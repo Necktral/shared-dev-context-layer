@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: wis_context_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - wis_context_postgres_data:/var/lib/postgresql/data
+    networks:
+      - wis_context_net
+
+  backend:
+    build:
+      context: ./backend
+    container_name: wis_context_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    ports:
+      - "${BACKEND_PORT}:8001"
+    networks:
+      - wis_context_net
+
+  mcp:
+    build:
+      context: ./backend
+    container_name: wis_context_mcp
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    command: ["python", "-m", "app.mcp.server"]
+    ports:
+      - "${MCP_PORT}:8002"
+    networks:
+      - wis_context_net
+
+volumes:
+  wis_context_postgres_data:
+
+networks:
+  wis_context_net:
+    driver: bridge
