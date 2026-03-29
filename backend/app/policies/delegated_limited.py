@@ -9,11 +9,23 @@ SENSITIVE_KEYS = {
 }
 
 TOOL_ALLOWLISTS: dict[str, set[str]] = {
-    "get_active_task": {"task", "mode"},
-    "get_context_snapshot": {"task_id", "status", "source", "snapshot", "metadata"},
-    "get_recent_errors": {"task_id", "window_hours", "limit", "total", "errors"},
-    "get_validation_status": {
+    "get_active_task": {"status", "task", "mode", "scope", "resolution_metadata"},
+    "get_context_snapshot": {
         "task_id",
+        "status",
+        "source",
+        "scope",
+        "consumer_context",
+        "resolution_metadata",
+        "snapshot",
+        "metadata",
+    },
+    "get_recent_errors": {"status", "task_id", "scope", "resolution_metadata", "window_hours", "limit", "total", "errors"},
+    "get_validation_status": {
+        "status",
+        "task_id",
+        "scope",
+        "resolution_metadata",
         "current_status",
         "last_validation_type",
         "last_validation_source",
@@ -21,7 +33,7 @@ TOOL_ALLOWLISTS: dict[str, set[str]] = {
         "summary",
         "details",
     },
-    "get_approved_decisions": {"task_id", "total", "decisions"},
+    "get_approved_decisions": {"status", "task_id", "scope", "resolution_metadata", "total", "decisions"},
 }
 
 

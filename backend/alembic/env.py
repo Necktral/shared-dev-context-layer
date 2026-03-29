@@ -7,11 +7,17 @@ from app.core.config import get_settings
 from app.db.base import Base
 from app.models import (  # noqa: F401
     ApprovedDecision,
+    Consumer,
     ContextSnapshot,
+    ContextScope,
     Event,
+    ExecutionSession,
     PolicyState,
+    Project,
     PublishAudit,
     Task,
+    ValidationRun,
+    Workspace,
 )
 
 config = context.config

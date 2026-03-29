@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -8,9 +9,9 @@ from app.models.approved_decision import ApprovedDecision
 from app.models.event import Event
 from app.models.task import Task
 from app.models.validation_run import ValidationRun
-from app.services.decision_service import list_active_decisions_for_task
+from app.services.decision_service import list_active_decisions_for_scope
 from app.services.event_service import list_recent_errors_for_task
-from app.services.validation_service import get_latest_validation_run_for_task
+from app.services.validation_service import get_latest_validation_run_for_scope
 
 
 def _decision_summary(decisions: Sequence[ApprovedDecision]) -> list[dict[str, Any]]:
@@ -35,9 +36,32 @@ def _error_summary(errors: Sequence[Event]) -> tuple[int, str | None]:
     return len(errors), dominant_error
 
 
-def build_operational_snapshot(db: Session, task: Task, policy_mode: str, generated_from: str = "derived_runtime") -> dict[str, Any]:
-    latest_validation = get_latest_validation_run_for_task(db, task.id)
-    active_decisions = list_active_decisions_for_task(db, task.id)
+def build_operational_snapshot(
+    db: Session,
+    task: Task,
+    policy_mode: str,
+    generated_from: str = "derived_runtime",
+    *,
+    workspace_id: UUID | None = None,
+    project_id: UUID | None = None,
+    consumer_context: dict[str, Any] | None = None,
+    resolution_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    effective_workspace_id = workspace_id or task.workspace_id
+    effective_project_id = project_id or task.project_id
+
+    latest_validation = get_latest_validation_run_for_scope(
+        db,
+        workspace_id=effective_workspace_id,
+        project_id=effective_project_id,
+        task_id=task.id,
+    )
+    active_decisions = list_active_decisions_for_scope(
+        db,
+        workspace_id=effective_workspace_id,
+        project_id=effective_project_id,
+        task_id=task.id,
+    )
     recent_errors = list_recent_errors_for_task(db, task.id, limit=20, window_hours=24)
     recent_errors_count, dominant_error = _error_summary(recent_errors)
 
@@ -52,6 +76,8 @@ def build_operational_snapshot(db: Session, task: Task, policy_mode: str, genera
 
     snapshot = {
         "identity": {
+            "workspace_id": str(effective_workspace_id),
+            "project_id": str(effective_project_id),
             "task_id": str(task.id),
             "task_title": task.title,
             "goal": task.goal,
@@ -84,6 +110,13 @@ def build_operational_snapshot(db: Session, task: Task, policy_mode: str, genera
             ],
         },
         "next_action": task.next_action,
+        "scope": {
+            "workspace_id": str(effective_workspace_id),
+            "project_id": str(effective_project_id),
+            "task_id": str(task.id),
+        },
+        "consumer_context": consumer_context or {},
+        "resolution_metadata": resolution_metadata or {},
         "metadata": {
             "policy": policy_mode,
             "origin": generated_from,
@@ -94,4 +127,9 @@ def build_operational_snapshot(db: Session, task: Task, policy_mode: str, genera
 
 
 def get_last_validation_for_task(db: Session, task: Task) -> ValidationRun | None:
-    return get_latest_validation_run_for_task(db, task.id)
+    return get_latest_validation_run_for_scope(
+        db,
+        workspace_id=task.workspace_id,
+        project_id=task.project_id,
+        task_id=task.id,
+    )

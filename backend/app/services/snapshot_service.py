@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.context_snapshot import ContextSnapshot
+from app.models.task import Task
 from app.schemas.snapshot import ManualSnapshotCreate
 
 
@@ -13,8 +14,14 @@ def create_manual_snapshot(
     payload: ManualSnapshotCreate,
     policy_mode: str,
 ) -> ContextSnapshot:
+    task = db.execute(select(Task).where(Task.id == task_id)).scalars().first()
+    if task is None:
+        raise LookupError("Task not found.")
+
     snapshot = ContextSnapshot(
         task_id=task_id,
+        workspace_id=task.workspace_id,
+        project_id=task.project_id,
         snapshot_type=payload.snapshot_type,
         snapshot_content=payload.snapshot_content,
         policy_applied=payload.policy_applied or policy_mode,

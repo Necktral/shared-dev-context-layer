@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.event import Event
+from app.models.task import Task
 from app.schemas.event import EventCreate
 
 
@@ -19,8 +20,14 @@ def list_recent_events_for_task(db: Session, task_id: UUID, limit: int = 20) -> 
 
 
 def create_event_for_task(db: Session, task_id: UUID, payload: EventCreate) -> Event:
+    task = db.execute(select(Task).where(Task.id == task_id)).scalars().first()
+    if task is None:
+        raise LookupError("Task not found.")
+
     event = Event(
         task_id=task_id,
+        workspace_id=task.workspace_id,
+        project_id=task.project_id,
         event_type=payload.event_type,
         summary=payload.summary,
         source=payload.source,

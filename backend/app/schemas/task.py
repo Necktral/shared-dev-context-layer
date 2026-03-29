@@ -16,6 +16,8 @@ class TaskOut(BaseModel):
     repo: str | None = None
     next_action: str | None = None
     current_phase: str | None = None
+    workspace_id: UUID
+    project_id: UUID
     is_active: bool
     created_at: datetime
     updated_at: datetime

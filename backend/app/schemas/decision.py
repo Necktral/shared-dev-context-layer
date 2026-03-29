@@ -8,7 +8,9 @@ class ApprovedDecisionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    task_id: UUID
+    task_id: UUID | None = None
+    workspace_id: UUID
+    project_id: UUID | None = None
     decision_key: str
     title: str
     category: str
