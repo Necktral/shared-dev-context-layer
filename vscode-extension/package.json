@@ -1,0 +1,49 @@
+{
+  "name": "wis-context-sync-control-plane",
+  "displayName": "WIS Context Sync",
+  "description": "Read-only local control plane for WIS Context Sync (Phase 3 Slice 0/1).",
+  "version": "0.0.1",
+  "publisher": "necktral",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:wisContextSync.loadOperationalContext",
+    "onCommand:wisContextSync.resetSession"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "wisContextSync.loadOperationalContext",
+        "title": "WIS: Load Operational Context"
+      },
+      {
+        "command": "wisContextSync.resetSession",
+        "title": "WIS: Reset Session"
+      }
+    ],
+    "configuration": {
+      "title": "WIS Context Sync",
+      "properties": {
+        "wisContextSync.mcpEndpoint": {
+          "type": "string",
+          "default": "http://localhost:8002/mcp",
+          "markdownDescription": "MCP endpoint used by the extension control plane."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.5",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.6.3"
+  }
+}
