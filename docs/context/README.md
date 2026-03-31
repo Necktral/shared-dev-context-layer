@@ -25,6 +25,7 @@
 - Contrato read-only MCP: `../mcp/vscode_read_model_contract.md`
 - Evidencia Slice 3A: `phase3/evidence/slice-3a/README.md`
 - Evidencia Slice 3B: `phase3/evidence/slice-3b/README.md`
+- Evidencia Slice 3C (`all_published`): `phase3/evidence/slice-3c-all-published/README.md`
 - Internal release pack: `phase3/release-internal/README.md`
 
 ## Roadmap corto

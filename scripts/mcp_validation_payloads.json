@@ -1,0 +1,10 @@
+{
+  "get_active_task": {},
+  "get_context_snapshot": {},
+  "get_recent_errors": {
+    "limit": 20,
+    "window_hours": 24
+  },
+  "get_validation_status": {},
+  "get_approved_decisions": {}
+}

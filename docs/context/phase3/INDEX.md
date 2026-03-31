@@ -26,3 +26,4 @@ Este index ordena las referencias mas utiles para ejecutar y cerrar trabajo sin 
 - `release-internal/GO_NO_GO_CHECKLIST.md`
 - `release-internal/CHANGELOG_PHASE3_INTERNAL.md`
 - `release-internal/TEAM_DAILY_GUIDE.md`
+- `evidence/slice-3c-all-published/README.md`

@@ -39,6 +39,8 @@
 - [ ] timeout/unreachable -> `transport_error|unavailable`
 - [ ] respuesta parcial -> `partially_loaded`
 - [ ] schema invalido -> `schema_error`
+- [x] policy MCP dinamica `all_published` validada en script remoto
+- [x] auditoria dinamica `delta +N` validada (`N = invocadas exitosamente`)
 
 ## D. Cierre operativo 3B + Slice 4 baseline
 
@@ -76,3 +78,4 @@ Motivo (si NO-GO):
 
 - Falta `CF_NAMED_TUNNEL_TOKEN` para crear named tunnel.
 - Falta `CF_MCP_PUBLIC_BASE_URL` para validar endpoint estable remoto.
+- Falta validación manual OAuth Auth0 completa en ChatGPT Connector sobre endpoint estable.

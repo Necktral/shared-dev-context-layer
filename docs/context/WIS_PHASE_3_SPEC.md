@@ -41,6 +41,8 @@ Sin esta fase:
 - sin fallback silencioso entre modos
 - en `mcp`: `streamable-http` y endpoint terminado en `/mcp`
 - `published_tools` descubiertas en runtime via `list_tools` (sin conteo fijo)
+- politica de validacion remota: `all_published` con registry de payloads read-only
+- auditoria esperada: `delta +N` con `N = invocadas exitosamente`
 - `core_context_fields` invariantes para el envelope:
   - `active_task`
   - `context_snapshot`

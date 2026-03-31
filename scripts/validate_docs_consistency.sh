@@ -75,4 +75,27 @@ if rg -n "5 tools|cinco tools|5/5 tools|exactamente 5 tools" \
   exit 1
 fi
 
+echo "[docs-check] Verificando terminos canónicos all_published/published_tools/delta +N..."
+CANON_DOCS=(
+  docs/mcp/README.md
+  docs/mcp/vscode_read_model_contract.md
+  docs/context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md
+  docs/context/WIS_PHASE_3_SPEC.md
+  docs/context/WIS_PHASE_3_ACCEPTANCE_GATE.md
+)
+for doc in "${CANON_DOCS[@]}"; do
+  if ! rg -q 'all_published' "$doc"; then
+    echo "ERROR: falta término canónico 'all_published' en $doc." >&2
+    exit 1
+  fi
+  if ! rg -q 'published_tools' "$doc"; then
+    echo "ERROR: falta término canónico 'published_tools' en $doc." >&2
+    exit 1
+  fi
+  if ! rg -q 'delta \+N|invocadas exitosamente' "$doc"; then
+    echo "ERROR: falta semántica canónica de auditoría dinámica (delta +N) en $doc." >&2
+    exit 1
+  fi
+done
+
 echo "[docs-check] OK"

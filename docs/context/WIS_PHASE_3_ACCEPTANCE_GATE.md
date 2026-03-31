@@ -42,7 +42,10 @@ Pass:
 
 - `published_tools` se descubren dinamicamente via `list_tools`
 - validacion operacional ejecuta politica `all_published`
+- invocacion dinamica usa registry de payloads read-only
+- cualquier `required_params_without_registry_payload` implica NO-GO
 - cobertura de `core_context_fields` para el envelope (`active_task`, `context_snapshot`, `validation_status`, `approved_decisions`, `recent_errors`)
+- auditoria dinamica: `delta +N`, donde `N = tools invocadas exitosamente`
 - transporte `streamable-http` sin drift
 - errores de transporte/esquema/dominio diferenciados
 
@@ -85,6 +88,8 @@ Pass:
 - endpoint valido con carga real
 - endpoint invalido/timeout con `transport_error`
 - respuesta parcial con `partially_loaded`
+- `published_tools` no vacia y policy `all_published` en verde
+- auditoria dinamica consistente: `delta +N` con `N = invocadas exitosamente`
 
 3. **Handoff evidence**
 - casos `ready`, `partial`, `blocked`

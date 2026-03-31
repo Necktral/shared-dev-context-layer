@@ -9,6 +9,8 @@ if [[ $# -lt 1 ]]; then
   echo "Example: $0 https://abcde.trycloudflare.com" >&2
   echo "Optional auth envs:" >&2
   echo "  MCP_AUTH_TOKEN=<token> MCP_AUTH_HEADER_NAME=Authorization MCP_AUTH_SCHEME=Bearer" >&2
+  echo "Optional payload registry env:" >&2
+  echo "  MCP_TOOL_PAYLOAD_REGISTRY_PATH=<path/to/mcp_validation_payloads.json>" >&2
   exit 1
 fi
 
@@ -37,6 +39,21 @@ if [[ -n "$AUTH_TOKEN" ]]; then
     AUTH_HEADER_VALUE="$AUTH_TOKEN"
   fi
 fi
+
+PAYLOAD_REGISTRY_PATH="${MCP_TOOL_PAYLOAD_REGISTRY_PATH:-$ROOT_DIR/scripts/mcp_validation_payloads.json}"
+if [[ ! -f "$PAYLOAD_REGISTRY_PATH" ]]; then
+  echo "ERROR: payload registry not found: $PAYLOAD_REGISTRY_PATH" >&2
+  exit 1
+fi
+PAYLOAD_REGISTRY_JSON="$(python3 - "$PAYLOAD_REGISTRY_PATH" <<'PY'
+import json
+import sys
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as f:
+    data = json.load(f)
+print(json.dumps(data, separators=(",", ":"), ensure_ascii=False))
+PY
+)"
 
 if ! docker compose ps postgres backend mcp | grep -q "Up"; then
   echo "ERROR: stack is not fully running. Use: docker compose up --build -d" >&2
@@ -100,9 +117,12 @@ docker compose exec -T \
   -e MCP_AUTH_TOKEN="$AUTH_TOKEN" \
   -e MCP_AUTH_HEADER_NAME="$AUTH_HEADER_NAME" \
   -e MCP_AUTH_SCHEME="$AUTH_SCHEME" \
+  -e MCP_TOOL_PAYLOADS_JSON="$PAYLOAD_REGISTRY_JSON" \
+  -e MCP_TOOL_PAYLOADS_SOURCE="$PAYLOAD_REGISTRY_PATH" \
   backend python - "$CLIENT_MCP_ENDPOINT" <<'PY' | tee "$tmp_validation"
 import json
 import os
+import re
 import sys
 
 import anyio
@@ -113,6 +133,25 @@ endpoint = sys.argv[1]
 auth_token = (os.getenv("MCP_AUTH_TOKEN") or "").strip()
 auth_header_name = (os.getenv("MCP_AUTH_HEADER_NAME") or "Authorization").strip()
 auth_scheme = (os.getenv("MCP_AUTH_SCHEME") or "Bearer").strip()
+payload_registry_source = (os.getenv("MCP_TOOL_PAYLOADS_SOURCE") or "scripts/mcp_validation_payloads.json").strip()
+payload_registry_raw = os.getenv("MCP_TOOL_PAYLOADS_JSON") or "{}"
+
+try:
+    payload_registry = json.loads(payload_registry_raw)
+except json.JSONDecodeError as exc:
+    raise RuntimeError(f"Invalid payload registry JSON: {exc}") from exc
+
+if not isinstance(payload_registry, dict):
+    raise RuntimeError("Payload registry must be a JSON object: {\"tool\": {payload}}")
+
+for tool_name, payload in payload_registry.items():
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Payload registry entry for '{tool_name}' must be an object.")
+
+required_params_regex = re.compile(
+    r"(required|missing|required argument|validation error|invalid arguments|field required)",
+    re.IGNORECASE,
+)
 
 async def main() -> None:
     headers = None
@@ -129,22 +168,50 @@ async def main() -> None:
 
             results = {}
             failed_tools = {}
+            attempted_tools = []
             for name in names:
+                has_registry_payload = name in payload_registry
+                payload = payload_registry.get(name, {})
+                payload_source = "registry" if has_registry_payload else "empty_default"
+                attempted_tools.append(
+                    {
+                        "tool": name,
+                        "payload_source": payload_source,
+                        "payload": payload,
+                    }
+                )
                 try:
-                    response = await session.call_tool(name, arguments={})
+                    response = await session.call_tool(name, arguments=payload)
                     if getattr(response, "isError", False):
-                        failed_tools[name] = "tool returned isError=true"
+                        failed_tools[name] = {
+                            "reason": "tool_returned_error",
+                            "message": "tool returned isError=true",
+                            "payload_source": payload_source,
+                            "attempted_payload": payload,
+                        }
                         continue
                     results[name] = response.structuredContent
                 except Exception as exc:  # noqa: BLE001
-                    failed_tools[name] = str(exc)
+                    message = str(exc)
+                    reason = "invocation_error"
+                    if not has_registry_payload and required_params_regex.search(message):
+                        reason = "required_params_without_registry_payload"
+                    failed_tools[name] = {
+                        "reason": reason,
+                        "message": message,
+                        "payload_source": payload_source,
+                        "attempted_payload": payload,
+                    }
 
             summary = {
                 "policy": "all_published",
+                "payload_registry": payload_registry_source,
                 "tools": names,
                 "total_tools": len(names),
+                "attempted_count": len(attempted_tools),
                 "successful_tools": len(results),
                 "failed_count": len(failed_tools),
+                "attempted_tools": attempted_tools,
                 "failed_tools": failed_tools,
                 "tool_results": results,
             }
@@ -203,10 +270,18 @@ if start == -1 or end == -1 or end < start:
     print("unknown")
     raise SystemExit(0)
 data = json.loads(text[start:end+1])
-print(", ".join(sorted(data.get("failed_tools", {}).keys())) or "unknown")
+failed = data.get("failed_tools", {}) or {}
+parts = []
+for name in sorted(failed.keys()):
+    reason = failed.get(name, {}).get("reason", "unknown")
+    parts.append(f"{name}({reason})")
+print(", ".join(parts) or "unknown")
 PY
 )"
   echo "ERROR: failed tools under policy all_published: $failed_tools" >&2
+  if grep -q 'required_params_without_registry_payload' "$tmp_validation"; then
+    echo "ERROR: one or more published tools require payload registry entries in $PAYLOAD_REGISTRY_PATH." >&2
+  fi
   exit 1
 fi
 
@@ -218,5 +293,6 @@ if [[ -n "$AUTH_TOKEN" ]]; then
   echo "Auth header used: $AUTH_HEADER_NAME"
 fi
 echo "Tool validation policy: all_published"
+echo "Payload registry: $PAYLOAD_REGISTRY_PATH"
 echo "Published tools: $total_count, successful: $success_count"
 echo "Domain tables unchanged; publish_audit increased by +$success_count."

@@ -64,8 +64,10 @@ La validacion debe confirmar:
 - reachability HTTPS + headers MCP
 - descubrimiento dinamico de `published_tools` desde `list_tools`
 - invocacion de todas las tools publicadas (`all_published`)
+- uso de registry canónico de payloads read-only (`scripts/mcp_validation_payloads.json`)
+- si una tool publicada falla por parámetros y no tiene entry en registry, el gate falla
 - sin cambios en tablas de dominio por consumo read-only
-- delta esperado en `publish_audit` igual a `N` tools invocadas con exito
+- delta esperado en `publish_audit`: `+N` (donde `N = tools invocadas exitosamente`)
 
 ## 6. VS Code usage checklist (runtimeMode=mcp)
 
@@ -114,3 +116,25 @@ La validacion debe confirmar:
 - Validación recomendada:
   - claims con `scripts/validate_oauth_token_claims.sh`
   - reachability/tools con `scripts/validate_remote_mcp.sh` (policy `all_published`)
+
+## 10. Named tunnel como ruta canónica
+
+Prerequisitos:
+
+- `CF_NAMED_TUNNEL_TOKEN`
+- `CF_MCP_PUBLIC_BASE_URL` (`https://<dominio-estable>`)
+
+Secuencia:
+
+```bash
+./scripts/stop_cloudflare_tunnel.sh
+docker compose up --build -d postgres backend mcp
+./scripts/start_named_cloudflare_tunnel.sh
+./scripts/check_named_cloudflare_tunnel.sh
+./scripts/validate_remote_mcp.sh https://<dominio-estable>
+```
+
+Regla operativa:
+
+- named tunnel es la ruta por defecto para cierre y operación estable.
+- quick tunnel queda solo como fallback temporal, no endpoint canónico de aceptación.

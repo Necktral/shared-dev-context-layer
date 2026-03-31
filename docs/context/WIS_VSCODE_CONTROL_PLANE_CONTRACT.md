@@ -41,6 +41,8 @@ Para `mcp`:
 - endpoint: URL explicita terminada en `/mcp`
 - `published_tools`: descubiertas en runtime via `list_tools` (sin fijar cantidad)
 - politica de validacion de endpoint/conector: `all_published`
+- invocacion dinamica gobernada por registry canónico de payloads read-only (`scripts/mcp_validation_payloads.json`)
+- criterio de auditoria remota: `delta +N` donde `N = tools invocadas exitosamente`
 - `core_context_fields` del envelope:
   - `active_task`
   - `context_snapshot`

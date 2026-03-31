@@ -29,10 +29,12 @@ Resolver precedence esperada:
 
 ## 4. MCP compatibility contract
 
-Published tools:
+`published_tools`:
 
 - fuente de verdad: `list_tools` en runtime (sin fijar conteo)
 - validacion operativa: invocar todas las tools publicadas (`all_published`)
+- estrategia de invocacion: registry de payloads mínimos read-only en `scripts/mcp_validation_payloads.json`
+- regla de gate: si una tool falla por parámetros y no tiene payload registrado, el cierre falla
 
 Core context fields (extension envelope):
 
@@ -46,6 +48,7 @@ Transporte:
 
 - `streamable-http`
 - endpoint terminado en `/mcp`
+- auditoria de validacion remota: `delta +N` donde `N = invocadas exitosamente`
 
 Autenticación de cliente (extensión):
 
