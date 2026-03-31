@@ -3,11 +3,11 @@
 ## A. Contrato y superficie publica
 
 - [x] Runtime contract documentado y vigente: `offline_fixture | mcp`
-- [ ] Comandos oficiales alineados docs+codigo:
+- [x] Comandos oficiales alineados docs+codigo:
   - [x] `WIS: Load Operational Context`
   - [x] `WIS: Reset Session`
   - [x] `WIS: Prepare Handoff`
-- [ ] Contratos tipados congelados:
+- [x] Contratos tipados congelados:
   - [x] `OperationalContextEnvelope`
   - [x] `HandoffIntent`
   - [x] `HandoffTarget`
@@ -43,7 +43,7 @@
 ## D. Cierre operativo 3B + Slice 4 baseline
 
 - [x] snapshots de envelope, renderer, artifact y prompts estables
-- [ ] evidencia `Prepare Handoff`:
+- [x] evidencia `Prepare Handoff`:
   - [x] `ready`
   - [x] `partial`
   - [x] `blocked`
@@ -62,7 +62,8 @@
 - [x] guia diaria del equipo publicada
 - [ ] checklist firmado por responsables
 - [x] tag creada: `v0.1.0-phase3-internal` (local)
-- [ ] tag publicada en remoto
+- [x] tag publicada en remoto
+- [x] branch `main` publicada en remoto (incluye `.github/workflows/phase3-ci.yml`)
 
 ## Decision
 
@@ -75,4 +76,3 @@ Motivo (si NO-GO):
 
 - Falta `CF_NAMED_TUNNEL_TOKEN` para crear named tunnel.
 - Falta `CF_MCP_PUBLIC_BASE_URL` para validar endpoint estable remoto.
-- Push bloqueado por PAT sin scope `workflow` para publicar `.github/workflows/phase3-ci.yml`.
