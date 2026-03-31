@@ -1,7 +1,7 @@
 {
   "name": "wis-context-sync-control-plane",
   "displayName": "WIS Context Sync",
-  "description": "Read-only local control plane for WIS Context Sync (Phase 3 Slice 0/1).",
+  "description": "Read-only local control plane for WIS Context Sync (Phase 3 Slice 3A).",
   "version": "0.0.1",
   "publisher": "necktral",
   "engines": {
@@ -13,7 +13,8 @@
   "main": "./dist/extension.js",
   "activationEvents": [
     "onCommand:wisContextSync.loadOperationalContext",
-    "onCommand:wisContextSync.resetSession"
+    "onCommand:wisContextSync.resetSession",
+    "onCommand:wisContextSync.prepareHandoff"
   ],
   "contributes": {
     "commands": [
@@ -24,6 +25,10 @@
       {
         "command": "wisContextSync.resetSession",
         "title": "WIS: Reset Session"
+      },
+      {
+        "command": "wisContextSync.prepareHandoff",
+        "title": "WIS: Prepare Handoff"
       }
     ],
     "configuration": {
@@ -38,17 +43,49 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Enables detailed diagnostics output in the WIS Context Sync channel."
+        },
+        "wisContextSync.runtimeMode": {
+          "type": "string",
+          "enum": [
+            "mcp",
+            "offline_fixture"
+          ],
+          "default": "offline_fixture",
+          "markdownDescription": "Explicit runtime mode. Use 'mcp' for live MCP transport or 'offline_fixture' for deterministic fixture mode."
+        },
+        "wisContextSync.requestTimeoutMs": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 100,
+          "markdownDescription": "Per-tool MCP request timeout in milliseconds."
+        },
+        "wisContextSync.fixtureScenario": {
+          "type": "string",
+          "enum": [
+            "success_full",
+            "partial_missing_recent_errors",
+            "degraded_no_remote_bundle",
+            "transport_error",
+            "no_active_task",
+            "validation_stale"
+          ],
+          "default": "success_full",
+          "markdownDescription": "Deterministic scenario used when runtimeMode is offline_fixture."
         }
       }
     }
   },
   "scripts": {
     "compile": "tsc -p .",
-    "watch": "tsc -w -p ."
+    "watch": "tsc -w -p .",
+    "test": "npm run compile && node --test \"dist/tests/**/*.test.js\""
   },
   "devDependencies": {
     "@types/node": "^20.16.5",
     "@types/vscode": "^1.90.0",
     "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
   }
 }

@@ -1,31 +1,50 @@
-# WIS Context Sync VS Code Extension (Slice 0 + Slice 1)
+# WIS Context Sync VS Code Extension (Slice 3A)
 
-This package implements the local read-only control plane baseline for Fase 3.
+This package implements the read-only control plane baseline for WIS consumption with explicit degradation and project-first offline support.
 
 ## Included in this slice
 
-- Extension scaffold (TypeScript)
 - Commands:
   - `WIS: Load Operational Context`
   - `WIS: Reset Session`
-- Stable output channel: `WIS Context Sync`
-- Configurable MCP endpoint (`wisContextSync.mcpEndpoint`)
-- Configurable diagnostics mode (`wisContextSync.diagnosticMode`)
-- Fixed consumer identity: `vscode_extension`
-- Session key lifecycle manager (create/reuse/reset)
-- Environment inspector baseline (workspace, repo, branch, active file, status)
-- Minimal diagnostics output
-- Stubs for Slice 2 modules:
-  - `WISClient`
-  - `ContextPresenter`
-  - `HandoffBuilder`
+- Layered orchestration (`LoadOperationalContextService`) with read-only envelope composition.
+- Output channel presentation with sections:
+  - Session
+  - Local Environment
+  - Active Task
+  - Validation
+  - Approved Decisions
+  - Recent Errors
+  - Load State
+  - Issues
+- Runtime modes (explicit):
+  - `mcp`
+  - `offline_fixture`
+- Deterministic fixture scenarios:
+  - `success_full`
+  - `partial_missing_recent_errors`
+  - `degraded_no_remote_bundle`
+  - `transport_error`
+  - `no_active_task`
+  - `validation_stale`
+- MCP SDK adapter (`streamable-http`) for live mode.
+- Typed diagnostics and envelope evidence.
 
-## Out of scope (by design)
+## Configuration
+
+- `wisContextSync.mcpEndpoint` (default: `http://localhost:8002/mcp`)
+- `wisContextSync.diagnosticMode` (default: `true`)
+- `wisContextSync.runtimeMode` (default: `offline_fixture`)
+- `wisContextSync.requestTimeoutMs` (default: `5000`)
+- `wisContextSync.fixtureScenario` (default: `success_full`)
+
+## Out of scope
 
 - No write actions to WIS
-- No scope resolution in extension
-- No backend/MCP contract changes
-- No heavy UI
+- No shell execution
+- No file mutation automation
+- No panel/webview UI
+- No handoff execution flows
 
 ## Development
 
@@ -33,16 +52,7 @@ This package implements the local read-only control plane baseline for Fase 3.
 cd vscode-extension
 npm install
 npm run compile
+npm test
 ```
 
 Then open the repo in VS Code and press `F5` to launch Extension Host.
-
-## Manual verification
-
-1. Open command palette and run `WIS: Load Operational Context`.
-2. Open output channel `WIS Context Sync` and verify diagnostics are printed.
-3. Run `WIS: Load Operational Context` again and confirm same `session_key`.
-4. Run `WIS: Reset Session` and confirm new `session_key`.
-5. Verify endpoint shown in diagnostics matches setting `wisContextSync.mcpEndpoint`.
-6. Toggle `wisContextSync.diagnosticMode` and verify detailed/minimal diagnostics output.
-7. Verify diagnostics include `workspace_root`, `repo_root`, `branch`, `active_file`, and `inspector_status`.

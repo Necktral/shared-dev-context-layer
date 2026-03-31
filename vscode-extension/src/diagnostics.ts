@@ -1,4 +1,7 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
+import type { OperationalContextEnvelope } from "./domain/operationalContext";
+import { formatLoadEvent, formatOperationalEnvelopeEnvelopeLine } from "./diagnostics/evidenceFormatter";
+import type { LoadEvent } from "./diagnostics/loadEvents";
 
 export interface DiagnosticsSnapshot {
   consumer: string;
@@ -28,6 +31,18 @@ export class DiagnosticsReporter {
       this.output.appendLine(
         `consumer=${snapshot.consumer} session_key=${snapshot.session_key} endpoint=${snapshot.endpoint} inspector_status=${snapshot.inspector_status}`,
       );
+    }
+    this.output.appendLine("");
+  }
+
+  public reportLoadEvent(event: LoadEvent): void {
+    this.output.appendLine(formatLoadEvent(event));
+  }
+
+  public reportOperationalEnvelope(envelope: OperationalContextEnvelope, detailed: boolean): void {
+    this.output.appendLine(formatOperationalEnvelopeEnvelopeLine(envelope));
+    if (detailed) {
+      this.output.appendLine(JSON.stringify(envelope, null, 2));
     }
     this.output.appendLine("");
   }
