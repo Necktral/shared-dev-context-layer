@@ -22,7 +22,7 @@ Sin esta fase:
 
 - deteccion de entorno local (workspace/repo/branch/active file)
 - sesion local estable (`session_key`) para `vscode_extension`
-- consumo read-only de 5 tools MCP
+- consumo read-only de tools MCP publicadas (validacion `all_published`)
 - composicion de `OperationalContextEnvelope`
 - presentacion en Output Channel
 - `Prepare Handoff` en memoria con artifact tipado (Codex-first)
@@ -40,12 +40,13 @@ Sin esta fase:
 - runtime dual explicito: `offline_fixture | mcp`
 - sin fallback silencioso entre modos
 - en `mcp`: `streamable-http` y endpoint terminado en `/mcp`
-- tools invariantes:
-  - `get_active_task`
-  - `get_context_snapshot`
-  - `get_validation_status`
-  - `get_approved_decisions`
-  - `get_recent_errors`
+- `published_tools` descubiertas en runtime via `list_tools` (sin conteo fijo)
+- `core_context_fields` invariantes para el envelope:
+  - `active_task`
+  - `context_snapshot`
+  - `validation_status`
+  - `approved_decisions`
+  - `recent_errors`
 
 ## 5. Core contracts
 

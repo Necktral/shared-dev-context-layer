@@ -40,7 +40,9 @@ Pass:
 
 Pass:
 
-- se mantienen las 5 tools estables
+- `published_tools` se descubren dinamicamente via `list_tools`
+- validacion operacional ejecuta politica `all_published`
+- cobertura de `core_context_fields` para el envelope (`active_task`, `context_snapshot`, `validation_status`, `approved_decisions`, `recent_errors`)
 - transporte `streamable-http` sin drift
 - errores de transporte/esquema/dominio diferenciados
 

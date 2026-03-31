@@ -62,9 +62,10 @@ MCP_AUTH_SCHEME="Bearer" \
 La validacion debe confirmar:
 
 - reachability HTTPS + headers MCP
-- invocacion de las 5 tools
+- descubrimiento dinamico de `published_tools` desde `list_tools`
+- invocacion de todas las tools publicadas (`all_published`)
 - sin cambios en tablas de dominio por consumo read-only
-- delta esperado en `publish_audit`
+- delta esperado en `publish_audit` igual a `N` tools invocadas con exito
 
 ## 6. VS Code usage checklist (runtimeMode=mcp)
 
@@ -112,4 +113,4 @@ La validacion debe confirmar:
 - En esta fase, la autenticación se cierra en el conector; el backend MCP todavía no aplica enforcement JWT estricto.
 - Validación recomendada:
   - claims con `scripts/validate_oauth_token_claims.sh`
-  - reachability/tools con `scripts/validate_remote_mcp.sh`
+  - reachability/tools con `scripts/validate_remote_mcp.sh` (policy `all_published`)

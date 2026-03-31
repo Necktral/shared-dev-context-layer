@@ -39,12 +39,14 @@ Para `mcp`:
 
 - transporte: `streamable-http`
 - endpoint: URL explicita terminada en `/mcp`
-- tools estables:
-  - `get_active_task`
-  - `get_context_snapshot`
-  - `get_validation_status`
-  - `get_approved_decisions`
-  - `get_recent_errors`
+- `published_tools`: descubiertas en runtime via `list_tools` (sin fijar cantidad)
+- politica de validacion de endpoint/conector: `all_published`
+- `core_context_fields` del envelope:
+  - `active_task`
+  - `context_snapshot`
+  - `validation_status`
+  - `approved_decisions`
+  - `recent_errors`
 
 ## 4. Public extension surface
 

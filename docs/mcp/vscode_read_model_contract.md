@@ -29,13 +29,18 @@ Resolver precedence esperada:
 
 ## 4. MCP compatibility contract
 
-Tools estables:
+Published tools:
 
-- `get_active_task`
-- `get_context_snapshot`
-- `get_validation_status`
-- `get_approved_decisions`
-- `get_recent_errors`
+- fuente de verdad: `list_tools` en runtime (sin fijar conteo)
+- validacion operativa: invocar todas las tools publicadas (`all_published`)
+
+Core context fields (extension envelope):
+
+- `active_task`
+- `context_snapshot`
+- `validation_status`
+- `approved_decisions`
+- `recent_errors`
 
 Transporte:
 

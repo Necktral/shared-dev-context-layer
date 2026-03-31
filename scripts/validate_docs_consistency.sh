@@ -64,4 +64,15 @@ if ! rg -q 'openid' docs/mcp/oauth_auth0_chatgpt_connector.md; then
   exit 1
 fi
 
+echo "[docs-check] Verificando que docs canonicas no fijen conteo de tools MCP..."
+if rg -n "5 tools|cinco tools|5/5 tools|exactamente 5 tools" \
+  docs/mcp/README.md \
+  docs/mcp/vscode_read_model_contract.md \
+  docs/context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md \
+  docs/context/WIS_PHASE_3_SPEC.md \
+  docs/context/WIS_PHASE_3_ACCEPTANCE_GATE.md; then
+  echo "ERROR: se detecto conteo fijo legacy de tools MCP en docs canonicas objetivo." >&2
+  exit 1
+fi
+
 echo "[docs-check] OK"

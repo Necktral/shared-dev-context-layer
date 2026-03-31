@@ -93,11 +93,14 @@ fi
 echo "MCP reachability check OK: HTTP $http_code with mcp-session-id header"
 echo "MCP client endpoint: $CLIENT_MCP_ENDPOINT"
 
+tmp_validation="$(mktemp)"
+trap 'rm -f "$tmp_headers" "$tmp_body" "$tmp_validation"' EXIT
+
 docker compose exec -T \
   -e MCP_AUTH_TOKEN="$AUTH_TOKEN" \
   -e MCP_AUTH_HEADER_NAME="$AUTH_HEADER_NAME" \
   -e MCP_AUTH_SCHEME="$AUTH_SCHEME" \
-  backend python - "$CLIENT_MCP_ENDPOINT" <<'PY'
+  backend python - "$CLIENT_MCP_ENDPOINT" <<'PY' | tee "$tmp_validation"
 import json
 import os
 import sys
@@ -110,14 +113,6 @@ endpoint = sys.argv[1]
 auth_token = (os.getenv("MCP_AUTH_TOKEN") or "").strip()
 auth_header_name = (os.getenv("MCP_AUTH_HEADER_NAME") or "Authorization").strip()
 auth_scheme = (os.getenv("MCP_AUTH_SCHEME") or "Bearer").strip()
-required = [
-    "get_active_task",
-    "get_context_snapshot",
-    "get_recent_errors",
-    "get_validation_status",
-    "get_approved_decisions",
-]
-
 
 async def main() -> None:
     headers = None
@@ -129,22 +124,51 @@ async def main() -> None:
             await session.initialize()
             listed = await session.list_tools()
             names = [tool.name for tool in listed.tools]
-            missing = [name for name in required if name not in names]
-            if missing:
-                raise RuntimeError(f"Missing required tools: {missing}")
+            if not names:
+                raise RuntimeError("No published tools were returned by MCP list_tools().")
 
             results = {}
-            for name in required:
-                response = await session.call_tool(name, arguments={})
-                if getattr(response, "isError", False):
-                    raise RuntimeError(f"Tool returned error: {name}")
-                results[name] = response.structuredContent
+            failed_tools = {}
+            for name in names:
+                try:
+                    response = await session.call_tool(name, arguments={})
+                    if getattr(response, "isError", False):
+                        failed_tools[name] = "tool returned isError=true"
+                        continue
+                    results[name] = response.structuredContent
+                except Exception as exc:  # noqa: BLE001
+                    failed_tools[name] = str(exc)
 
-            print(json.dumps({"tools": names, "tool_results": results}, indent=2, ensure_ascii=False))
+            summary = {
+                "policy": "all_published",
+                "tools": names,
+                "total_tools": len(names),
+                "successful_tools": len(results),
+                "failed_count": len(failed_tools),
+                "failed_tools": failed_tools,
+                "tool_results": results,
+            }
+            print(json.dumps(summary, indent=2, ensure_ascii=False))
+            print(f"__VALIDATION_COUNTS__ success={len(results)} total={len(names)} failed={len(failed_tools)}")
 
 
 anyio.run(main)
 PY
+
+counts_line="$(grep '^__VALIDATION_COUNTS__' "$tmp_validation" | tail -n1 || true)"
+if [[ -z "$counts_line" ]]; then
+  echo "ERROR: validation did not produce counts line." >&2
+  exit 1
+fi
+
+success_count="$(echo "$counts_line" | sed -E 's/.*success=([0-9]+).*/\1/')"
+total_count="$(echo "$counts_line" | sed -E 's/.*total=([0-9]+).*/\1/')"
+failed_count="$(echo "$counts_line" | sed -E 's/.*failed=([0-9]+).*/\1/')"
+
+if [[ "$total_count" -le 0 ]]; then
+  echo "ERROR: MCP returned zero published tools." >&2
+  exit 1
+fi
 
 IFS='|' read -r post_tasks post_decisions post_events post_snapshots post_policy post_audit <<<"$(read_counts)"
 
@@ -161,8 +185,28 @@ if [[ "$delta_tasks" -ne 0 || "$delta_decisions" -ne 0 || "$delta_events" -ne 0 
   exit 1
 fi
 
-if [[ "$delta_audit" -ne 5 ]]; then
-  echo "ERROR: expected publish_audit delta of 5, got $delta_audit." >&2
+if [[ "$delta_audit" -ne "$success_count" ]]; then
+  echo "ERROR: expected publish_audit delta of $success_count (successful tools), got $delta_audit." >&2
+  exit 1
+fi
+
+if [[ "$failed_count" -ne 0 ]]; then
+  failed_tools="$(python3 - "$tmp_validation" <<'PY'
+import json
+import sys
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as f:
+    text = f.read()
+start = text.find("{")
+end = text.rfind("}")
+if start == -1 or end == -1 or end < start:
+    print("unknown")
+    raise SystemExit(0)
+data = json.loads(text[start:end+1])
+print(", ".join(sorted(data.get("failed_tools", {}).keys())) or "unknown")
+PY
+)"
+  echo "ERROR: failed tools under policy all_published: $failed_tools" >&2
   exit 1
 fi
 
@@ -173,4 +217,6 @@ echo "Client endpoint: $CLIENT_MCP_ENDPOINT"
 if [[ -n "$AUTH_TOKEN" ]]; then
   echo "Auth header used: $AUTH_HEADER_NAME"
 fi
-echo "Domain tables unchanged; publish_audit increased by +5."
+echo "Tool validation policy: all_published"
+echo "Published tools: $total_count, successful: $success_count"
+echo "Domain tables unchanged; publish_audit increased by +$success_count."
