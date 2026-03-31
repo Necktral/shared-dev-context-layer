@@ -7,6 +7,8 @@ import {
   isDiagnosticModeEnabled,
 } from "./config";
 import {
+  COMMAND_CLEAR_AUTH,
+  COMMAND_CONFIGURE_AUTH,
   COMMAND_LOAD_CONTEXT,
   COMMAND_PREPARE_HANDOFF,
   COMMAND_RESET_SESSION,
@@ -25,6 +27,7 @@ import { InMemoryOperationalContextStore } from "./application/operationalContex
 import { HandoffBuilder } from "./application/handoffBuilder";
 import { InMemoryHandoffArtifactStore } from "./application/handoffArtifactStore";
 import { HandoffOutputChannelRenderer } from "./presentation/renderers/handoffOutputChannelRenderer";
+import { AuthManager } from "./auth/authManager";
 
 let outputChannel: vscode.OutputChannel | undefined;
 
@@ -73,6 +76,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const diagnostics = new DiagnosticsReporter(outputChannel);
   const contextStore = new InMemoryOperationalContextStore();
   const handoffArtifactStore = new InMemoryHandoffArtifactStore();
+  const authManager = new AuthManager(context);
 
   const endpoint = getMcpEndpoint();
   const activeSession = await sessionManager.getOrCreateSession();
@@ -111,10 +115,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   const loadDisposable = vscode.commands.registerCommand(COMMAND_LOAD_CONTEXT, async () => {
-    const envelope = await loadService.load();
+    const auth = await authManager.resolveAuthContext();
+    const envelope = await loadService.load(auth);
+    const authSummary = auth.mode === "none" ? "none" : `${auth.mode}/${auth.token ? "configured" : "missing"}`;
     outputChannel?.show(true);
     await vscode.window.showInformationMessage(
-      `WIS context ${envelope.meta.load_state}. mode=${envelope.meta.runtime_mode}, transport=${envelope.meta.transport_status}, session=${envelope.meta.session_key}`,
+      `WIS context ${envelope.meta.load_state}. mode=${envelope.meta.runtime_mode}, transport=${envelope.meta.transport_status}, auth=${authSummary}, session=${envelope.meta.session_key}`,
     );
   });
 
@@ -158,7 +164,37 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     );
   });
 
-  context.subscriptions.push(loadDisposable, resetDisposable, prepareHandoffDisposable);
+  const configureAuthDisposable = vscode.commands.registerCommand(COMMAND_CONFIGURE_AUTH, async () => {
+    const status = await authManager.configureInteractive();
+    outputChannel?.show(true);
+    if (status.mode === "none") {
+      await vscode.window.showWarningMessage(
+        "authMode está en 'none'. Cambia wisContextSync.authMode a 'bearer' o 'api_key' antes de configurar token.",
+      );
+      return;
+    }
+    if (!status.has_token) {
+      await vscode.window.showWarningMessage("No se guardó token de autenticación.");
+      return;
+    }
+    await vscode.window.showInformationMessage(
+      `Autenticación configurada. mode=${status.mode}, required=${status.required ? "true" : "false"}.`,
+    );
+  });
+
+  const clearAuthDisposable = vscode.commands.registerCommand(COMMAND_CLEAR_AUTH, async () => {
+    await authManager.clearToken();
+    outputChannel?.show(true);
+    await vscode.window.showInformationMessage("Token de autenticación eliminado de SecretStorage.");
+  });
+
+  context.subscriptions.push(
+    loadDisposable,
+    resetDisposable,
+    prepareHandoffDisposable,
+    configureAuthDisposable,
+    clearAuthDisposable,
+  );
 }
 
 export function deactivate(): void {

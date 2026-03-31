@@ -4,7 +4,7 @@ import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolResult, WISBundleResult, WISToolName } from "../../domain/operationalContext";
 import { aggregateBundleStatus, extractStructuredPayload, failureToolResult, normalizeToolPayload } from "./normalizers";
 import { scopeArguments, WIS_TOOLS } from "./toolContracts";
-import type { WISGateway, WISLoadInput } from "./wisGateway";
+import type { AuthRuntimeContext, WISGateway, WISLoadInput } from "./wisGateway";
 
 interface McpClient {
   connect(): Promise<void>;
@@ -17,12 +17,15 @@ class SdkMcpClient implements McpClient {
   private readonly client: Client;
   private readonly transport: StreamableHTTPClientTransport;
 
-  constructor(endpoint: string) {
+  constructor(endpoint: string, requestInit?: RequestInit) {
     this.client = new Client({
       name: "wis-context-sync-vscode",
       version: "0.0.1",
     });
-    this.transport = new StreamableHTTPClientTransport(new URL(endpoint));
+    this.transport = new StreamableHTTPClientTransport(
+      new URL(endpoint),
+      requestInit ? { requestInit } : undefined,
+    );
   }
 
   public async connect(): Promise<void> {
@@ -64,6 +67,14 @@ function classifyTransportFailure(error: unknown): {
   }
 
   if (error instanceof StreamableHTTPError) {
+    if (typeof error.code === "number" && (error.code === 401 || error.code === 403)) {
+      return {
+        kind: "transport_error",
+        message: `Autenticación MCP rechazada (HTTP ${error.code}).`,
+        evidenceHint: "Configurar token válido en WIS: Configure Authentication o ajustar authMode.",
+      };
+    }
+
     if (typeof error.code === "number" && (error.code === 404 || error.code === 405 || error.code >= 500)) {
       return {
         kind: "unavailable",
@@ -95,10 +106,30 @@ function classifyTransportFailure(error: unknown): {
   };
 }
 
-export type McpClientFactory = (endpoint: string) => McpClient;
+export type McpClientFactory = (endpoint: string, requestInit?: RequestInit) => McpClient;
+
+function requestInitFromAuth(auth: AuthRuntimeContext | undefined): RequestInit | undefined {
+  if (!auth || auth.mode === "none" || !auth.token) {
+    return undefined;
+  }
+
+  if (auth.mode === "bearer") {
+    return {
+      headers: {
+        Authorization: `Bearer ${auth.token}`,
+      },
+    };
+  }
+
+  return {
+    headers: {
+      [auth.header_name]: auth.token,
+    },
+  };
+}
 
 export class McpWISGateway implements WISGateway {
-  constructor(private readonly clientFactory: McpClientFactory = (endpoint) => new SdkMcpClient(endpoint)) {}
+  constructor(private readonly clientFactory: McpClientFactory = (endpoint, requestInit) => new SdkMcpClient(endpoint, requestInit)) {}
 
   public async getActiveTask(input: WISLoadInput): Promise<ToolResult> {
     return this.loadSingleTool("get_active_task", input);
@@ -128,8 +159,34 @@ export class McpWISGateway implements WISGateway {
       get_approved_decisions: failureToolResult("get_approved_decisions", "unavailable", "No ejecutado.", "Bundle aún no iniciado.", null),
       get_recent_errors: failureToolResult("get_recent_errors", "unavailable", "No ejecutado.", "Bundle aún no iniciado.", null),
     };
+    if (input.auth?.mode !== "none" && input.auth?.required && !input.auth?.token) {
+      const message = "Autenticación requerida pero no hay token configurado.";
+      for (const tool of WIS_TOOLS) {
+        toolResults[tool] = failureToolResult(
+          tool,
+          "unavailable",
+          message,
+          "Ejecutar 'WIS: Configure Authentication' y cargar credencial válida.",
+          null,
+        );
+      }
 
-    const client = this.clientFactory(input.endpoint);
+      return {
+        status: "failure",
+        tool_results: toolResults,
+        transport_diagnostics: {
+          endpoint: input.endpoint,
+          runtime_mode: input.runtime_mode,
+          timeout_ms: input.timeout_ms,
+          fetched_at: new Date().toISOString(),
+          available_tools: [],
+          missing_tools: [...WIS_TOOLS],
+        },
+        issues: WIS_TOOLS.flatMap((tool) => toolResults[tool].issues),
+      };
+    }
+
+    const client = this.clientFactory(input.endpoint, requestInitFromAuth(input.auth));
     const requestedArgs = scopeArguments({
       consumer: input.consumer,
       session_key: input.session_key,

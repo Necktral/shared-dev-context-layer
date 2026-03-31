@@ -1,6 +1,6 @@
 # Shared Dev Context Layer
 
-Control plane read-only para contexto operativo entre VS Code y WIS, con modo Project-first y soporte MCP en runtime conectado.
+Control plane autenticado para contexto operativo entre VS Code y WIS, con modo Project-first y soporte MCP en runtime conectado.
 
 ## Vision del sistema
 
@@ -14,6 +14,7 @@ La extension de VS Code no reemplaza la verdad canonica. Consume contexto de WIS
 
 1. `WIS: Load Operational Context`
 2. `WIS: Prepare Handoff`
+3. `WIS: Configure Authentication` (cuando `authMode != none`)
 
 El primer comando construye `OperationalContextEnvelope` (read-only). El segundo genera `HandoffArtifact` (Codex-first) en memoria, sin writes ni ejecucion automatica.
 

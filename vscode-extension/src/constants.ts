@@ -5,10 +5,16 @@ export const DEFAULT_DIAGNOSTIC_MODE = true;
 export const DEFAULT_RUNTIME_MODE = "offline_fixture";
 export const DEFAULT_REQUEST_TIMEOUT_MS = 5000;
 export const DEFAULT_FIXTURE_SCENARIO = "success_full";
+export const DEFAULT_AUTH_MODE = "none";
+export const DEFAULT_AUTH_HEADER_NAME = "x-api-key";
+export const DEFAULT_REQUIRE_AUTHENTICATION = false;
 
 export const SESSION_KEY_STORAGE_KEY = "wisContextSync.sessionKey";
 export const SESSION_CREATED_AT_STORAGE_KEY = "wisContextSync.sessionCreatedAt";
+export const AUTH_TOKEN_STORAGE_KEY = "wisContextSync.authToken";
 
 export const COMMAND_LOAD_CONTEXT = "wisContextSync.loadOperationalContext";
 export const COMMAND_RESET_SESSION = "wisContextSync.resetSession";
 export const COMMAND_PREPARE_HANDOFF = "wisContextSync.prepareHandoff";
+export const COMMAND_CONFIGURE_AUTH = "wisContextSync.configureAuthentication";
+export const COMMAND_CLEAR_AUTH = "wisContextSync.clearAuthentication";

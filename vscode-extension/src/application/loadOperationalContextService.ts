@@ -2,7 +2,7 @@ import { composeOperationalContext } from "./composeOperationalContext";
 import type { LocalEnvironmentContext, OperationalContextEnvelope, RuntimeMode, SessionInfo, WISBundleResult } from "../domain/operationalContext";
 import { failureToolResult } from "../infrastructure/wis/normalizers";
 import { WIS_TOOLS } from "../infrastructure/wis/toolContracts";
-import type { WISGateway } from "../infrastructure/wis/wisGateway";
+import type { AuthRuntimeContext, WISGateway } from "../infrastructure/wis/wisGateway";
 import type { FixtureScenario } from "../infrastructure/wis/fixtureWISGateway";
 import type { EnvironmentSnapshot } from "../environment/environmentInspector";
 import type { SessionSnapshot } from "../sessionManager";
@@ -93,7 +93,7 @@ function failedBundle(config: LoadContextConfig, message: string): WISBundleResu
 export class LoadOperationalContextService {
   constructor(private readonly deps: LoadOperationalContextDependencies) {}
 
-  public async load(): Promise<OperationalContextEnvelope> {
+  public async load(auth?: AuthRuntimeContext): Promise<OperationalContextEnvelope> {
     const config = this.deps.getConfig();
     this.deps.diagnostics.reportLoadEvent({
       event: "load_started",
@@ -133,6 +133,7 @@ export class LoadOperationalContextService {
         timeout_ms: config.timeoutMs,
         consumer: session.consumer,
         session_key: session.session_key,
+        auth,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

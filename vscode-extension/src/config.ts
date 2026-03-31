@@ -1,13 +1,17 @@
 import * as vscode from "vscode";
 import {
+  DEFAULT_AUTH_HEADER_NAME,
+  DEFAULT_AUTH_MODE,
   DEFAULT_DIAGNOSTIC_MODE,
   DEFAULT_FIXTURE_SCENARIO,
   DEFAULT_MCP_ENDPOINT,
+  DEFAULT_REQUIRE_AUTHENTICATION,
   DEFAULT_REQUEST_TIMEOUT_MS,
   DEFAULT_RUNTIME_MODE,
 } from "./constants";
 import type { RuntimeMode } from "./domain/operationalContext";
 import type { FixtureScenario } from "./infrastructure/wis/fixtureWISGateway";
+import type { AuthMode, ResolvedAuthConfig } from "./infrastructure/wis/wisGateway";
 
 const FIXTURE_SCENARIOS: readonly FixtureScenario[] = [
   "success_full",
@@ -30,6 +34,13 @@ function normalizeFixtureScenario(value: string | undefined): FixtureScenario {
     return value as FixtureScenario;
   }
   return DEFAULT_FIXTURE_SCENARIO as FixtureScenario;
+}
+
+function normalizeAuthMode(value: string | undefined): AuthMode {
+  if (value === "none" || value === "bearer" || value === "api_key") {
+    return value;
+  }
+  return DEFAULT_AUTH_MODE as AuthMode;
 }
 
 export function getMcpEndpoint(): string {
@@ -62,4 +73,33 @@ export function isDiagnosticModeEnabled(): boolean {
     vscode.workspace.getConfiguration().get<boolean>("wisContextSync.diagnosticMode") ??
     DEFAULT_DIAGNOSTIC_MODE
   );
+}
+
+export function getAuthMode(): AuthMode {
+  const configured = vscode.workspace.getConfiguration().get<string>("wisContextSync.authMode");
+  return normalizeAuthMode(configured);
+}
+
+export function getAuthHeaderName(): string {
+  const configured = vscode.workspace.getConfiguration().get<string>("wisContextSync.authHeaderName");
+  const trimmed = configured?.trim();
+  if (!trimmed) {
+    return DEFAULT_AUTH_HEADER_NAME;
+  }
+  return trimmed;
+}
+
+export function isAuthenticationRequired(): boolean {
+  return (
+    vscode.workspace.getConfiguration().get<boolean>("wisContextSync.requireAuthentication") ??
+    DEFAULT_REQUIRE_AUTHENTICATION
+  );
+}
+
+export function getAuthConfig(): ResolvedAuthConfig {
+  return {
+    mode: getAuthMode(),
+    header_name: getAuthHeaderName(),
+    required: isAuthenticationRequired(),
+  };
 }

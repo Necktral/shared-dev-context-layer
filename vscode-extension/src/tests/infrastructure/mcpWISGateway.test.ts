@@ -114,3 +114,49 @@ test("McpWISGateway clasifica unavailable cuando connect falla por red", async (
   assert.equal(bundle.tool_results.get_active_task.kind, "unavailable");
   assert.equal(bundle.tool_results.get_context_snapshot.kind, "unavailable");
 });
+
+test("McpWISGateway bloquea carga si auth es requerida y no hay token", async () => {
+  let factoryCalled = false;
+  const factory: McpClientFactory = () => {
+    factoryCalled = true;
+    return new FakeMcpClient({});
+  };
+
+  const gateway = new McpWISGateway(factory);
+  const bundle = await gateway.loadOperationalBundle({
+    ...baseInput,
+    auth: {
+      mode: "bearer",
+      header_name: "x-api-key",
+      required: true,
+      token: null,
+    },
+  });
+
+  assert.equal(factoryCalled, false);
+  assert.equal(bundle.status, "failure");
+  assert.equal(bundle.tool_results.get_active_task.kind, "unavailable");
+  assert.match(bundle.tool_results.get_active_task.issues[0]?.message ?? "", /Autenticación requerida/);
+});
+
+test("McpWISGateway inyecta Authorization header cuando authMode=bearer", async () => {
+  let captured: RequestInit | undefined;
+  const factory: McpClientFactory = (_endpoint, requestInit) => {
+    captured = requestInit;
+    return new FakeMcpClient({});
+  };
+
+  const gateway = new McpWISGateway(factory);
+  await gateway.loadOperationalBundle({
+    ...baseInput,
+    auth: {
+      mode: "bearer",
+      header_name: "x-api-key",
+      required: false,
+      token: "token-123",
+    },
+  });
+
+  const headers = captured?.headers as Record<string, string> | undefined;
+  assert.equal(headers?.Authorization, "Bearer token-123");
+});

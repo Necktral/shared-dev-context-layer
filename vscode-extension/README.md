@@ -1,6 +1,6 @@
 # WIS Context Sync VS Code Extension
 
-Read-only control plane para consumo de contexto operativo desde WIS, con degradacion explicita y soporte dual `offline_fixture` / `mcp`.
+Control plane autenticado para consumo de contexto operativo desde WIS, con degradacion explicita y soporte dual `offline_fixture` / `mcp`.
 
 ## Estado implementado
 
@@ -12,6 +12,8 @@ Read-only control plane para consumo de contexto operativo desde WIS, con degrad
 - `WIS: Load Operational Context`
 - `WIS: Reset Session`
 - `WIS: Prepare Handoff`
+- `WIS: Configure Authentication`
+- `WIS: Clear Authentication`
 
 ## Runtime modes
 
@@ -27,6 +29,11 @@ No existe fallback automatico entre modos.
 - `wisContextSync.requestTimeoutMs` (default: `5000`)
 - `wisContextSync.fixtureScenario` (default: `success_full`)
 - `wisContextSync.diagnosticMode` (default: `true`)
+- `wisContextSync.authMode` (default: `none`; enum: `none | bearer | api_key`)
+- `wisContextSync.authHeaderName` (default: `x-api-key`)
+- `wisContextSync.requireAuthentication` (default: `false`)
+
+Token de autenticación se guarda en `SecretStorage` (no en settings de texto plano) usando `WIS: Configure Authentication`.
 
 ## Operational load states
 
@@ -59,6 +66,13 @@ No permitido:
 - mutaciones automaticas de archivos
 - shell execution automatica
 - webview/panel avanzado en este baseline
+
+## Authentication quickstart
+
+1. Configura `wisContextSync.authMode` (`bearer` o `api_key`).
+2. Ejecuta `WIS: Configure Authentication` y guarda token.
+3. Ejecuta `WIS: Load Operational Context`.
+4. Si necesitas limpiar credencial: `WIS: Clear Authentication`.
 
 ## Development
 
