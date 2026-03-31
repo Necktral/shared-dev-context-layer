@@ -17,6 +17,13 @@ else
   MCP_ENDPOINT="${RAW_URL%/}/mcp"
 fi
 
+CLIENT_MCP_ENDPOINT="$MCP_ENDPOINT"
+# When validator client runs inside backend container, localhost targets itself.
+# For host-local endpoint checks, switch client path to the compose service URL.
+if [[ "$MCP_ENDPOINT" =~ ^https?://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?/mcp$ ]]; then
+  CLIENT_MCP_ENDPOINT="http://mcp:8002/mcp"
+fi
+
 if ! docker compose ps postgres backend mcp | grep -q "Up"; then
   echo "ERROR: stack is not fully running. Use: docker compose up --build -d" >&2
   exit 1
@@ -66,8 +73,9 @@ if ! grep -qi '^mcp-session-id:' "$tmp_headers"; then
 fi
 
 echo "MCP reachability check OK: HTTP $http_code with mcp-session-id header"
+echo "MCP client endpoint: $CLIENT_MCP_ENDPOINT"
 
-docker compose exec -T backend python - "$MCP_ENDPOINT" <<'PY'
+docker compose exec -T backend python - "$CLIENT_MCP_ENDPOINT" <<'PY'
 import json
 import sys
 
@@ -130,5 +138,6 @@ fi
 
 echo
 echo "Remote MCP validation PASSED"
-echo "Endpoint: $MCP_ENDPOINT"
+echo "Host endpoint: $MCP_ENDPOINT"
+echo "Client endpoint: $CLIENT_MCP_ENDPOINT"
 echo "Domain tables unchanged; publish_audit increased by +5."

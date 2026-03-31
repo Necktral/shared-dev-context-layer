@@ -5,8 +5,9 @@ import {
   COMMAND_RESET_SESSION,
   EXTENSION_OUTPUT_CHANNEL,
 } from "./constants";
-import { DiagnosticsReporter } from "./diagnostics";
+import { DiagnosticsReporter, type DiagnosticsSnapshot } from "./diagnostics";
 import { SessionManager, SessionSnapshot } from "./sessionManager";
+import { EnvironmentInspector, EnvironmentSnapshot } from "./stubs/environmentInspector";
 
 let outputChannel: vscode.OutputChannel | undefined;
 
@@ -16,7 +17,8 @@ function createSnapshot(
   session: SessionSnapshot,
   endpoint: string,
   initialized: boolean,
-) {
+  environment?: EnvironmentSnapshot,
+): DiagnosticsSnapshot {
   return {
     event,
     consumer,
@@ -24,6 +26,12 @@ function createSnapshot(
     session_created_at: session.sessionCreatedAt,
     session_state: session.sessionState,
     endpoint,
+    workspace_root: environment?.workspace_root ?? null,
+    repo_root: environment?.repo_root ?? null,
+    branch: environment?.branch ?? null,
+    active_file: environment?.active_file ?? null,
+    inspector_status: environment?.inspector_status ?? "not_checked",
+    inspector_error: environment?.inspector_error ?? null,
     initialized,
     timestamp: new Date().toISOString(),
   };
@@ -34,24 +42,35 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(outputChannel);
 
   const sessionManager = new SessionManager(context);
+  const environmentInspector = new EnvironmentInspector();
   const diagnostics = new DiagnosticsReporter(outputChannel);
 
   const endpoint = getMcpEndpoint();
   const activeSession = await sessionManager.getOrCreateSession();
+  const activationEnvironment = await environmentInspector.inspect();
   diagnostics.report(
-    createSnapshot("extension_activated", sessionManager.consumer, activeSession, endpoint, true),
+    createSnapshot(
+      "extension_activated",
+      sessionManager.consumer,
+      activeSession,
+      endpoint,
+      true,
+      activationEnvironment,
+    ),
     isDiagnosticModeEnabled(),
   );
 
   const loadDisposable = vscode.commands.registerCommand(COMMAND_LOAD_CONTEXT, async () => {
     const currentEndpoint = getMcpEndpoint();
     const session = await sessionManager.getOrCreateSession();
+    const environment = await environmentInspector.inspect();
     const snapshot = createSnapshot(
       "load_operational_context_requested",
       sessionManager.consumer,
       session,
       currentEndpoint,
       true,
+      environment,
     );
     diagnostics.report(snapshot, isDiagnosticModeEnabled());
     outputChannel?.show(true);

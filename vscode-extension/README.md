@@ -13,6 +13,7 @@ This package implements the local read-only control plane baseline for Fase 3.
 - Configurable diagnostics mode (`wisContextSync.diagnosticMode`)
 - Fixed consumer identity: `vscode_extension`
 - Session key lifecycle manager (create/reuse/reset)
+- Environment inspector baseline (workspace, repo, branch, active file, status)
 - Minimal diagnostics output
 - Stubs for Slice 2 modules:
   - `EnvironmentInspector`
@@ -45,3 +46,4 @@ Then open the repo in VS Code and press `F5` to launch Extension Host.
 4. Run `WIS: Reset Session` and confirm new `session_key`.
 5. Verify endpoint shown in diagnostics matches setting `wisContextSync.mcpEndpoint`.
 6. Toggle `wisContextSync.diagnosticMode` and verify detailed/minimal diagnostics output.
+7. Verify diagnostics include `workspace_root`, `repo_root`, `branch`, `active_file`, and `inspector_status`.
