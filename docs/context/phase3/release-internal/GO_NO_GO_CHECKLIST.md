@@ -2,25 +2,25 @@
 
 ## A. Contrato y superficie publica
 
-- [ ] Runtime contract documentado y vigente: `offline_fixture | mcp`
+- [x] Runtime contract documentado y vigente: `offline_fixture | mcp`
 - [ ] Comandos oficiales alineados docs+codigo:
-  - [ ] `WIS: Load Operational Context`
-  - [ ] `WIS: Reset Session`
-  - [ ] `WIS: Prepare Handoff`
+  - [x] `WIS: Load Operational Context`
+  - [x] `WIS: Reset Session`
+  - [x] `WIS: Prepare Handoff`
 - [ ] Contratos tipados congelados:
-  - [ ] `OperationalContextEnvelope`
-  - [ ] `HandoffIntent`
-  - [ ] `HandoffTarget`
-  - [ ] `HandoffBuildResult`
-  - [ ] `HandoffArtifact`
+  - [x] `OperationalContextEnvelope`
+  - [x] `HandoffIntent`
+  - [x] `HandoffTarget`
+  - [x] `HandoffBuildResult`
+  - [x] `HandoffArtifact`
 
 ## B. Calidad automatica
 
-- [ ] `vscode-extension`: compile + tests verdes
-- [ ] `backend`: `alembic upgrade head` + `pytest -q` verde
-- [ ] docs consistency check verde
-- [ ] sin strings legacy prohibidas
-- [ ] sin marcadores `filecite` residuales
+- [x] `vscode-extension`: compile + tests verdes
+- [x] `backend`: `alembic upgrade head` + `pytest -q` verde
+- [x] docs consistency check verde
+- [x] sin strings legacy prohibidas
+- [x] sin marcadores `filecite` residuales
 
 ## C. Cierre operativo 3A (manual)
 
@@ -42,26 +42,26 @@
 
 ## D. Cierre operativo 3B + Slice 4 baseline
 
-- [ ] snapshots de envelope, renderer, artifact y prompts estables
+- [x] snapshots de envelope, renderer, artifact y prompts estables
 - [ ] evidencia `Prepare Handoff`:
-  - [ ] `ready`
-  - [ ] `partial`
-  - [ ] `blocked`
-- [ ] paridad semantica fixture vs mcp validada
+  - [x] `ready`
+  - [x] `partial`
+  - [x] `blocked`
+- [x] paridad semantica fixture vs mcp validada
 
 ## E. No-write proof
 
-- [ ] sin write actions contra WIS
-- [ ] sin shell auto-execution
-- [ ] sin mutacion automatica de repo
-- [ ] policy `delegated_limited` respetada
+- [x] sin write actions contra WIS
+- [x] sin shell auto-execution
+- [x] sin mutacion automatica de repo
+- [x] policy `delegated_limited` respetada
 
 ## F. Release interna
 
-- [ ] changelog de cierre validado
-- [ ] guia diaria del equipo publicada
+- [x] changelog de cierre validado
+- [x] guia diaria del equipo publicada
 - [ ] checklist firmado por responsables
-- [ ] tag creada: `v0.1.0-phase3-internal`
+- [x] tag creada: `v0.1.0-phase3-internal` (local)
 - [ ] tag publicada en remoto
 
 ## Decision
@@ -71,3 +71,8 @@
 
 Motivo (si NO-GO):
 
+## Bloqueos actuales para pasar a GO
+
+- Falta `CF_NAMED_TUNNEL_TOKEN` para crear named tunnel.
+- Falta `CF_MCP_PUBLIC_BASE_URL` para validar endpoint estable remoto.
+- Push bloqueado por PAT sin scope `workflow` para publicar `.github/workflows/phase3-ci.yml`.
