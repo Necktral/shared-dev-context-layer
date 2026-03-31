@@ -10,6 +10,7 @@ This package implements the local read-only control plane baseline for Fase 3.
   - `WIS: Reset Session`
 - Stable output channel: `WIS Context Sync`
 - Configurable MCP endpoint (`wisContextSync.mcpEndpoint`)
+- Configurable diagnostics mode (`wisContextSync.diagnosticMode`)
 - Fixed consumer identity: `vscode_extension`
 - Session key lifecycle manager (create/reuse/reset)
 - Minimal diagnostics output
@@ -43,3 +44,4 @@ Then open the repo in VS Code and press `F5` to launch Extension Host.
 3. Run `WIS: Load Operational Context` again and confirm same `session_key`.
 4. Run `WIS: Reset Session` and confirm new `session_key`.
 5. Verify endpoint shown in diagnostics matches setting `wisContextSync.mcpEndpoint`.
+6. Toggle `wisContextSync.diagnosticMode` and verify detailed/minimal diagnostics output.

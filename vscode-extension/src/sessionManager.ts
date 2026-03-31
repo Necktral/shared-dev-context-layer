@@ -6,6 +6,14 @@ import {
   SESSION_KEY_STORAGE_KEY,
 } from "./constants";
 
+export type SessionState = "created" | "reused" | "reset";
+
+export interface SessionSnapshot {
+  sessionKey: string;
+  sessionCreatedAt: string;
+  sessionState: SessionState;
+}
+
 export class SessionManager {
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -13,22 +21,36 @@ export class SessionManager {
     return FIXED_CONSUMER;
   }
 
-  public async getSessionKey(): Promise<string> {
+  public async getOrCreateSession(): Promise<SessionSnapshot> {
     const existing = this.context.workspaceState.get<string>(SESSION_KEY_STORAGE_KEY);
+    const existingCreatedAt = this.context.workspaceState.get<string>(SESSION_CREATED_AT_STORAGE_KEY);
     if (existing) {
-      return existing;
+      const sessionCreatedAt = existingCreatedAt ?? new Date().toISOString();
+      if (!existingCreatedAt) {
+        await this.context.workspaceState.update(SESSION_CREATED_AT_STORAGE_KEY, sessionCreatedAt);
+      }
+      return {
+        sessionKey: existing,
+        sessionCreatedAt,
+        sessionState: "reused",
+      };
     }
-    return this.rotateSessionKey();
+    return this.createSession("created");
   }
 
-  public async rotateSessionKey(): Promise<string> {
+  public async resetSession(): Promise<SessionSnapshot> {
+    return this.createSession("reset");
+  }
+
+  private async createSession(sessionState: "created" | "reset"): Promise<SessionSnapshot> {
     const value = `wis-vscode-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    const sessionCreatedAt = new Date().toISOString();
     await this.context.workspaceState.update(SESSION_KEY_STORAGE_KEY, value);
-    await this.context.workspaceState.update(SESSION_CREATED_AT_STORAGE_KEY, new Date().toISOString());
-    return value;
-  }
-
-  public getSessionCreatedAt(): string | undefined {
-    return this.context.workspaceState.get<string>(SESSION_CREATED_AT_STORAGE_KEY);
+    await this.context.workspaceState.update(SESSION_CREATED_AT_STORAGE_KEY, sessionCreatedAt);
+    return {
+      sessionKey: value,
+      sessionCreatedAt,
+      sessionState,
+    };
   }
 }

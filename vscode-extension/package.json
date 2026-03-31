@@ -33,6 +33,11 @@
           "type": "string",
           "default": "http://localhost:8002/mcp",
           "markdownDescription": "MCP endpoint used by the extension control plane."
+        },
+        "wisContextSync.diagnosticMode": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Enables detailed diagnostics output in the WIS Context Sync channel."
         }
       }
     }
