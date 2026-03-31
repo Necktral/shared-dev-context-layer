@@ -7,6 +7,8 @@ cd "$ROOT_DIR"
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <PUBLIC_URL_OR_MCP_ENDPOINT>" >&2
   echo "Example: $0 https://abcde.trycloudflare.com" >&2
+  echo "Optional auth envs:" >&2
+  echo "  MCP_AUTH_TOKEN=<token> MCP_AUTH_HEADER_NAME=Authorization MCP_AUTH_SCHEME=Bearer" >&2
   exit 1
 fi
 
@@ -22,6 +24,18 @@ CLIENT_MCP_ENDPOINT="$MCP_ENDPOINT"
 # For host-local endpoint checks, switch client path to the compose service URL.
 if [[ "$MCP_ENDPOINT" =~ ^https?://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?/mcp$ ]]; then
   CLIENT_MCP_ENDPOINT="http://mcp:8002/mcp"
+fi
+
+AUTH_TOKEN="${MCP_AUTH_TOKEN:-${MCP_BEARER_TOKEN:-}}"
+AUTH_HEADER_NAME="${MCP_AUTH_HEADER_NAME:-Authorization}"
+AUTH_SCHEME="${MCP_AUTH_SCHEME:-Bearer}"
+AUTH_HEADER_VALUE=""
+if [[ -n "$AUTH_TOKEN" ]]; then
+  if [[ "$AUTH_HEADER_NAME" == "Authorization" ]]; then
+    AUTH_HEADER_VALUE="${AUTH_SCHEME} ${AUTH_TOKEN}"
+  else
+    AUTH_HEADER_VALUE="$AUTH_TOKEN"
+  fi
 fi
 
 if ! docker compose ps postgres backend mcp | grep -q "Up"; then
@@ -53,7 +67,11 @@ IFS='|' read -r pre_tasks pre_decisions pre_events pre_snapshots pre_policy pre_
 tmp_headers="$(mktemp)"
 tmp_body="$(mktemp)"
 trap 'rm -f "$tmp_headers" "$tmp_body"' EXIT
-http_code="$(curl -sS -o "$tmp_body" -D "$tmp_headers" -w "%{http_code}" -H 'Accept: text/event-stream' "$MCP_ENDPOINT" || true)"
+curl_args=(-sS -o "$tmp_body" -D "$tmp_headers" -w "%{http_code}" -H 'Accept: text/event-stream')
+if [[ -n "$AUTH_HEADER_VALUE" ]]; then
+  curl_args+=(-H "${AUTH_HEADER_NAME}: ${AUTH_HEADER_VALUE}")
+fi
+http_code="$(curl "${curl_args[@]}" "$MCP_ENDPOINT" || true)"
 
 if [[ -z "$http_code" ]]; then
   echo "ERROR: failed to contact endpoint: $MCP_ENDPOINT" >&2
@@ -75,8 +93,13 @@ fi
 echo "MCP reachability check OK: HTTP $http_code with mcp-session-id header"
 echo "MCP client endpoint: $CLIENT_MCP_ENDPOINT"
 
-docker compose exec -T backend python - "$CLIENT_MCP_ENDPOINT" <<'PY'
+docker compose exec -T \
+  -e MCP_AUTH_TOKEN="$AUTH_TOKEN" \
+  -e MCP_AUTH_HEADER_NAME="$AUTH_HEADER_NAME" \
+  -e MCP_AUTH_SCHEME="$AUTH_SCHEME" \
+  backend python - "$CLIENT_MCP_ENDPOINT" <<'PY'
 import json
+import os
 import sys
 
 import anyio
@@ -84,6 +107,9 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 endpoint = sys.argv[1]
+auth_token = (os.getenv("MCP_AUTH_TOKEN") or "").strip()
+auth_header_name = (os.getenv("MCP_AUTH_HEADER_NAME") or "Authorization").strip()
+auth_scheme = (os.getenv("MCP_AUTH_SCHEME") or "Bearer").strip()
 required = [
     "get_active_task",
     "get_context_snapshot",
@@ -94,7 +120,11 @@ required = [
 
 
 async def main() -> None:
-    async with streamablehttp_client(endpoint) as (read_stream, write_stream, _):
+    headers = None
+    if auth_token:
+        header_value = f"{auth_scheme} {auth_token}" if auth_header_name == "Authorization" else auth_token
+        headers = {auth_header_name: header_value}
+    async with streamablehttp_client(endpoint, headers=headers) as (read_stream, write_stream, _):
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
             listed = await session.list_tools()
@@ -140,4 +170,7 @@ echo
 echo "Remote MCP validation PASSED"
 echo "Host endpoint: $MCP_ENDPOINT"
 echo "Client endpoint: $CLIENT_MCP_ENDPOINT"
+if [[ -n "$AUTH_TOKEN" ]]; then
+  echo "Auth header used: $AUTH_HEADER_NAME"
+fi
 echo "Domain tables unchanged; publish_audit increased by +5."

@@ -42,6 +42,7 @@ Luego abrir el workspace en VS Code y ejecutar los comandos desde Command Palett
 
 - Canon de Fase 3: `docs/context/`
 - Runbook MCP: `docs/mcp/README.md`
+- OAuth connector Auth0: `docs/mcp/oauth_auth0_chatgpt_connector.md`
 - Contrato read-only VS Code/MCP: `docs/mcp/vscode_read_model_contract.md`
 - Guia de extension: `vscode-extension/README.md`
 - Evidencia Slice 3A: `docs/context/phase3/evidence/slice-3a/README.md`

@@ -42,6 +42,12 @@ Transporte:
 - `streamable-http`
 - endpoint terminado en `/mcp`
 
+Autenticación de cliente (extensión):
+
+- `authMode=none | bearer | api_key`
+- token en `SecretStorage` (no en settings planos)
+- si `requireAuthentication=true` y no hay token, la carga debe fallar explícitamente
+
 ## 5. Response invariants
 
 En respuestas exitosas (`status: ok`), preservar:

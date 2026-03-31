@@ -50,6 +50,15 @@ Esperado:
 ./scripts/validate_remote_mcp.sh https://<stable-domain>
 ```
 
+Con auth header (si aplica):
+
+```bash
+MCP_AUTH_TOKEN="<access_token>" \
+MCP_AUTH_HEADER_NAME="Authorization" \
+MCP_AUTH_SCHEME="Bearer" \
+./scripts/validate_remote_mcp.sh https://<stable-domain>
+```
+
 La validacion debe confirmar:
 
 - reachability HTTPS + headers MCP
@@ -95,3 +104,12 @@ La validacion debe confirmar:
 - Canon contract: `../context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
 - Evidence 3A: `../context/phase3/evidence/slice-3a/README.md`
 - Evidence 3B: `../context/phase3/evidence/slice-3b/README.md`
+- OAuth Auth0 (ChatGPT Connector): `oauth_auth0_chatgpt_connector.md`
+
+## 9. OAuth connector (Auth0) status
+
+- Implementado a nivel de guía operativa del conector.
+- En esta fase, la autenticación se cierra en el conector; el backend MCP todavía no aplica enforcement JWT estricto.
+- Validación recomendada:
+  - claims con `scripts/validate_oauth_token_claims.sh`
+  - reachability/tools con `scripts/validate_remote_mcp.sh`

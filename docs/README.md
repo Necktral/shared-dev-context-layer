@@ -7,6 +7,7 @@ Este directorio concentra la fuente de verdad documental para el control plane r
 - Canon Fase 3: `docs/context/`
 - Operacion MCP (runbook): `docs/mcp/`
 - Contrato VS Code <-> MCP read-only: `docs/mcp/vscode_read_model_contract.md`
+- OAuth Auth0 para ChatGPT Connector: `docs/mcp/oauth_auth0_chatgpt_connector.md`
 
 ## Runtime posture (dual mode)
 

@@ -50,4 +50,18 @@ if ! rg -q '/mcp' docs/mcp/README.md; then
   exit 1
 fi
 
+echo "[docs-check] Verificando guia OAuth Auth0 del conector..."
+if [[ ! -f docs/mcp/oauth_auth0_chatgpt_connector.md ]]; then
+  echo "ERROR: falta docs/mcp/oauth_auth0_chatgpt_connector.md." >&2
+  exit 1
+fi
+if ! rg -q 'Cliente de OAuth definido por el usuario' docs/mcp/oauth_auth0_chatgpt_connector.md; then
+  echo "ERROR: guia OAuth no documenta el metodo de registro esperado." >&2
+  exit 1
+fi
+if ! rg -q 'openid' docs/mcp/oauth_auth0_chatgpt_connector.md; then
+  echo "ERROR: guia OAuth no documenta scopes OIDC base." >&2
+  exit 1
+fi
+
 echo "[docs-check] OK"
