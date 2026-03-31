@@ -16,7 +16,6 @@ This package implements the local read-only control plane baseline for Fase 3.
 - Environment inspector baseline (workspace, repo, branch, active file, status)
 - Minimal diagnostics output
 - Stubs for Slice 2 modules:
-  - `EnvironmentInspector`
   - `WISClient`
   - `ContextPresenter`
   - `HandoffBuilder`

@@ -117,7 +117,6 @@ export class EnvironmentInspector {
       return ref;
     }
 
-    // Detached HEAD: return short commit for visibility.
     return head.length >= 12 ? head.slice(0, 12) : head;
   }
 

@@ -6,8 +6,8 @@ import {
   EXTENSION_OUTPUT_CHANNEL,
 } from "./constants";
 import { DiagnosticsReporter, type DiagnosticsSnapshot } from "./diagnostics";
+import { EnvironmentInspector, EnvironmentSnapshot } from "./environment/environmentInspector";
 import { SessionManager, SessionSnapshot } from "./sessionManager";
-import { EnvironmentInspector, EnvironmentSnapshot } from "./stubs/environmentInspector";
 
 let outputChannel: vscode.OutputChannel | undefined;
 

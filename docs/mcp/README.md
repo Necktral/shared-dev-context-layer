@@ -27,7 +27,32 @@ This runbook is only for remote exposure and external connectivity validation.
 3. `curl -s http://localhost:8001/health` must return `db: up`.
 4. `docker compose logs mcp --tail=60` must show Streamable HTTP startup.
 
-## Tunnel (Cloudflare via Docker)
+## Named tunnel (Cloudflare, stable URL)
+
+Required environment variables:
+
+- `CF_NAMED_TUNNEL_TOKEN` (Cloudflare named tunnel token).
+- `CF_MCP_PUBLIC_BASE_URL` (stable public base URL, e.g. `https://mcp.dev.example.com`).
+
+### Start
+
+```bash
+./scripts/start_named_cloudflare_tunnel.sh
+```
+
+### Check
+
+```bash
+./scripts/check_named_cloudflare_tunnel.sh
+```
+
+### Stop
+
+```bash
+./scripts/stop_named_cloudflare_tunnel.sh
+```
+
+## Quick tunnel (fallback only)
 
 ### Start
 
@@ -51,7 +76,7 @@ Expected output includes:
 Run:
 
 ```bash
-./scripts/validate_remote_mcp.sh https://<random>.trycloudflare.com
+./scripts/validate_remote_mcp.sh https://<stable-domain>
 ```
 
 What this validation enforces:
@@ -67,11 +92,11 @@ Pass criteria:
 
 ## ChatGPT Developer Mode registration
 
-Create app using:
+Create app using the stable endpoint:
 
 - Name: `WIS Context Sync`
 - Description: read-only operational context sync for tasks, decisions, errors and validations under WIS policy
-- MCP Server URL: `https://<random>.trycloudflare.com/mcp`
+- MCP Server URL: `https://<stable-domain>/mcp`
 - Authentication: `No Authentication`
 
 After saving:
@@ -94,8 +119,8 @@ After saving:
   - Cause: wrong endpoint path.
   - Action: use exact URL ending in `/mcp`.
 - Symptom: tunnel URL unreachable.
-  - Cause: tunnel container stopped.
-  - Action: restart `./scripts/start_cloudflare_tunnel.sh`, inspect `docker logs wis_context_cloudflared_tunnel`.
+  - Cause: named tunnel container stopped or DNS mismatch.
+  - Action: run `./scripts/check_named_cloudflare_tunnel.sh`; inspect `docker logs wis_context_cloudflared_named_tunnel`.
 - Symptom: MCP responds `Not Acceptable` or handshake errors.
   - Cause: bad headers or non-MCP client.
   - Action: run `./scripts/validate_remote_mcp.sh <public-url>` to validate transport and tool calls.
@@ -106,5 +131,5 @@ After saving:
   - Cause: tool path bypassing audit or DB write failure.
   - Action: run remote validation script and inspect `publish_audit` query output.
 - Symptom: tunnel drops after some time.
-  - Cause: ephemeral tunnel lifecycle.
-  - Action: restart tunnel and update ChatGPT app URL to new domain.
+  - Cause: using quick tunnel instead of named tunnel.
+  - Action: use named tunnel scripts and stable domain; avoid quick tunnel for normal development.
