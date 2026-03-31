@@ -1,40 +1,52 @@
 # Slice 3A Closure Evidence Matrix
 
-Objetivo: cerrar evidencia runtime visible para estados `loaded`, `partially_loaded`, `degraded`, `failed` en ambos modos `offline_fixture` y `mcp`.
+Objetivo: cerrar evidencia runtime visible para estados de carga en ambos modos (`offline_fixture` y `mcp`) sin writes.
 
-## Checklist por corrida
+## 1. Registro por corrida (template)
 
 - Fecha/hora:
 - Runtime mode:
+- Endpoint (`mcpEndpoint`):
 - Fixture scenario (si aplica):
-- Command: `WIS: Load Operational Context`
-- Estado final observado (`load_state`):
+- Command ejecutado: `WIS: Load Operational Context`
+- `load_state` observado:
 - `transport_status` observado:
 - `runtime_mode` observado:
 - `issues` observadas:
 - `authority_map.conflict_flags` observadas:
-- Confirmación no-write (sin cambios de dominio):
+- Confirmacion no-write:
 
-## Matriz mínima obligatoria
+## 2. Matriz minima obligatoria
 
-### offline_fixture
+### 2.1 offline_fixture
 
 1. `success_full` -> esperado `loaded`
 2. `partial_missing_recent_errors` -> esperado `partially_loaded`
 3. `degraded_no_remote_bundle` -> esperado `degraded`
-4. `transport_error` -> esperado `failed` o degradación explícita con `transport_error`
-5. `no_active_task` -> esperado estado remoto explícito `no_active_task`
-6. `validation_stale` -> esperado issue explícito de `validation_stale`
+4. `transport_error` -> esperado degradacion/fallo explicito
+5. `no_active_task` -> esperado issue de dominio explicita
+6. `validation_stale` -> esperado issue de validacion stale
 
-### mcp
+### 2.2 mcp
 
-1. Endpoint válido -> carga operativa real
-2. Endpoint inválido/timeout -> fallo de transporte explícito
-3. Respuesta parcial -> estado parcial explícito
-4. Transporte caído -> degradación/fallo explícito sin fallback silencioso
+1. Endpoint valido -> carga operativa real
+2. Endpoint invalido/timeout -> `transport_error` o `unavailable`
+3. Payload parcial -> `partially_loaded`
+4. Error de schema -> `schema_error`
 
-## Notas de aceptación
+## 3. Handoff evidence vinculada (Slice 4 baseline)
 
-- Cada corrida debe adjuntar evidencia del Output Channel `WIS Context Sync`.
-- No se acepta “ok general” sin estado final, issues y authority_map.
-- El gate 3A queda cerrado solo con cobertura completa de la matriz.
+Tras cada corrida de contexto, ejecutar `WIS: Prepare Handoff` y registrar:
+
+- `status`: `ready` / `partial` / `blocked`
+- evidencia de prompts y resumen en Output Channel
+- ausencia de writes y ausencia de ejecucion automatica downstream
+
+## 4. Criterio de cierre
+
+Slice 3A se considera cerrado solo si:
+
+- matriz completa en ambos modos
+- estados y issues trazables
+- evidencia de no-write explicita
+- coherencia con `docs/context/WIS_PHASE_3_ACCEPTANCE_GATE.md`

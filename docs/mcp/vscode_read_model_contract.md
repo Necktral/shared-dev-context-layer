@@ -1,12 +1,18 @@
-# VS Code Read-Only Handoff Contract (Fase 2)
+# VS Code Read-Only MCP Contract
+_Status: active contract for runtimeMode=mcp_
 
-## Purpose
+## 1. Purpose
 
-Define the read-only payload contract the future VS Code extension will use to resolve scope and request context without triggering write actions.
+Definir el contrato read-only entre la extension de VS Code y WIS cuando la extension opera en `runtimeMode=mcp`.
 
-## Scope input contract
+## 2. Runtime linkage
 
-The extension may send any subset of:
+- `runtimeMode=offline_fixture`: usa fixtures locales (este contrato no aplica).
+- `runtimeMode=mcp`: aplica este contrato completo.
+
+## 3. Scope input contract
+
+La extension puede enviar cualquier subconjunto de:
 
 - `workspace_id`
 - `project_id`
@@ -14,45 +20,62 @@ The extension may send any subset of:
 - `consumer` (`vscode_extension`)
 - `session_key`
 
-Resolver precedence is:
+Resolver precedence esperada:
 
 1. `task_id`
 2. `project_id`
 3. `workspace_id`
-4. canonical current scope (`context_scopes.is_current = true`)
+4. canonical current scope
 
-If a conflict exists (`task` does not belong to provided `project/workspace`), MCP returns:
+## 4. MCP compatibility contract
 
-- `status: "scope_conflict"`
-- `resolution_metadata.conflict_flags`
-
-## MCP compatibility
-
-The same 5 tools remain stable:
+Tools estables:
 
 - `get_active_task`
 - `get_context_snapshot`
-- `get_recent_errors`
 - `get_validation_status`
 - `get_approved_decisions`
+- `get_recent_errors`
 
-All tools now accept optional scope args listed above. Calls with no args remain backward compatible.
+Transporte:
 
-## Response invariants for extension prep
+- `streamable-http`
+- endpoint terminado en `/mcp`
 
-All successful tool responses (`status: "ok"`) include:
+## 5. Response invariants
 
-- `scope` (effective `workspace/project/task`)
-- `resolution_metadata` (`source`, `fallback_level`, `conflict_flags`, `requested`, `resolved_scope`)
+En respuestas exitosas (`status: ok`), preservar:
 
-`get_context_snapshot` additionally includes:
+- `scope`
+- `resolution_metadata`
+
+En `get_context_snapshot`, preservar ademas:
 
 - `consumer_context`
-- rich `snapshot` payload with identity, execution_state, validation, decisions, errors, metadata
+- `snapshot`
+- `metadata`
 
-## Non-goals in this phase
+## 6. Error and state mapping
 
-- no write actions
-- no auth changes
-- no transport changes (`streamable-http` on `/mcp`)
-- no automatic code execution from extension
+Errores MCP deben mapearse al modelo tipado del control plane:
+
+- transporte -> `transport_error` / `unavailable`
+- esquema -> `schema_error`
+- dominio -> `no_active_task`, `scope_conflict`, etc.
+
+Sin colapsar errores a "no data".
+
+## 7. Read-only boundaries
+
+No permitido:
+
+- write actions
+- cambios de tool names
+- cambios de transporte
+- bypass de policy `delegated_limited`
+
+## 8. Cross-links
+
+- Runbook MCP: `README.md`
+- Canon contract: `../context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
+- Extension usage: `../../vscode-extension/README.md`

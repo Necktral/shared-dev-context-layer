@@ -1,58 +1,78 @@
-# WIS Context Sync VS Code Extension (Slice 3A)
+# WIS Context Sync VS Code Extension
 
-This package implements the read-only control plane baseline for WIS consumption with explicit degradation and project-first offline support.
+Read-only control plane para consumo de contexto operativo desde WIS, con degradacion explicita y soporte dual `offline_fixture` / `mcp`.
 
-## Included in this slice
+## Estado implementado
 
-- Commands:
-  - `WIS: Load Operational Context`
-  - `WIS: Reset Session`
-- Layered orchestration (`LoadOperationalContextService`) with read-only envelope composition.
-- Output channel presentation with sections:
-  - Session
-  - Local Environment
-  - Active Task
-  - Validation
-  - Approved Decisions
-  - Recent Errors
-  - Load State
-  - Issues
-- Runtime modes (explicit):
-  - `mcp`
-  - `offline_fixture`
-- Deterministic fixture scenarios:
-  - `success_full`
-  - `partial_missing_recent_errors`
-  - `degraded_no_remote_bundle`
-  - `transport_error`
-  - `no_active_task`
-  - `validation_stale`
-- MCP SDK adapter (`streamable-http`) for live mode.
-- Typed diagnostics and envelope evidence.
+- Slice 3A: WIS consumption baseline (envelope tipado + orchestrator).
+- Slice 4 baseline: `WIS: Prepare Handoff` (artifact tipado en memoria, Codex-first).
 
-## Configuration
+## Commands
+
+- `WIS: Load Operational Context`
+- `WIS: Reset Session`
+- `WIS: Prepare Handoff`
+
+## Runtime modes
+
+- `offline_fixture`: desarrollo y pruebas deterministas sin red.
+- `mcp`: consumo real de tools MCP contra endpoint configurado.
+
+No existe fallback automatico entre modos.
+
+## Settings
 
 - `wisContextSync.mcpEndpoint` (default: `http://localhost:8002/mcp`)
-- `wisContextSync.diagnosticMode` (default: `true`)
-- `wisContextSync.runtimeMode` (default: `offline_fixture`)
+- `wisContextSync.runtimeMode` (default: `offline_fixture`; enum: `mcp | offline_fixture`)
 - `wisContextSync.requestTimeoutMs` (default: `5000`)
 - `wisContextSync.fixtureScenario` (default: `success_full`)
+- `wisContextSync.diagnosticMode` (default: `true`)
 
-## Out of scope
+## Operational load states
 
-- No write actions to WIS
-- No shell execution
-- No file mutation automation
-- No panel/webview UI
-- No handoff execution flows
+- `loaded`
+- `partially_loaded`
+- `degraded`
+- `failed`
+
+Transport status se reporta de forma separada (`ok`, `partial`, `degraded`, `transport_error`, `schema_error`, `unavailable`).
+
+## Handoff states
+
+- `ready`
+- `partial`
+- `blocked`
+
+`Prepare Handoff` consume solo `OperationalContextEnvelope` en memoria. No usa responses MCP crudas ni strings de renderer como fuente de verdad.
+
+## Read-only boundaries
+
+Permitido:
+
+- leer contexto WIS
+- presentar estado
+- preparar artifact de handoff en memoria
+
+No permitido:
+
+- write actions a WIS
+- mutaciones automaticas de archivos
+- shell execution automatica
+- webview/panel avanzado en este baseline
 
 ## Development
 
 ```bash
-cd vscode-extension
 npm install
 npm run compile
 npm test
 ```
 
-Then open the repo in VS Code and press `F5` to launch Extension Host.
+En VS Code, usar `F5` para abrir Extension Host y validar comandos.
+
+## Referencias
+
+- Canon de fase: `../docs/context/`
+- Runbook MCP: `../docs/mcp/README.md`
+- Evidencia 3A: `../docs/context/phase3/evidence/slice-3a/README.md`
+- Evidencia 3B: `../docs/context/phase3/evidence/slice-3b/README.md`

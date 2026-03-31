@@ -1,8 +1,8 @@
 {
   "name": "wis-context-sync-control-plane",
   "displayName": "WIS Context Sync",
-  "description": "Read-only local control plane for WIS Context Sync (Phase 3 Slice 3A).",
-  "version": "0.0.1",
+  "description": "Read-only local control plane for WIS Context Sync (Phase 3 closure candidate).",
+  "version": "0.1.0-internal",
   "publisher": "necktral",
   "engines": {
     "vscode": "^1.90.0"

@@ -19,3 +19,10 @@ Este index ordena las referencias mas utiles para ejecutar y cerrar trabajo sin 
 
 - Para implementar: SSOT -> ADR -> Gate -> Plan.
 - Para disenar o revisar limites: Contract -> Architecture -> Spec.
+
+## Cierre operativo (internal release)
+
+- `release-internal/README.md`
+- `release-internal/GO_NO_GO_CHECKLIST.md`
+- `release-internal/CHANGELOG_PHASE3_INTERNAL.md`
+- `release-internal/TEAM_DAILY_GUIDE.md`

@@ -1,135 +1,97 @@
-# MCP Remote v1 Runbook (Fase 4)
+# MCP Runtime Runbook (VS Code Control Plane)
 
-## Scope freeze (must stay true)
+Runbook para operar el modo `mcp` de la extension y validar conectividad local/remota sin romper postura read-only.
 
-- Do not change models.
-- Do not change MCP tools.
-- Do not add write actions.
-- Do not change policy mode (`delegated_limited`) except critical bugfixes.
+## 1. Scope and guardrails
 
-This runbook is only for remote exposure and external connectivity validation.
+- No cambiar modelos de dominio.
+- No cambiar tools MCP.
+- No agregar write actions.
+- Mantener policy mode `delegated_limited`.
 
-## Current local baseline
+Este runbook valida transporte y consumo read-only.
 
-- Backend health: `http://localhost:8001/health`
-- MCP local endpoint: `http://localhost:8002/mcp`
-- Required tools:
-  - `get_active_task`
-  - `get_context_snapshot`
-  - `get_recent_errors`
-  - `get_validation_status`
-  - `get_approved_decisions`
+## 2. Relacion con runtimeMode de extension
 
-## Preflight
+En la extension:
 
-1. `docker compose up --build -d`
-2. `docker compose ps` must show `postgres`, `backend`, `mcp` as `Up`.
-3. `curl -s http://localhost:8001/health` must return `db: up`.
-4. `docker compose logs mcp --tail=60` must show Streamable HTTP startup.
+- `runtimeMode=offline_fixture`: no usa red, util para pruebas deterministas.
+- `runtimeMode=mcp`: usa endpoint configurado en `wisContextSync.mcpEndpoint`.
 
-## Named tunnel (Cloudflare, stable URL)
+Este documento aplica cuando `runtimeMode=mcp`.
 
-Required environment variables:
+## 3. Endpoint contract
 
-- `CF_NAMED_TUNNEL_TOKEN` (Cloudflare named tunnel token).
-- `CF_MCP_PUBLIC_BASE_URL` (stable public base URL, e.g. `https://mcp.dev.example.com`).
+Endpoint canonical:
 
-### Start
+- local: `http://localhost:8002/mcp`
+- remoto: `https://<stable-domain>/mcp`
+
+Siempre debe terminar en `/mcp`.
+
+## 4. Preflight local
 
 ```bash
-./scripts/start_named_cloudflare_tunnel.sh
+docker compose up --build -d
+docker compose ps
+curl -s http://localhost:8001/health
+docker compose logs mcp --tail=60
 ```
 
-### Check
+Esperado:
 
-```bash
-./scripts/check_named_cloudflare_tunnel.sh
-```
+- `postgres`, `backend`, `mcp` en estado `Up`
+- health con DB operativa
+- MCP levantado en `streamable-http`
 
-### Stop
-
-```bash
-./scripts/stop_named_cloudflare_tunnel.sh
-```
-
-## Quick tunnel (fallback only)
-
-### Start
-
-```bash
-./scripts/start_cloudflare_tunnel.sh
-```
-
-Expected output includes:
-
-- `Public base URL: https://<random>.trycloudflare.com`
-- `MCP endpoint URL: https://<random>.trycloudflare.com/mcp`
-
-### Stop
-
-```bash
-./scripts/stop_cloudflare_tunnel.sh
-```
-
-## Remote MCP validation (before ChatGPT)
-
-Run:
+## 5. Validacion MCP (before ChatGPT)
 
 ```bash
 ./scripts/validate_remote_mcp.sh https://<stable-domain>
 ```
 
-What this validation enforces:
+La validacion debe confirmar:
 
-- HTTPS endpoint reachability with `Accept: text/event-stream`.
-- MCP client can list and call all 5 required tools.
-- Domain tables do not change from tool consumption.
-- `publish_audit` increases exactly by `+5` (one row per tool call).
+- reachability HTTPS + headers MCP
+- invocacion de las 5 tools
+- sin cambios en tablas de dominio por consumo read-only
+- delta esperado en `publish_audit`
 
-Pass criteria:
+## 6. VS Code usage checklist (runtimeMode=mcp)
 
-- Script ends with `Remote MCP validation PASSED`.
+1. Setear:
+- `wisContextSync.runtimeMode = mcp`
+- `wisContextSync.mcpEndpoint = <url>/mcp`
 
-## ChatGPT Developer Mode registration
+2. Ejecutar comandos:
+- `WIS: Load Operational Context`
+- `WIS: Prepare Handoff`
 
-Create app using the stable endpoint:
+3. Verificar en Output Channel:
+- `transport_status`
+- `load_state`
+- `runtime_mode`
+- `issues`
+- estado de handoff (`ready|partial|blocked`)
 
-- Name: `WIS Context Sync`
-- Description: read-only operational context sync for tasks, decisions, errors and validations under WIS policy
-- MCP Server URL: `https://<stable-domain>/mcp`
-- Authentication: `No Authentication`
+## 7. Troubleshooting matrix (control-plane states)
 
-After saving:
+- **Transport issue** (`transport_error`, `unavailable`)
+  - Causa probable: endpoint incorrecto o red caida.
+  - Accion: validar URL con `/mcp`, revisar `docker compose logs mcp`.
 
-1. Refresh tool list.
-2. Confirm all 5 tools are visible.
-3. Invoke each tool once from ChatGPT conversation.
+- **Schema issue** (`schema_error`)
+  - Causa probable: payload MCP malformado o drift en shape.
+  - Accion: correr validacion remota y revisar normalizacion en gateway.
 
-## Evidence checklist (manual)
+- **Domain issue** (`no_active_task`, `scope_conflict`, `validation_stale`)
+  - Causa probable: estado funcional del dominio, no transporte.
+  - Accion: revisar payload tipado e `issues` en envelope, no enmascarar como no-data.
 
-- Screenshot or copy of app config URL and auth mode.
-- One successful invocation per tool.
-- SQL evidence:
-  - domain tables unchanged after tool usage
-  - `publish_audit` rows added with correct `package_type`.
+## 8. References
 
-## Fast diagnostics matrix
-
-- Symptom: URL works without `/mcp` but tools fail.
-  - Cause: wrong endpoint path.
-  - Action: use exact URL ending in `/mcp`.
-- Symptom: tunnel URL unreachable.
-  - Cause: named tunnel container stopped or DNS mismatch.
-  - Action: run `./scripts/check_named_cloudflare_tunnel.sh`; inspect `docker logs wis_context_cloudflared_named_tunnel`.
-- Symptom: MCP responds `Not Acceptable` or handshake errors.
-  - Cause: bad headers or non-MCP client.
-  - Action: run `./scripts/validate_remote_mcp.sh <public-url>` to validate transport and tool calls.
-- Symptom: tools visible but call fails.
-  - Cause: backend/mcp dependency issue or DB unavailable.
-  - Action: check `docker compose logs mcp` and `docker compose logs backend`; verify `GET /health`.
-- Symptom: audit does not increment.
-  - Cause: tool path bypassing audit or DB write failure.
-  - Action: run remote validation script and inspect `publish_audit` query output.
-- Symptom: tunnel drops after some time.
-  - Cause: using quick tunnel instead of named tunnel.
-  - Action: use named tunnel scripts and stable domain; avoid quick tunnel for normal development.
+- Root overview: `../../README.md`
+- VS Code extension usage: `../../vscode-extension/README.md`
+- Canon contract: `../context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
+- Evidence 3A: `../context/phase3/evidence/slice-3a/README.md`
+- Evidence 3B: `../context/phase3/evidence/slice-3b/README.md`

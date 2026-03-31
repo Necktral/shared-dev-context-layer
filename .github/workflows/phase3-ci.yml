@@ -1,0 +1,91 @@
+name: phase3-ci
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  docs:
+    name: docs-consistency
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Validate docs consistency
+        run: ./scripts/validate_docs_consistency.sh
+
+  vscode-extension:
+    name: vscode-extension-compile-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - name: Install deps
+        working-directory: vscode-extension
+        run: npm ci
+
+      - name: Compile
+        working-directory: vscode-extension
+        run: npm run compile
+
+      - name: Test
+        working-directory: vscode-extension
+        run: npm test
+
+  backend:
+    name: backend-pytest
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: wis_context
+          POSTGRES_USER: wis_admin
+          POSTGRES_PASSWORD: wis_strong_password_change_this
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wis_admin -d wis_context"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PROJECT_NAME: shared-dev-context-layer
+      BACKEND_PORT: 8001
+      MCP_PORT: 8002
+      SYSTEM_MODE: delegated_limited
+      DATABASE_URL: postgresql://wis_admin:wis_strong_password_change_this@localhost:5432/wis_context
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run migrations
+        working-directory: backend
+        run: alembic upgrade head
+
+      - name: Run tests
+        working-directory: backend
+        run: pytest -q

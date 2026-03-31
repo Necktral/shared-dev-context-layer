@@ -1,32 +1,33 @@
-# WIS Fase 3 Canon (Fuente Unica)
+# WIS Fase 3 Canon (Single Source of Truth)
 
-`docs/context` es la fuente oficial de documentacion para Fase 3.
+`docs/context` es la fuente oficial para contratos, arquitectura y gates de Fase 3.
 
-## Regla de freeze
+## Regla de consistencia
 
-No se permite implementar cambios de Fase 3 fuera de este paquete sin un delta documentado y versionado en esta misma carpeta.
+- El control plane de VS Code es read-only.
+- WIS mantiene autoridad canonica.
+- El runtime de extension es dual: `offline_fixture` y `mcp`.
+- No existe fallback automatico entre modos.
 
-## Precedencia documental (Slice 0)
-
-Para Slice 0, el orden de precedencia es obligatorio:
+## Precedencia documental vigente
 
 1. `phase3/slice-0-foundation-ssot.md`
 2. `adr/ADR-phase3-slice0-foundation-contract-lock.md`
 3. `WIS_PHASE_3_ACCEPTANCE_GATE.md`
 4. `WIS_PHASE_3_IMPLEMENTATION_PLAN.md`
-5. `WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`, `WIS_VSCODE_EXTENSION_ARCHITECTURE.md`, `WIS_PHASE_3_SPEC.md`
+5. `WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
+6. `WIS_VSCODE_EXTENSION_ARCHITECTURE.md`
+7. `WIS_PHASE_3_SPEC.md`
 
-Si existe contradiccion entre documentos, se corrige en `docs/context` en un unico delta versionado. No se abren rutas paralelas.
+## Puentes operativos
 
-## Arranque operativo de Slice 0
+- Runbook MCP: `../mcp/README.md`
+- Contrato read-only MCP: `../mcp/vscode_read_model_contract.md`
+- Evidencia Slice 3A: `phase3/evidence/slice-3a/README.md`
+- Evidencia Slice 3B: `phase3/evidence/slice-3b/README.md`
+- Internal release pack: `phase3/release-internal/README.md`
 
-Los documentos de arranque operativo son:
+## Roadmap corto
 
-- `phase3/slice-0-foundation-ssot.md`
-- `adr/ADR-phase3-slice0-foundation-contract-lock.md`
-
-## Regla de consistencia
-
-- Mantener una sola fuente de verdad para evitar drift.
-- No duplicar este paquete en otras carpetas canonicas.
-- Todo delta documental de Fase 3 se hace en `docs/context`.
+- Estado actual: Slice 3A + baseline Slice 4 (`Prepare Handoff`) con salida en Output Channel + memoria.
+- Siguiente foco: hardening de contrato y refinamiento de presentacion, sin abrir write flows.
