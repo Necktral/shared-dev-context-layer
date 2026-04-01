@@ -2,7 +2,7 @@
   "name": "wis-context-sync-control-plane",
   "displayName": "WIS Context Sync",
   "description": "Authenticated control plane for WIS Context Sync with dual runtime (offline_fixture/mcp).",
-  "version": "0.1.0-internal",
+  "version": "0.2.0-internal",
   "publisher": "necktral",
   "engines": {
     "vscode": "^1.90.0"
@@ -16,7 +16,14 @@
     "onCommand:wisContextSync.resetSession",
     "onCommand:wisContextSync.prepareHandoff",
     "onCommand:wisContextSync.configureAuthentication",
-    "onCommand:wisContextSync.clearAuthentication"
+    "onCommand:wisContextSync.clearAuthentication",
+    "onCommand:wisContextSync.searchContext",
+    "onCommand:wisContextSync.upsertContextItem",
+    "onCommand:wisContextSync.appendContextEvent",
+    "onCommand:wisContextSync.linkContextEntities",
+    "onCommand:wisContextSync.setContextLabels",
+    "onCommand:wisContextSync.archiveContextItem",
+    "onCommand:wisContextSync.applySyncBatch"
   ],
   "contributes": {
     "commands": [
@@ -39,6 +46,34 @@
       {
         "command": "wisContextSync.clearAuthentication",
         "title": "WIS: Clear Authentication"
+      },
+      {
+        "command": "wisContextSync.searchContext",
+        "title": "WIS: Search Context"
+      },
+      {
+        "command": "wisContextSync.upsertContextItem",
+        "title": "WIS: Upsert Context Item"
+      },
+      {
+        "command": "wisContextSync.appendContextEvent",
+        "title": "WIS: Append Context Event"
+      },
+      {
+        "command": "wisContextSync.linkContextEntities",
+        "title": "WIS: Link Context Entities"
+      },
+      {
+        "command": "wisContextSync.setContextLabels",
+        "title": "WIS: Set Context Labels"
+      },
+      {
+        "command": "wisContextSync.archiveContextItem",
+        "title": "WIS: Archive Context Item"
+      },
+      {
+        "command": "wisContextSync.applySyncBatch",
+        "title": "WIS: Apply Sync Batch"
       }
     ],
     "configuration": {

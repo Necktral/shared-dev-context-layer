@@ -6,5 +6,66 @@
     "window_hours": 24
   },
   "get_validation_status": {},
-  "get_approved_decisions": {}
+  "get_approved_decisions": {},
+  "search_context": {
+    "query": "bootstrap",
+    "limit": 10,
+    "offset": 0
+  },
+  "get_context_by_id": {
+    "context_item_id": "00000000-0000-4000-8000-000000000001"
+  },
+  "list_context_windows": {
+    "window_hours": 24,
+    "limit": 10
+  },
+  "resolve_related_items": {
+    "context_item_id": "00000000-0000-4000-8000-000000000001",
+    "limit": 10
+  },
+  "get_sync_status": {
+    "limit": 10
+  },
+  "preview_write_impact": {
+    "operation": "upsert_context_item",
+    "payload": {
+      "item_key": "registry.preview.item"
+    }
+  },
+  "upsert_context_item": {
+    "item_key": "registry.validation.item",
+    "item_type": "note",
+    "title": "Registry validation item",
+    "dry_run": true
+  },
+  "append_context_event": {
+    "event_type": "info",
+    "summary": "registry validation event",
+    "dry_run": true
+  },
+  "link_context_entities": {
+    "source_item_id": "00000000-0000-4000-8000-000000000001",
+    "target_item_id": "00000000-0000-4000-8000-000000000002",
+    "relation": "depends_on",
+    "dry_run": true
+  },
+  "set_context_labels": {
+    "context_item_id": "00000000-0000-4000-8000-000000000001",
+    "labels": [
+      "registry"
+    ],
+    "dry_run": true
+  },
+  "archive_context_item": {
+    "context_item_id": "00000000-0000-4000-8000-000000000001",
+    "dry_run": true
+  },
+  "apply_sync_batch": {
+    "operations": [
+      {
+        "operation": "upsert_context_item"
+      }
+    ],
+    "dry_run": true
+  }
 }

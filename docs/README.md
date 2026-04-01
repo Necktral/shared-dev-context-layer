@@ -1,12 +1,12 @@
 # Documentacion del Proyecto
 
-Este directorio concentra la fuente de verdad documental para el control plane read-only.
+Este directorio concentra la fuente de verdad documental para el control plane (read baseline + write plane controlado).
 
 ## Mapa principal
 
 - Canon Fase 3: `docs/context/`
 - Operacion MCP (runbook): `docs/mcp/`
-- Contrato VS Code <-> MCP read-only: `docs/mcp/vscode_read_model_contract.md`
+- Contrato VS Code <-> MCP runtime: `docs/mcp/vscode_read_model_contract.md`
 - OAuth Auth0 para ChatGPT Connector: `docs/mcp/oauth_auth0_chatgpt_connector.md`
 
 ## Runtime posture (dual mode)
@@ -30,6 +30,7 @@ No hay fallback silencioso entre modos.
 
 - Slice 3A closure: `docs/context/phase3/evidence/slice-3a/README.md`
 - Slice 3B hardening: `docs/context/phase3/evidence/slice-3b/README.md`
+- Phase 4 read/write + OAuth: `docs/context/phase4/evidence/README.md`
 - Internal release: `docs/context/phase3/release-internal/README.md`
 
 ## Governance

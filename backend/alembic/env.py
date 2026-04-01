@@ -8,8 +8,13 @@ from app.db.base import Base
 from app.models import (  # noqa: F401
     ApprovedDecision,
     Consumer,
+    ContextItem,
+    ContextItemLabel,
+    ContextItemLink,
     ContextSnapshot,
     ContextScope,
+    ContextSyncBatch,
+    ContextWriteAudit,
     Event,
     ExecutionSession,
     PolicyState,

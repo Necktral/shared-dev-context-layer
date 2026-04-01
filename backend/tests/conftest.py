@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -5,6 +6,9 @@ import pytest
 from sqlalchemy import select
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+os.environ.setdefault("MCP_AUTH_ENABLED", "true")
+os.environ.setdefault("MCP_AUTH_BYPASS_LOCAL", "true")
 
 from app.db.seed_v5 import run_seed as run_seed_v5
 from app.db.session import SessionLocal

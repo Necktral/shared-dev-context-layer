@@ -1,10 +1,10 @@
-# WIS Fase 3 Canon (Single Source of Truth)
+# WIS Canon (Single Source of Truth)
 
-`docs/context` es la fuente oficial para contratos, arquitectura y gates de Fase 3.
+`docs/context` es la fuente oficial para contratos, arquitectura y gates de Fase 3 + extensión v0.2.0 (write plane controlado).
 
 ## Regla de consistencia
 
-- El control plane de VS Code es read-only.
+- El control plane de VS Code mantiene autoridad separada y write guardrails explícitos.
 - WIS mantiene autoridad canonica.
 - El runtime de extension es dual: `offline_fixture` y `mcp`.
 - No existe fallback automatico entre modos.
@@ -22,13 +22,14 @@
 ## Puentes operativos
 
 - Runbook MCP: `../mcp/README.md`
-- Contrato read-only MCP: `../mcp/vscode_read_model_contract.md`
+- Contrato MCP runtime (read/write): `../mcp/vscode_read_model_contract.md`
 - Evidencia Slice 3A: `phase3/evidence/slice-3a/README.md`
 - Evidencia Slice 3B: `phase3/evidence/slice-3b/README.md`
 - Evidencia Slice 3C (`all_published`): `phase3/evidence/slice-3c-all-published/README.md`
+- Evidencia Phase 4 (read/write + OAuth): `phase4/evidence/README.md`
 - Internal release pack: `phase3/release-internal/README.md`
 
 ## Roadmap corto
 
-- Estado actual: Slice 3A + baseline Slice 4 (`Prepare Handoff`) con salida en Output Channel + memoria.
-- Siguiente foco: hardening de contrato y refinamiento de presentacion, sin abrir write flows.
+- Estado actual: Slice 3A + Slice 4 baseline + write plane v0.2.0 con comandos MCP read/write.
+- Siguiente foco: hardening de claims privados y refinamiento de presentación.

@@ -1,10 +1,10 @@
 # WIS Phase 3 Acceptance Gate
 _Status: active gate (Go/No-Go)_
-_Scope: VS Code control plane read-only_
+_Scope: VS Code control plane + write plane controlado_
 
 ## 1. Purpose
 
-Definir criterios binarios para cerrar Fase 3 sin drift de contrato, sin writes y con soporte dual de runtime.
+Definir criterios binarios para cerrar Fase 3 + v0.2.0 sin drift de contrato, con soporte dual de runtime y write plane controlado.
 
 ## 2. Gate principles
 
@@ -13,7 +13,7 @@ Fase 3 solo es **GO** si el sistema es:
 1. util en runtime real
 2. contract-safe
 3. honesto en degradacion
-4. read-only verificable
+4. mutación controlada y verificable
 5. listo para handoff estructurado
 
 ## 3. Mandatory categories
@@ -27,6 +27,13 @@ Pass:
   - `WIS: Load Operational Context`
   - `WIS: Reset Session`
   - `WIS: Prepare Handoff`
+  - `WIS: Search Context`
+  - `WIS: Upsert Context Item`
+  - `WIS: Append Context Event`
+  - `WIS: Link Context Entities`
+  - `WIS: Set Context Labels`
+  - `WIS: Archive Context Item`
+  - `WIS: Apply Sync Batch`
 
 ## B. Runtime dual and transport
 
@@ -42,7 +49,7 @@ Pass:
 
 - `published_tools` se descubren dinamicamente via `list_tools`
 - validacion operacional ejecuta politica `all_published`
-- invocacion dinamica usa registry de payloads read-only
+- invocacion dinamica usa registry de payloads
 - cualquier `required_params_without_registry_payload` implica NO-GO
 - cobertura de `core_context_fields` para el envelope (`active_task`, `context_snapshot`, `validation_status`, `approved_decisions`, `recent_errors`)
 - auditoria dinamica: `delta +N`, donde `N = tools invocadas exitosamente`
@@ -65,11 +72,14 @@ Pass:
 - estados visibles: `ready`, `partial`, `blocked`
 - artifact derivado solo de `OperationalContextEnvelope`
 
-## F. Read-only authority
+## F. Write guardrails
 
 Pass:
 
-- no writes a WIS
+- write tools disponibles solo por comando explícito
+- `dry_run|commit` funcional
+- `idempotency_key` obligatoria en commit
+- auditoría write (`context_write_audit`) + `publish_audit`
 - no shell auto-execution
 - no mutacion automatica de repo
 - no bypass de `delegated_limited`
@@ -96,7 +106,12 @@ Pass:
 - resumen en Output Channel
 - evidencia de no-write
 
-4. **Contract evidence**
+4. **Write evidence**
+- `dry_run` exitoso sin mutación de tablas de dominio
+- `commit` exitoso con mutación esperada y auditoría consistente
+- respuesta explícita ante `403 insufficient_scope`
+
+5. **Contract evidence**
 - snapshots de envelope y renderer
 - snapshots de handoff artifact/prompts
 - paridad semantica fixture vs mcp
@@ -112,7 +127,7 @@ Pass:
 ### NO-GO
 
 - cualquier drift en comandos/settings/runtime contract
-- cualquier write behavior
+- write behavior sin `dry_run|commit` o sin idempotencia/auditoría
 - degradacion oculta o estado engañoso
 - handoff acoplado a ejecucion downstream
 

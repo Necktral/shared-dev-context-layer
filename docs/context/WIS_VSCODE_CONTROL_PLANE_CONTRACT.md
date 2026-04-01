@@ -1,10 +1,10 @@
 # WIS VS Code Control Plane Contract
-_Status: active contract (Slice 3A + Slice 4 baseline)_
-_Scope: VS Code read-only control plane + MCP compatibility_
+_Status: active contract (Slice 3A + Slice 4 + v0.2.0 write plane)_
+_Scope: VS Code control plane read/write + MCP compatibility_
 
 ## 1. Purpose
 
-Definir el contrato operativo para la extension de VS Code como consumidor read-only de WIS.
+Definir el contrato operativo para la extensión de VS Code como consumidor y operador controlado de WIS.
 
 Este contrato fija:
 
@@ -17,10 +17,10 @@ Este contrato fija:
 ## 2. System role split
 
 - **WIS**: autoridad canonica de contexto operativo.
-- **VS Code extension**: orquestador read-only local.
+- **VS Code extension**: orquestador local con read plane y write plane controlado.
 - **Codex/ChatGPT/Copilot**: consumidores downstream de handoff, no fuente canonica.
 
-La extension no decide verdad canonica ni ejecuta writes.
+La extensión no decide verdad canónica; ejecuta writes solo mediante tools explícitas, con `dry_run|commit`, `idempotency_key` y auditoría.
 
 ## 3. Runtime contract
 
@@ -41,7 +41,7 @@ Para `mcp`:
 - endpoint: URL explicita terminada en `/mcp`
 - `published_tools`: descubiertas en runtime via `list_tools` (sin fijar cantidad)
 - politica de validacion de endpoint/conector: `all_published`
-- invocacion dinamica gobernada por registry canónico de payloads read-only (`scripts/mcp_validation_payloads.json`)
+- invocación dinámica gobernada por registry canónico de payloads (`scripts/mcp_validation_payloads.json`)
 - criterio de auditoria remota: `delta +N` donde `N = tools invocadas exitosamente`
 - `core_context_fields` del envelope:
   - `active_task`
@@ -57,6 +57,13 @@ Para `mcp`:
 - `WIS: Load Operational Context`
 - `WIS: Reset Session`
 - `WIS: Prepare Handoff`
+- `WIS: Search Context`
+- `WIS: Upsert Context Item`
+- `WIS: Append Context Event`
+- `WIS: Link Context Entities`
+- `WIS: Set Context Labels`
+- `WIS: Archive Context Item`
+- `WIS: Apply Sync Batch`
 
 ### 4.2 Settings
 
@@ -135,17 +142,18 @@ Artifact tipado: `HandoffArtifact` (Codex-first), sin export a archivo en v1.
 - `evidence_hint`
 - `conflict_flag?`
 
-## 8. Read-only boundaries
+## 8. Write guardrails
 
 Permitido:
 
 - consumo read-only de tools MCP
+- mutaciones vía tools write en modo explícito (`dry_run` o `commit`)
+- `idempotency_key` obligatoria en `commit`
 - composicion de contexto
 - presentacion y handoff en memoria
 
 No permitido:
 
-- writes a WIS
 - ejecucion automatica de shell
 - mutacion automatica de repo
 - bypass de policy `delegated_limited`

@@ -19,7 +19,17 @@ if rg -n "filecite|||" "${TARGETS[@]}"; then
 fi
 
 echo "[docs-check] Verificando superficie oficial de comandos en docs y package..."
-for cmd in "WIS: Load Operational Context" "WIS: Reset Session" "WIS: Prepare Handoff"; do
+for cmd in \
+  "WIS: Load Operational Context" \
+  "WIS: Reset Session" \
+  "WIS: Prepare Handoff" \
+  "WIS: Search Context" \
+  "WIS: Upsert Context Item" \
+  "WIS: Append Context Event" \
+  "WIS: Link Context Entities" \
+  "WIS: Set Context Labels" \
+  "WIS: Archive Context Item" \
+  "WIS: Apply Sync Batch"; do
   if ! rg -q "$cmd" vscode-extension/README.md docs/context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md; then
     echo "ERROR: comando '$cmd' no esta documentado de forma canonica." >&2
     exit 1

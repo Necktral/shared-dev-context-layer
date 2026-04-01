@@ -75,11 +75,16 @@ read_counts() {
           (SELECT COUNT(*) FROM approved_decisions),
           (SELECT COUNT(*) FROM events),
           (SELECT COUNT(*) FROM context_snapshots),
+          (SELECT COUNT(*) FROM context_items),
+          (SELECT COUNT(*) FROM context_item_links),
+          (SELECT COUNT(*) FROM context_item_labels),
+          (SELECT COUNT(*) FROM context_sync_batches),
           (SELECT COUNT(*) FROM policy_state),
-          (SELECT COUNT(*) FROM publish_audit);"
+          (SELECT COUNT(*) FROM publish_audit),
+          (SELECT COUNT(*) FROM context_write_audit);"
 }
 
-IFS='|' read -r pre_tasks pre_decisions pre_events pre_snapshots pre_policy pre_audit <<<"$(read_counts)"
+IFS='|' read -r pre_tasks pre_decisions pre_events pre_snapshots pre_context_items pre_context_links pre_context_labels pre_sync_batches pre_policy pre_audit pre_write_audit <<<"$(read_counts)"
 
 tmp_headers="$(mktemp)"
 tmp_body="$(mktemp)"
@@ -97,6 +102,13 @@ fi
 
 if [[ "$http_code" -ge 500 ]]; then
   echo "ERROR: MCP endpoint returned server error ($http_code)." >&2
+  cat "$tmp_body" >&2
+  exit 1
+fi
+
+if [[ "$http_code" -eq 401 || "$http_code" -eq 403 ]]; then
+  echo "ERROR: MCP endpoint requires valid auth (HTTP $http_code)." >&2
+  echo "Set MCP_AUTH_TOKEN and retry. Header=$AUTH_HEADER_NAME scheme=$AUTH_SCHEME" >&2
   cat "$tmp_body" >&2
   exit 1
 fi
@@ -190,7 +202,18 @@ async def main() -> None:
                             "attempted_payload": payload,
                         }
                         continue
-                    results[name] = response.structuredContent
+                    structured = response.structuredContent
+                    status_value = structured.get("status") if isinstance(structured, dict) else None
+                    if status_value in {"forbidden", "unauthorized", "invalid_request", "error"}:
+                        failed_tools[name] = {
+                            "reason": "tool_status_not_ok",
+                            "message": f"tool returned status={status_value}",
+                            "payload_source": payload_source,
+                            "attempted_payload": payload,
+                            "structured": structured,
+                        }
+                        continue
+                    results[name] = structured
                 except Exception as exc:  # noqa: BLE001
                     message = str(exc)
                     reason = "invocation_error"
@@ -237,18 +260,23 @@ if [[ "$total_count" -le 0 ]]; then
   exit 1
 fi
 
-IFS='|' read -r post_tasks post_decisions post_events post_snapshots post_policy post_audit <<<"$(read_counts)"
+IFS='|' read -r post_tasks post_decisions post_events post_snapshots post_context_items post_context_links post_context_labels post_sync_batches post_policy post_audit post_write_audit <<<"$(read_counts)"
 
 delta_tasks=$((post_tasks - pre_tasks))
 delta_decisions=$((post_decisions - pre_decisions))
 delta_events=$((post_events - pre_events))
 delta_snapshots=$((post_snapshots - pre_snapshots))
+delta_context_items=$((post_context_items - pre_context_items))
+delta_context_links=$((post_context_links - pre_context_links))
+delta_context_labels=$((post_context_labels - pre_context_labels))
+delta_sync_batches=$((post_sync_batches - pre_sync_batches))
 delta_policy=$((post_policy - pre_policy))
 delta_audit=$((post_audit - pre_audit))
+delta_write_audit=$((post_write_audit - pre_write_audit))
 
-if [[ "$delta_tasks" -ne 0 || "$delta_decisions" -ne 0 || "$delta_events" -ne 0 || "$delta_snapshots" -ne 0 || "$delta_policy" -ne 0 ]]; then
+if [[ "$delta_tasks" -ne 0 || "$delta_decisions" -ne 0 || "$delta_events" -ne 0 || "$delta_snapshots" -ne 0 || "$delta_context_items" -ne 0 || "$delta_context_links" -ne 0 || "$delta_context_labels" -ne 0 || "$delta_sync_batches" -ne 0 || "$delta_policy" -ne 0 ]]; then
   echo "ERROR: domain tables changed unexpectedly." >&2
-  echo "Delta tasks=$delta_tasks decisions=$delta_decisions events=$delta_events snapshots=$delta_snapshots policy=$delta_policy" >&2
+  echo "Delta tasks=$delta_tasks decisions=$delta_decisions events=$delta_events snapshots=$delta_snapshots context_items=$delta_context_items context_links=$delta_context_links context_labels=$delta_context_labels sync_batches=$delta_sync_batches policy=$delta_policy" >&2
   exit 1
 fi
 
@@ -295,4 +323,4 @@ fi
 echo "Tool validation policy: all_published"
 echo "Payload registry: $PAYLOAD_REGISTRY_PATH"
 echo "Published tools: $total_count, successful: $success_count"
-echo "Domain tables unchanged; publish_audit increased by +$success_count."
+echo "Domain tables unchanged; publish_audit increased by +$success_count, context_write_audit delta=$delta_write_audit."

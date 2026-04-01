@@ -1,11 +1,12 @@
 # WIS Context Sync VS Code Extension
 
-Control plane autenticado para consumo de contexto operativo desde WIS, con degradacion explicita y soporte dual `offline_fixture` / `mcp`.
+Control plane autenticado para consumo y mutación controlada de contexto operativo desde WIS, con degradación explícita y soporte dual `offline_fixture` / `mcp`.
 
 ## Estado implementado
 
 - Slice 3A: WIS consumption baseline (envelope tipado + orchestrator).
 - Slice 4 baseline: `WIS: Prepare Handoff` (artifact tipado en memoria, Codex-first).
+- v0.2.0: plano read/write MCP con `dry_run|commit`, idempotencia y auditoría.
 
 ## Commands
 
@@ -14,6 +15,13 @@ Control plane autenticado para consumo de contexto operativo desde WIS, con degr
 - `WIS: Prepare Handoff`
 - `WIS: Configure Authentication`
 - `WIS: Clear Authentication`
+- `WIS: Search Context`
+- `WIS: Upsert Context Item`
+- `WIS: Append Context Event`
+- `WIS: Link Context Entities`
+- `WIS: Set Context Labels`
+- `WIS: Archive Context Item`
+- `WIS: Apply Sync Batch`
 
 ## Runtime modes
 
@@ -59,11 +67,11 @@ Permitido:
 - leer contexto WIS
 - presentar estado
 - preparar artifact de handoff en memoria
+- ejecutar write tools MCP con confirmación explícita (`dry_run|commit`)
 
 No permitido:
 
-- write actions a WIS
-- mutaciones automaticas de archivos
+- mutaciones automáticas de archivos
 - shell execution automatica
 - webview/panel avanzado en este baseline
 
@@ -72,7 +80,8 @@ No permitido:
 1. Configura `wisContextSync.authMode` (`bearer` o `api_key`).
 2. Ejecuta `WIS: Configure Authentication` y guarda token.
 3. Ejecuta `WIS: Load Operational Context`.
-4. Si necesitas limpiar credencial: `WIS: Clear Authentication`.
+4. Para write, ejecuta un comando (`WIS: Upsert Context Item`, etc.) y elige `dry_run` o `commit`.
+5. Si necesitas limpiar credencial: `WIS: Clear Authentication`.
 
 ## Development
 

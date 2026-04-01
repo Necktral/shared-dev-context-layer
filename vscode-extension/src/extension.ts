@@ -7,11 +7,18 @@ import {
   isDiagnosticModeEnabled,
 } from "./config";
 import {
+  COMMAND_APPEND_CONTEXT_EVENT,
+  COMMAND_APPLY_SYNC_BATCH,
+  COMMAND_ARCHIVE_CONTEXT_ITEM,
   COMMAND_CLEAR_AUTH,
   COMMAND_CONFIGURE_AUTH,
+  COMMAND_LINK_CONTEXT_ENTITIES,
   COMMAND_LOAD_CONTEXT,
   COMMAND_PREPARE_HANDOFF,
   COMMAND_RESET_SESSION,
+  COMMAND_SEARCH_CONTEXT,
+  COMMAND_SET_CONTEXT_LABELS,
+  COMMAND_UPSERT_CONTEXT_ITEM,
   EXTENSION_OUTPUT_CHANNEL,
 } from "./constants";
 import { DiagnosticsReporter, type DiagnosticsSnapshot } from "./diagnostics";
@@ -28,6 +35,8 @@ import { HandoffBuilder } from "./application/handoffBuilder";
 import { InMemoryHandoffArtifactStore } from "./application/handoffArtifactStore";
 import { HandoffOutputChannelRenderer } from "./presentation/renderers/handoffOutputChannelRenderer";
 import { AuthManager } from "./auth/authManager";
+import { ContextCommandService, type ContextCommandExecutionInput } from "./application/contextCommandService";
+import { ContextCommandOutputRenderer } from "./presentation/renderers/contextCommandOutputRenderer";
 
 let outputChannel: vscode.OutputChannel | undefined;
 
@@ -65,6 +74,37 @@ function currentConfig(): LoadContextConfig {
     fixtureScenario: getFixtureScenario(),
     diagnosticMode: isDiagnosticModeEnabled(),
   };
+}
+
+async function promptRequired(placeHolder: string, prompt: string, value?: string): Promise<string | undefined> {
+  return vscode.window.showInputBox({
+    placeHolder,
+    prompt,
+    value,
+    ignoreFocusOut: true,
+    validateInput: (raw) => (!raw.trim() ? "Campo obligatorio." : null),
+  });
+}
+
+async function promptDryRunMode(): Promise<boolean | undefined> {
+  const selected = await vscode.window.showQuickPick(
+    [
+      { label: "dry_run", detail: "Preview sin mutación", value: true },
+      { label: "commit", detail: "Ejecutar mutación", value: false },
+    ],
+    {
+      placeHolder: "Selecciona modo de ejecución",
+      ignoreFocusOut: true,
+    },
+  );
+  return selected?.value;
+}
+
+function labelsFromInput(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -113,6 +153,47 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     artifactStore: handoffArtifactStore,
     renderer: new HandoffOutputChannelRenderer(outputChannel),
   });
+  const contextCommandService = new ContextCommandService();
+  const contextCommandRenderer = new ContextCommandOutputRenderer(outputChannel);
+  const executeContextTool = async (
+    toolLabel: string,
+    runner: (input: ContextCommandExecutionInput) => Promise<{
+      ok: boolean;
+      status: string | null;
+      message: string;
+      requiredScopes: string[];
+      tool: string;
+      payload: Record<string, unknown> | null;
+      httpStatus: number | null;
+    }>,
+  ): Promise<void> => {
+    const auth = await authManager.resolveAuthContext();
+    const session = await sessionManager.getOrCreateSession();
+    const config = currentConfig();
+    const result = await runner({
+      endpoint: config.endpoint,
+      timeoutMs: config.timeoutMs,
+      auth,
+      consumer: sessionManager.consumer,
+      sessionKey: session.sessionKey,
+    });
+    contextCommandRenderer.render(result.tool, result);
+    outputChannel?.show(true);
+    if (!result.ok) {
+      const scopeHint = result.requiredScopes.length > 0 ? ` scopes=${result.requiredScopes.join(",")}` : "";
+      if (result.status === "forbidden") {
+        await vscode.window.showErrorMessage(`${toolLabel} -> 403 insufficient_scope.${scopeHint}`);
+        return;
+      }
+      if (result.status === "unauthorized") {
+        await vscode.window.showErrorMessage(`${toolLabel} -> 401 unauthorized. Configura token/authMode.`);
+        return;
+      }
+      await vscode.window.showErrorMessage(`${toolLabel} falló: ${result.message}`);
+      return;
+    }
+    await vscode.window.showInformationMessage(`${toolLabel} completado. status=${result.status ?? "ok"}`);
+  };
 
   const loadDisposable = vscode.commands.registerCommand(COMMAND_LOAD_CONTEXT, async () => {
     const auth = await authManager.resolveAuthContext();
@@ -188,12 +269,191 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await vscode.window.showInformationMessage("Token de autenticación eliminado de SecretStorage.");
   });
 
+  const searchContextDisposable = vscode.commands.registerCommand(COMMAND_SEARCH_CONTEXT, async () => {
+    const query = await vscode.window.showInputBox({
+      placeHolder: "Texto de búsqueda",
+      prompt: "Buscar en contexto",
+      value: "",
+      ignoreFocusOut: true,
+    });
+    if (query === undefined) {
+      return;
+    }
+    await executeContextTool("WIS: Search Context", (input) =>
+      contextCommandService.searchContext(input, query),
+    );
+  });
+
+  const upsertContextItemDisposable = vscode.commands.registerCommand(COMMAND_UPSERT_CONTEXT_ITEM, async () => {
+    const itemKey = await promptRequired("context.item.key", "Identificador lógico del item");
+    if (!itemKey) {
+      return;
+    }
+    const title = await promptRequired("Título", "Título del item");
+    if (!title) {
+      return;
+    }
+    const itemType = await promptRequired("note|decision|risk", "Tipo del item", "note");
+    if (!itemType) {
+      return;
+    }
+    const labelsRaw = await vscode.window.showInputBox({
+      placeHolder: "labels separadas por coma (opcional)",
+      prompt: "Etiquetas del item",
+      value: "",
+      ignoreFocusOut: true,
+    });
+    if (labelsRaw === undefined) {
+      return;
+    }
+    const dryRun = await promptDryRunMode();
+    if (dryRun === undefined) {
+      return;
+    }
+    await executeContextTool("WIS: Upsert Context Item", (input) =>
+      contextCommandService.upsertContextItem(input, {
+        itemKey: itemKey.trim(),
+        itemType: itemType.trim(),
+        title: title.trim(),
+        labels: labelsFromInput(labelsRaw),
+        dryRun,
+      }),
+    );
+  });
+
+  const appendContextEventDisposable = vscode.commands.registerCommand(COMMAND_APPEND_CONTEXT_EVENT, async () => {
+    const summary = await promptRequired("Resumen del evento", "Describe el evento");
+    if (!summary) {
+      return;
+    }
+    const eventType = await promptRequired("event_type", "Tipo de evento", "info");
+    if (!eventType) {
+      return;
+    }
+    const dryRun = await promptDryRunMode();
+    if (dryRun === undefined) {
+      return;
+    }
+    await executeContextTool("WIS: Append Context Event", (input) =>
+      contextCommandService.appendContextEvent(input, {
+        summary: summary.trim(),
+        eventType: eventType.trim(),
+        dryRun,
+      }),
+    );
+  });
+
+  const linkContextEntitiesDisposable = vscode.commands.registerCommand(COMMAND_LINK_CONTEXT_ENTITIES, async () => {
+    const sourceItemId = await promptRequired("source UUID", "ID del item origen");
+    if (!sourceItemId) {
+      return;
+    }
+    const targetItemId = await promptRequired("target UUID", "ID del item destino");
+    if (!targetItemId) {
+      return;
+    }
+    const relation = await promptRequired("depends_on|blocks|relates_to", "Relación", "depends_on");
+    if (!relation) {
+      return;
+    }
+    const dryRun = await promptDryRunMode();
+    if (dryRun === undefined) {
+      return;
+    }
+    await executeContextTool("WIS: Link Context Entities", (input) =>
+      contextCommandService.linkContextEntities(input, {
+        sourceItemId: sourceItemId.trim(),
+        targetItemId: targetItemId.trim(),
+        relation: relation.trim(),
+        dryRun,
+      }),
+    );
+  });
+
+  const setContextLabelsDisposable = vscode.commands.registerCommand(COMMAND_SET_CONTEXT_LABELS, async () => {
+    const contextItemId = await promptRequired("context_item_id UUID", "ID del item");
+    if (!contextItemId) {
+      return;
+    }
+    const labelsRaw = await promptRequired("label1,label2", "Labels separadas por coma");
+    if (!labelsRaw) {
+      return;
+    }
+    const dryRun = await promptDryRunMode();
+    if (dryRun === undefined) {
+      return;
+    }
+    await executeContextTool("WIS: Set Context Labels", (input) =>
+      contextCommandService.setContextLabels(input, {
+        contextItemId: contextItemId.trim(),
+        labels: labelsFromInput(labelsRaw),
+        dryRun,
+      }),
+    );
+  });
+
+  const archiveContextItemDisposable = vscode.commands.registerCommand(COMMAND_ARCHIVE_CONTEXT_ITEM, async () => {
+    const contextItemId = await promptRequired("context_item_id UUID", "ID del item a archivar");
+    if (!contextItemId) {
+      return;
+    }
+    const dryRun = await promptDryRunMode();
+    if (dryRun === undefined) {
+      return;
+    }
+    await executeContextTool("WIS: Archive Context Item", (input) =>
+      contextCommandService.archiveContextItem(input, {
+        contextItemId: contextItemId.trim(),
+        dryRun,
+      }),
+    );
+  });
+
+  const applySyncBatchDisposable = vscode.commands.registerCommand(COMMAND_APPLY_SYNC_BATCH, async () => {
+    const operationsRaw = await promptRequired(
+      'JSON ops, ej: [{"operation":"upsert_context_item"}]',
+      "Operaciones batch en JSON",
+      '[{"operation":"upsert_context_item"}]',
+    );
+    if (!operationsRaw) {
+      return;
+    }
+    let operations: Array<Record<string, unknown>>;
+    try {
+      const parsed = JSON.parse(operationsRaw);
+      if (!Array.isArray(parsed)) {
+        throw new Error("operations debe ser array");
+      }
+      operations = parsed as Array<Record<string, unknown>>;
+    } catch (error) {
+      await vscode.window.showErrorMessage(`JSON inválido para operations: ${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
+    const dryRun = await promptDryRunMode();
+    if (dryRun === undefined) {
+      return;
+    }
+    await executeContextTool("WIS: Apply Sync Batch", (input) =>
+      contextCommandService.applySyncBatch(input, {
+        operations,
+        dryRun,
+      }),
+    );
+  });
+
   context.subscriptions.push(
     loadDisposable,
     resetDisposable,
     prepareHandoffDisposable,
     configureAuthDisposable,
     clearAuthDisposable,
+    searchContextDisposable,
+    upsertContextItemDisposable,
+    appendContextEventDisposable,
+    linkContextEntitiesDisposable,
+    setContextLabelsDisposable,
+    archiveContextItemDisposable,
+    applySyncBatchDisposable,
   );
 }
 

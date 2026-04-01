@@ -5,7 +5,7 @@ Guía operativa para crear un conector nuevo en ChatGPT con OAuth funcional usan
 Estado objetivo de esta fase:
 
 - OAuth/OIDC activo en el **conector**.
-- MCP sigue en postura operativa actual (sin enforcement JWT estricto en backend).
+- MCP aplica enforcement JWT estricto en runtime conectado.
 - Runtime del proyecto permanece dual: `offline_fixture` y `mcp`.
 
 ## 1. Pre-requisitos
@@ -120,6 +120,6 @@ MCP_AUTH_SCHEME="Bearer" \
 
 ## 5. Notas de seguridad y alcance de fase
 
-- Esta guía no habilita todavía enforcement JWT estricto en backend MCP.
-- No se modifica el contrato read-only del control plane en esta fase.
-- OAuth aquí protege el flujo de autenticación/autorización del conector; el hardening end-to-end se aborda en fase posterior.
+- Esta guía asume enforcement JWT activo en backend MCP (`iss/aud/exp/scope`).
+- El control plane conserva modo dual (`offline_fixture | mcp`) y en `mcp` requiere bearer válido.
+- OAuth protege el flujo del conector y habilita autorización por scopes en tools read/write.

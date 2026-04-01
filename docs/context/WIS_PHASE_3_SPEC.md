@@ -1,12 +1,10 @@
 # WIS Phase 3 Spec
 _Status: active spec (estado actual + roadmap)_
-_Scope: VS Code control plane read-only_
+_Scope: VS Code control plane (read baseline + write plane v0.2.0)_
 
 ## 1. Objective
 
-Entregar un consumidor local real de WIS en VS Code, con contexto estructurado, degradacion explicita y preparacion de handoff tipado.
-
-Phase 3 no es fase de ejecucion automatica ni de writes.
+Entregar un consumidor local real de WIS en VS Code, con contexto estructurado, degradación explícita y preparación de handoff tipado; luego habilitar write plane controlado sin drift.
 
 ## 2. Problem statement
 
@@ -22,14 +20,14 @@ Sin esta fase:
 
 - deteccion de entorno local (workspace/repo/branch/active file)
 - sesion local estable (`session_key`) para `vscode_extension`
-- consumo read-only de tools MCP publicadas (validacion `all_published`)
+- consumo de tools MCP publicadas (validación `all_published`)
 - composicion de `OperationalContextEnvelope`
 - presentacion en Output Channel
 - `Prepare Handoff` en memoria con artifact tipado (Codex-first)
+- comandos write/read de contexto con `dry_run|commit`, `idempotency_key` y auditoría
 
 ### 3.2 Out of scope
 
-- write actions a WIS
 - mutaciones automaticas de repo
 - shell execution automatica
 - panel/webview avanzada
@@ -41,7 +39,7 @@ Sin esta fase:
 - sin fallback silencioso entre modos
 - en `mcp`: `streamable-http` y endpoint terminado en `/mcp`
 - `published_tools` descubiertas en runtime via `list_tools` (sin conteo fijo)
-- politica de validacion remota: `all_published` con registry de payloads read-only
+- politica de validacion remota: `all_published` con registry de payloads
 - auditoria esperada: `delta +N` con `N = invocadas exitosamente`
 - `core_context_fields` invariantes para el envelope:
   - `active_task`
@@ -91,6 +89,13 @@ Comandos vigentes:
 - `WIS: Load Operational Context`
 - `WIS: Reset Session`
 - `WIS: Prepare Handoff`
+- `WIS: Search Context`
+- `WIS: Upsert Context Item`
+- `WIS: Append Context Event`
+- `WIS: Link Context Entities`
+- `WIS: Set Context Labels`
+- `WIS: Archive Context Item`
+- `WIS: Apply Sync Batch`
 
 Surface minima:
 
@@ -100,7 +105,7 @@ Surface minima:
 
 ## 8. Non-functional requirements
 
-- Read-only verificable
+- Guardrails de mutación verificables
 - Deterministic behavior en `offline_fixture`
 - compatibilidad MCP sin drift
 - observabilidad suficiente para troubleshooting

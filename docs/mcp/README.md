@@ -1,15 +1,13 @@
 # MCP Runtime Runbook (VS Code Control Plane)
 
-Runbook para operar el modo `mcp` de la extension y validar conectividad local/remota sin romper postura read-only.
+Runbook para operar el modo `mcp` de la extensión y validar conectividad local/remota con OAuth Auth0, read plane y write plane.
 
 ## 1. Scope and guardrails
 
-- No cambiar modelos de dominio.
-- No cambiar tools MCP.
-- No agregar write actions.
 - Mantener policy mode `delegated_limited`.
-
-Este runbook valida transporte y consumo read-only.
+- Mantener contrato `all_published` para validación de tools publicadas.
+- Operar write con `dry_run|commit`, `idempotency_key` y auditoría.
+- Diferenciar validación read-only (`validate_remote_mcp.sh`) y write (`validate_remote_mcp_write.sh`).
 
 ## 2. Relacion con runtimeMode de extension
 
@@ -44,7 +42,7 @@ Esperado:
 - health con DB operativa
 - MCP levantado en `streamable-http`
 
-## 5. Validacion MCP (before ChatGPT)
+## 5. Validación MCP (before ChatGPT)
 
 ```bash
 ./scripts/validate_remote_mcp.sh https://<stable-domain>
@@ -66,8 +64,19 @@ La validacion debe confirmar:
 - invocacion de todas las tools publicadas (`all_published`)
 - uso de registry canónico de payloads read-only (`scripts/mcp_validation_payloads.json`)
 - si una tool publicada falla por parámetros y no tiene entry en registry, el gate falla
-- sin cambios en tablas de dominio por consumo read-only
+- sin cambios en tablas de dominio durante validación `dry_run`
 - delta esperado en `publish_audit`: `+N` (donde `N = tools invocadas exitosamente`)
+
+Validación write (`commit`) con token write:
+
+```bash
+MCP_AUTH_TOKEN="<access_token_write>" \
+MCP_AUTH_HEADER_NAME="Authorization" \
+MCP_AUTH_SCHEME="Bearer" \
+./scripts/validate_remote_mcp_write.sh https://<stable-domain>/mcp
+```
+
+Debe confirmar mutación esperada + auditoría write.
 
 ## 6. VS Code usage checklist (runtimeMode=mcp)
 
@@ -78,6 +87,9 @@ La validacion debe confirmar:
 2. Ejecutar comandos:
 - `WIS: Load Operational Context`
 - `WIS: Prepare Handoff`
+- `WIS: Search Context`
+- `WIS: Upsert Context Item` / `WIS: Append Context Event` / `WIS: Link Context Entities`
+- `WIS: Set Context Labels` / `WIS: Archive Context Item` / `WIS: Apply Sync Batch`
 
 3. Verificar en Output Channel:
 - `transport_status`
@@ -100,6 +112,10 @@ La validacion debe confirmar:
   - Causa probable: estado funcional del dominio, no transporte.
   - Accion: revisar payload tipado e `issues` en envelope, no enmascarar como no-data.
 
+- **Auth issue** (`unauthorized`, `forbidden`)
+  - Causa probable: token inválido o scopes insuficientes.
+  - Acción: validar claims (`iss/aud/scope/exp`) y scopes requeridos de la tool.
+
 ## 8. References
 
 - Root overview: `../../README.md`
@@ -112,10 +128,11 @@ La validacion debe confirmar:
 ## 9. OAuth connector (Auth0) status
 
 - Implementado a nivel de guía operativa del conector.
-- En esta fase, la autenticación se cierra en el conector; el backend MCP todavía no aplica enforcement JWT estricto.
+- En esta fase v0.2.0, el backend MCP aplica enforcement JWT estricto para runtime conectado.
 - Validación recomendada:
   - claims con `scripts/validate_oauth_token_claims.sh`
-  - reachability/tools con `scripts/validate_remote_mcp.sh` (policy `all_published`)
+  - read plane con `scripts/validate_remote_mcp.sh`
+  - write plane con `scripts/validate_remote_mcp_write.sh`
 
 ## 10. Named tunnel como ruta canónica
 

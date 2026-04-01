@@ -1,9 +1,9 @@
-# VS Code Read-Only MCP Contract
-_Status: active contract for runtimeMode=mcp_
+# VS Code MCP Runtime Contract (Read+Write)
+_Status: active contract for runtimeMode=mcp (v0.2.0)_
 
 ## 1. Purpose
 
-Definir el contrato read-only entre la extension de VS Code y WIS cuando la extension opera en `runtimeMode=mcp`.
+Definir el contrato read/write entre la extensión de VS Code y WIS cuando la extensión opera en `runtimeMode=mcp`.
 
 ## 2. Runtime linkage
 
@@ -56,6 +56,13 @@ Autenticación de cliente (extensión):
 - token en `SecretStorage` (no en settings planos)
 - si `requireAuthentication=true` y no hay token, la carga debe fallar explícitamente
 
+Scope matrix mínima:
+
+- read tools: `wis.context.read`
+- sync status read: `wis.context.sync.read`
+- write tools: `wis.context.write`
+- batch commit: `wis.context.sync.write`
+
 ## 5. Response invariants
 
 En respuestas exitosas (`status: ok`), preservar:
@@ -79,14 +86,19 @@ Errores MCP deben mapearse al modelo tipado del control plane:
 
 Sin colapsar errores a "no data".
 
-## 7. Read-only boundaries
+## 7. Guardrails de mutación
 
 No permitido:
 
-- write actions
 - cambios de tool names
 - cambios de transporte
 - bypass de policy `delegated_limited`
+
+Permitido en v0.2.0:
+
+- write tools con `dry_run|commit`
+- `idempotency_key` obligatoria en commit
+- auditoría write + publish_audit en cada operación mutable
 
 ## 8. Cross-links
 
