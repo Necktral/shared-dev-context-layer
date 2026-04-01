@@ -1,7 +1,9 @@
 import * as vscode from "vscode";
 import {
+  getCodexCliCommand,
   getFixtureScenario,
   getMcpEndpoint,
+  getOperationProfile,
   getRequestTimeoutMs,
   getRuntimeMode,
   isDiagnosticModeEnabled,
@@ -12,6 +14,10 @@ import {
   COMMAND_ARCHIVE_CONTEXT_ITEM,
   COMMAND_CLEAR_AUTH,
   COMMAND_CONFIGURE_AUTH,
+  COMMAND_LOCAL_INDEX,
+  COMMAND_LOCAL_PREPARE_TASK,
+  COMMAND_LOCAL_REFRESH,
+  COMMAND_LOCAL_RUN_CODEX,
   COMMAND_LINK_CONTEXT_ENTITIES,
   COMMAND_LOAD_CONTEXT,
   COMMAND_PREPARE_HANDOFF,
@@ -20,6 +26,7 @@ import {
   COMMAND_SET_CONTEXT_LABELS,
   COMMAND_UPSERT_CONTEXT_ITEM,
   EXTENSION_OUTPUT_CHANNEL,
+  LOCAL_RUNTIME_VIEW_ID,
 } from "./constants";
 import { DiagnosticsReporter, type DiagnosticsSnapshot } from "./diagnostics";
 import { EnvironmentInspector, EnvironmentSnapshot } from "./environment/environmentInspector";
@@ -37,6 +44,14 @@ import { HandoffOutputChannelRenderer } from "./presentation/renderers/handoffOu
 import { AuthManager } from "./auth/authManager";
 import { ContextCommandService, type ContextCommandExecutionInput } from "./application/contextCommandService";
 import { ContextCommandOutputRenderer } from "./presentation/renderers/contextCommandOutputRenderer";
+import { InMemoryLocalRuntimeStore } from "./local/localRuntimeStore";
+import { createInitialProjectRuntimeSnapshot } from "./local/types";
+import { LocalRuntimePanelProvider } from "./presentation/local/localRuntimePanelProvider";
+import { LocalRuntimeOutputRenderer } from "./presentation/renderers/localRuntimeOutputRenderer";
+import { CodexCliRunner } from "./local/codexCliRunner";
+import { NoopIndexer, NoopPersistence, NoopRetriever, NoopTaskBuilder } from "./local/noopServices";
+import { LocalCommandService } from "./local/localCommandService";
+import type { LocalCommandResult } from "./local/types";
 
 let outputChannel: vscode.OutputChannel | undefined;
 
@@ -155,6 +170,43 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   const contextCommandService = new ContextCommandService();
   const contextCommandRenderer = new ContextCommandOutputRenderer(outputChannel);
+  const localStore = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(getOperationProfile()));
+  const localPanelProvider = new LocalRuntimePanelProvider(localStore.getSnapshot());
+  const localOutputRenderer = new LocalRuntimeOutputRenderer(outputChannel);
+  const localCommandService = new LocalCommandService({
+    inspector: environmentInspector,
+    store: localStore,
+    indexer: new NoopIndexer(),
+    retriever: new NoopRetriever(),
+    taskBuilder: new NoopTaskBuilder(),
+    codexRunner: new CodexCliRunner(),
+    persistence: new NoopPersistence(),
+    getOperationProfile,
+    getCodexCliCommand,
+  });
+
+  localStore.update((current) => ({
+    ...current,
+    operation_profile: getOperationProfile(),
+    workspace_root: activationEnvironment.workspace_root,
+    repo_root: activationEnvironment.repo_root,
+    branch: activationEnvironment.branch,
+    active_file: activationEnvironment.active_file,
+    runtime_state:
+      activationEnvironment.inspector_status === "error"
+        ? "error"
+        : activationEnvironment.inspector_status === "no_workspace"
+          ? "idle"
+          : "ready",
+    updated_at: new Date().toISOString(),
+  }));
+
+  const localStoreUnsubscribe = localStore.subscribe((snapshot) => {
+    localPanelProvider.update(snapshot);
+  });
+  context.subscriptions.push({ dispose: localStoreUnsubscribe });
+  context.subscriptions.push(vscode.window.registerWebviewViewProvider(LOCAL_RUNTIME_VIEW_ID, localPanelProvider));
+
   const executeContextTool = async (
     toolLabel: string,
     runner: (input: ContextCommandExecutionInput) => Promise<{
@@ -193,6 +245,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       return;
     }
     await vscode.window.showInformationMessage(`${toolLabel} completado. status=${result.status ?? "ok"}`);
+  };
+
+  const executeLocalCommand = async (
+    label: string,
+    runner: () => Promise<LocalCommandResult>,
+  ): Promise<void> => {
+    const result = await runner();
+    localOutputRenderer.render(result, localStore.getSnapshot());
+    outputChannel?.show(true);
+
+    if (!result.ok) {
+      if (result.status === "blocked") {
+        await vscode.window.showWarningMessage(result.message);
+      } else {
+        await vscode.window.showErrorMessage(`${label} falló: ${result.message}`);
+      }
+      return;
+    }
+
+    await vscode.window.showInformationMessage(`${label} completado.`);
   };
 
   const loadDisposable = vscode.commands.registerCommand(COMMAND_LOAD_CONTEXT, async () => {
@@ -441,6 +513,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     );
   });
 
+  const localIndexDisposable = vscode.commands.registerCommand(COMMAND_LOCAL_INDEX, async () => {
+    await executeLocalCommand("WIS: Local Index", async () => localCommandService.localIndex());
+  });
+
+  const localPrepareTaskDisposable = vscode.commands.registerCommand(COMMAND_LOCAL_PREPARE_TASK, async () => {
+    const intent = await promptRequired(
+      "Objetivo técnico",
+      "Describe la tarea que quieres preparar para Codex",
+    );
+    if (!intent) {
+      return;
+    }
+    await executeLocalCommand("WIS: Local Prepare Task", async () => localCommandService.localPrepareTask(intent));
+  });
+
+  const localRunCodexDisposable = vscode.commands.registerCommand(COMMAND_LOCAL_RUN_CODEX, async () => {
+    await executeLocalCommand("WIS: Local Run Codex", async () => localCommandService.localRunCodex());
+  });
+
+  const localRefreshDisposable = vscode.commands.registerCommand(COMMAND_LOCAL_REFRESH, async () => {
+    await executeLocalCommand("WIS: Local Refresh", async () => localCommandService.localRefresh());
+  });
+
   context.subscriptions.push(
     loadDisposable,
     resetDisposable,
@@ -454,6 +549,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     setContextLabelsDisposable,
     archiveContextItemDisposable,
     applySyncBatchDisposable,
+    localIndexDisposable,
+    localPrepareTaskDisposable,
+    localRunCodexDisposable,
+    localRefreshDisposable,
   );
 }
 

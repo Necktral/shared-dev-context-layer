@@ -8,6 +8,8 @@ export const DEFAULT_FIXTURE_SCENARIO = "success_full";
 export const DEFAULT_AUTH_MODE = "none";
 export const DEFAULT_AUTH_HEADER_NAME = "x-api-key";
 export const DEFAULT_REQUIRE_AUTHENTICATION = false;
+export const DEFAULT_OPERATION_PROFILE = "phase3_control_plane";
+export const DEFAULT_CODEX_CLI_COMMAND = "codex";
 
 export const SESSION_KEY_STORAGE_KEY = "wisContextSync.sessionKey";
 export const SESSION_CREATED_AT_STORAGE_KEY = "wisContextSync.sessionCreatedAt";
@@ -25,3 +27,9 @@ export const COMMAND_LINK_CONTEXT_ENTITIES = "wisContextSync.linkContextEntities
 export const COMMAND_SET_CONTEXT_LABELS = "wisContextSync.setContextLabels";
 export const COMMAND_ARCHIVE_CONTEXT_ITEM = "wisContextSync.archiveContextItem";
 export const COMMAND_APPLY_SYNC_BATCH = "wisContextSync.applySyncBatch";
+export const COMMAND_LOCAL_INDEX = "wisContextSync.localIndex";
+export const COMMAND_LOCAL_PREPARE_TASK = "wisContextSync.localPrepareTask";
+export const COMMAND_LOCAL_RUN_CODEX = "wisContextSync.localRunCodex";
+export const COMMAND_LOCAL_REFRESH = "wisContextSync.localRefresh";
+
+export const LOCAL_RUNTIME_VIEW_ID = "wisContextSync.localRuntimePanel";

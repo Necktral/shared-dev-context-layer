@@ -7,6 +7,7 @@ Control plane autenticado para consumo y mutación controlada de contexto operat
 - Slice 3A: WIS consumption baseline (envelope tipado + orchestrator).
 - Slice 4 baseline: `WIS: Prepare Handoff` (artifact tipado en memoria, Codex-first).
 - v0.2.0: plano read/write MCP con `dry_run|commit`, idempotencia y auditoría.
+- Paquete 1 local-private: panel base + comandos locales supervisados para baseline Codex.
 
 ## Commands
 
@@ -22,6 +23,10 @@ Control plane autenticado para consumo y mutación controlada de contexto operat
 - `WIS: Set Context Labels`
 - `WIS: Archive Context Item`
 - `WIS: Apply Sync Batch`
+- `WIS: Local Index`
+- `WIS: Local Prepare Task`
+- `WIS: Local Run Codex`
+- `WIS: Local Refresh`
 
 ## Runtime modes
 
@@ -29,6 +34,13 @@ Control plane autenticado para consumo y mutación controlada de contexto operat
 - `mcp`: consumo real de tools MCP contra endpoint configurado.
 
 No existe fallback automatico entre modos.
+
+## Operation profiles
+
+- `phase3_control_plane`: superficie actual WIS/MCP.
+- `local_private`: habilita el baseline local para index/task/codex supervisado.
+
+Los comandos `WIS: Local *` requieren `wisContextSync.operationProfile=local_private`.
 
 ## Settings
 
@@ -40,6 +52,8 @@ No existe fallback automatico entre modos.
 - `wisContextSync.authMode` (default: `none`; enum: `none | bearer | api_key`)
 - `wisContextSync.authHeaderName` (default: `x-api-key`)
 - `wisContextSync.requireAuthentication` (default: `false`)
+- `wisContextSync.operationProfile` (default: `phase3_control_plane`; enum: `phase3_control_plane | local_private`)
+- `wisContextSync.codexCliCommand` (default: `codex`)
 
 Token de autenticación se guarda en `SecretStorage` (no en settings de texto plano) usando `WIS: Configure Authentication`.
 

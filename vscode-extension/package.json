@@ -12,6 +12,7 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
+    "onView:wisContextSync.localRuntimePanel",
     "onCommand:wisContextSync.loadOperationalContext",
     "onCommand:wisContextSync.resetSession",
     "onCommand:wisContextSync.prepareHandoff",
@@ -23,9 +24,21 @@
     "onCommand:wisContextSync.linkContextEntities",
     "onCommand:wisContextSync.setContextLabels",
     "onCommand:wisContextSync.archiveContextItem",
-    "onCommand:wisContextSync.applySyncBatch"
+    "onCommand:wisContextSync.applySyncBatch",
+    "onCommand:wisContextSync.localIndex",
+    "onCommand:wisContextSync.localPrepareTask",
+    "onCommand:wisContextSync.localRunCodex",
+    "onCommand:wisContextSync.localRefresh"
   ],
   "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "wisContextSync.localRuntimePanel",
+          "name": "WIS Local Runtime"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "wisContextSync.loadOperationalContext",
@@ -74,6 +87,22 @@
       {
         "command": "wisContextSync.applySyncBatch",
         "title": "WIS: Apply Sync Batch"
+      },
+      {
+        "command": "wisContextSync.localIndex",
+        "title": "WIS: Local Index"
+      },
+      {
+        "command": "wisContextSync.localPrepareTask",
+        "title": "WIS: Local Prepare Task"
+      },
+      {
+        "command": "wisContextSync.localRunCodex",
+        "title": "WIS: Local Run Codex"
+      },
+      {
+        "command": "wisContextSync.localRefresh",
+        "title": "WIS: Local Refresh"
       }
     ],
     "configuration": {
@@ -136,6 +165,20 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "If true and authMode != none, load is blocked when token is missing."
+        },
+        "wisContextSync.operationProfile": {
+          "type": "string",
+          "enum": [
+            "phase3_control_plane",
+            "local_private"
+          ],
+          "default": "phase3_control_plane",
+          "markdownDescription": "Operational profile selector. Use local_private to enable local Codex baseline commands."
+        },
+        "wisContextSync.codexCliCommand": {
+          "type": "string",
+          "default": "codex",
+          "markdownDescription": "CLI command used by local Codex runner (package 1 baseline)."
         }
       }
     }

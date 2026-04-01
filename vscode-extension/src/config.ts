@@ -2,9 +2,11 @@ import * as vscode from "vscode";
 import {
   DEFAULT_AUTH_HEADER_NAME,
   DEFAULT_AUTH_MODE,
+  DEFAULT_CODEX_CLI_COMMAND,
   DEFAULT_DIAGNOSTIC_MODE,
   DEFAULT_FIXTURE_SCENARIO,
   DEFAULT_MCP_ENDPOINT,
+  DEFAULT_OPERATION_PROFILE,
   DEFAULT_REQUIRE_AUTHENTICATION,
   DEFAULT_REQUEST_TIMEOUT_MS,
   DEFAULT_RUNTIME_MODE,
@@ -12,6 +14,7 @@ import {
 import type { RuntimeMode } from "./domain/operationalContext";
 import type { FixtureScenario } from "./infrastructure/wis/fixtureWISGateway";
 import type { AuthMode, ResolvedAuthConfig } from "./infrastructure/wis/wisGateway";
+import type { OperationProfile } from "./local/types";
 
 const FIXTURE_SCENARIOS: readonly FixtureScenario[] = [
   "success_full",
@@ -41,6 +44,13 @@ function normalizeAuthMode(value: string | undefined): AuthMode {
     return value;
   }
   return DEFAULT_AUTH_MODE as AuthMode;
+}
+
+function normalizeOperationProfile(value: string | undefined): OperationProfile {
+  if (value === "phase3_control_plane" || value === "local_private") {
+    return value;
+  }
+  return DEFAULT_OPERATION_PROFILE as OperationProfile;
 }
 
 export function getMcpEndpoint(): string {
@@ -102,4 +112,18 @@ export function getAuthConfig(): ResolvedAuthConfig {
     header_name: getAuthHeaderName(),
     required: isAuthenticationRequired(),
   };
+}
+
+export function getOperationProfile(): OperationProfile {
+  const configured = vscode.workspace.getConfiguration().get<string>("wisContextSync.operationProfile");
+  return normalizeOperationProfile(configured);
+}
+
+export function getCodexCliCommand(): string {
+  const configured = vscode.workspace.getConfiguration().get<string>("wisContextSync.codexCliCommand");
+  const command = configured?.trim();
+  if (!command) {
+    return DEFAULT_CODEX_CLI_COMMAND;
+  }
+  return command;
 }
