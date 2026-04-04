@@ -14,6 +14,8 @@ export class LocalRuntimeOutputRenderer {
     this.output.appendLine(`workspace_root: ${snapshot.workspace_root ?? "-"}`);
     this.output.appendLine(`repo_root: ${snapshot.repo_root ?? "-"}`);
     this.output.appendLine(`runtime_state: ${snapshot.runtime_state}`);
+    this.output.appendLine(`db_status: ${snapshot.db_status}`);
+    this.output.appendLine(`db_error: ${snapshot.db_error ?? "-"}`);
     this.output.appendLine(`updated_at: ${snapshot.updated_at}`);
 
     if (result.details) {

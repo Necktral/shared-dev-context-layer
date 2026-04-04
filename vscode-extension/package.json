@@ -28,7 +28,8 @@
     "onCommand:wisContextSync.localIndex",
     "onCommand:wisContextSync.localPrepareTask",
     "onCommand:wisContextSync.localRunCodex",
-    "onCommand:wisContextSync.localRefresh"
+    "onCommand:wisContextSync.localRefresh",
+    "onCommand:wisContextSync.localConfigureDbPassword"
   ],
   "contributes": {
     "views": {
@@ -103,6 +104,10 @@
       {
         "command": "wisContextSync.localRefresh",
         "title": "WIS: Local Refresh"
+      },
+      {
+        "command": "wisContextSync.localConfigureDbPassword",
+        "title": "WIS: Local Configure DB Password"
       }
     ],
     "configuration": {
@@ -179,6 +184,47 @@
           "type": "string",
           "default": "codex",
           "markdownDescription": "CLI command used by local Codex runner (package 1 baseline)."
+        },
+        "wisContextSync.localDb.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Enable PostgreSQL persistence for local_private profile."
+        },
+        "wisContextSync.localDb.host": {
+          "type": "string",
+          "default": "localhost",
+          "markdownDescription": "PostgreSQL host for local_private profile."
+        },
+        "wisContextSync.localDb.port": {
+          "type": "number",
+          "default": 5432,
+          "minimum": 1,
+          "markdownDescription": "PostgreSQL port for local_private profile."
+        },
+        "wisContextSync.localDb.database": {
+          "type": "string",
+          "default": "wis_context",
+          "markdownDescription": "PostgreSQL database name for local_private profile."
+        },
+        "wisContextSync.localDb.user": {
+          "type": "string",
+          "default": "wis_admin",
+          "markdownDescription": "PostgreSQL username for local_private profile."
+        },
+        "wisContextSync.localDb.password": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional plaintext PostgreSQL password. If empty, SecretStorage key wisContextSync.localDbPassword is used."
+        },
+        "wisContextSync.localDb.schema": {
+          "type": "string",
+          "default": "local_private",
+          "markdownDescription": "Schema namespace used by local_private persistence."
+        },
+        "wisContextSync.localDb.ssl": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Enable SSL when connecting to PostgreSQL for local_private profile."
         }
       }
     }
@@ -186,14 +232,17 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -w -p .",
-    "test": "npm run compile && node --test \"dist/tests/**/*.test.js\""
+    "test": "npm run compile && node --test \"dist/tests/**/*.test.js\"",
+    "test:local-db": "LOCAL_DB_TESTS=1 npm run compile && LOCAL_DB_TESTS=1 node --test \"dist/tests/local-db/**/*.test.js\""
   },
   "devDependencies": {
     "@types/node": "^20.16.5",
+    "@types/pg": "^8.20.0",
     "@types/vscode": "^1.90.0",
     "typescript": "^5.6.3"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "pg": "^8.16.3"
   }
 }

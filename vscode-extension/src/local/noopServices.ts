@@ -1,5 +1,30 @@
 import { randomUUID } from "node:crypto";
-import type { ContextRetrieverPort, PersistencePort, RetrievedContext, TaskBuilderPort, WorkspaceIndexerPort } from "./ports";
+import type {
+  ContextRetrieverPort,
+  CreateIndexRunInput,
+  EnsureProjectInput,
+  PersistedDecision,
+  PersistedEvent,
+  PersistedExecution,
+  PersistedExecutionArtifact,
+  PersistedIndexRun,
+  PersistedProject,
+  PersistedTask,
+  PersistedTaskContext,
+  PersistenceHealthcheck,
+  PersistencePort,
+  PersistenceTransactionPort,
+  RetrievedContext,
+  SaveDecisionInput,
+  SaveEventInput,
+  SaveExecutionArtifactInput,
+  SaveExecutionInput,
+  SaveTaskContextInput,
+  SaveTaskInput,
+  TaskBuilderPort,
+  WorkspaceIndexerPort,
+  CompleteIndexRunInput,
+} from "./ports";
 import type { LocalTaskDraft, ProjectRuntimeSnapshot } from "./types";
 
 export class NoopIndexer implements WorkspaceIndexerPort {
@@ -46,12 +71,93 @@ export class NoopTaskBuilder implements TaskBuilderPort {
   }
 }
 
+export interface NoopPersistenceOptions {
+  dbStatus?: "connected" | "disconnected";
+  reason?: string | null;
+}
+
 export class NoopPersistence implements PersistencePort {
-  public async saveTask(_task: LocalTaskDraft): Promise<void> {
-    // No-op by design in package 1.
+  private readonly dbStatus: "connected" | "disconnected";
+
+  private readonly reason: string | null;
+
+  constructor(options?: NoopPersistenceOptions) {
+    this.dbStatus = options?.dbStatus ?? "disconnected";
+    this.reason = options?.reason ?? "Persistence adapter no configurado.";
   }
 
-  public async saveExecution(_taskId: string, _result: { ok: boolean }): Promise<void> {
-    // No-op by design in package 1.
+  public async healthcheck(): Promise<PersistenceHealthcheck> {
+    return {
+      ok: this.dbStatus === "connected",
+      db_status: this.dbStatus,
+      error: this.dbStatus === "connected" ? null : this.reason,
+      migrations_applied: 0,
+    };
+  }
+
+  public async ensureProject(input: EnsureProjectInput): Promise<PersistedProject> {
+    return {
+      id: randomUUID(),
+      project_key: `${input.operation_profile}:${input.workspace_root ?? "no_workspace"}:${input.repo_root ?? "no_repo"}`,
+    };
+  }
+
+  public async createIndexRun(input: CreateIndexRunInput): Promise<PersistedIndexRun> {
+    return {
+      id: randomUUID(),
+      project_id: input.project_id,
+      status: input.status,
+    };
+  }
+
+  public async completeIndexRun(_input: CompleteIndexRunInput): Promise<void> {
+    // No-op by design.
+  }
+
+  public async saveTask(input: SaveTaskInput): Promise<PersistedTask> {
+    return {
+      id: input.task.id,
+      project_id: input.project_id,
+    };
+  }
+
+  public async saveTaskContext(input: SaveTaskContextInput): Promise<PersistedTaskContext> {
+    return {
+      id: randomUUID(),
+      task_id: input.task.id,
+    };
+  }
+
+  public async saveExecution(input: SaveExecutionInput): Promise<PersistedExecution> {
+    return {
+      id: randomUUID(),
+      task_id: input.task_id,
+      project_id: input.project_id,
+    };
+  }
+
+  public async saveExecutionArtifact(input: SaveExecutionArtifactInput): Promise<PersistedExecutionArtifact> {
+    return {
+      id: randomUUID(),
+      execution_id: input.execution_id,
+    };
+  }
+
+  public async saveDecision(input: SaveDecisionInput): Promise<PersistedDecision> {
+    return {
+      id: randomUUID(),
+      project_id: input.project_id,
+    };
+  }
+
+  public async saveEvent(input: SaveEventInput): Promise<PersistedEvent> {
+    return {
+      id: randomUUID(),
+      project_id: input.project_id,
+    };
+  }
+
+  public async runInTransaction<T>(operation: (tx: PersistenceTransactionPort) => Promise<T>): Promise<T> {
+    return operation(this);
   }
 }

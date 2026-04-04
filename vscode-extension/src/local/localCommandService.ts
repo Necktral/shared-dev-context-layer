@@ -1,5 +1,13 @@
 import type { EnvironmentSnapshot } from "../environment/environmentInspector";
-import type { ContextRetrieverPort, CodexRunnerPort, PersistencePort, TaskBuilderPort, WorkspaceIndexerPort } from "./ports";
+import type {
+  ContextRetrieverPort,
+  CodexRunnerPort,
+  PersistedProject,
+  PersistenceHealthcheck,
+  PersistencePort,
+  TaskBuilderPort,
+  WorkspaceIndexerPort,
+} from "./ports";
 import { InMemoryLocalRuntimeStore } from "./localRuntimeStore";
 import type { LocalCommandName, LocalCommandResult, OperationProfile, ProjectRuntimeSnapshot } from "./types";
 
@@ -19,6 +27,10 @@ export interface LocalCommandServiceDeps {
   getCodexCliCommand: () => string;
 }
 
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export class LocalCommandService {
   constructor(private readonly deps: LocalCommandServiceDeps) {}
 
@@ -28,16 +40,41 @@ export class LocalCommandService {
       return blocked;
     }
 
-    const environment = await this.deps.inspector.inspect();
-    this.applyEnvironment(environment, "local_refresh");
+    try {
+      const environment = await this.deps.inspector.inspect();
+      this.applyEnvironment(environment, "local_refresh");
 
-    const result = this.makeResult("local_refresh", "ok", "Estado local actualizado.", {
-      inspector_status: environment.inspector_status,
-      workspace_root: environment.workspace_root,
-      repo_root: environment.repo_root,
-    });
-    this.pushResult(result, environment.inspector_status === "error");
-    return result;
+      const health = await this.refreshPersistenceStatus();
+      if (!health.ok) {
+        const result = this.makeResult(
+          "local_refresh",
+          "error",
+          "Conexión PostgreSQL no disponible. Revisa wisContextSync.localDb.* y el estado del contenedor.",
+          {
+            db_status: health.db_status,
+            db_error: health.error,
+            migrations_applied: health.migrations_applied,
+          },
+        );
+        this.pushResult(result, true);
+        return result;
+      }
+
+      const result = this.makeResult("local_refresh", "ok", "Estado local actualizado.", {
+        inspector_status: environment.inspector_status,
+        workspace_root: environment.workspace_root,
+        repo_root: environment.repo_root,
+        db_status: health.db_status,
+        migrations_applied: health.migrations_applied,
+      });
+      this.pushResult(result, false);
+      return result;
+    } catch (error) {
+      const result = this.makeResult("local_refresh", "error", toErrorMessage(error), null);
+      this.pushResult(result, true);
+      this.updateDbStatus("disconnected", toErrorMessage(error));
+      return result;
+    }
   }
 
   public async localIndex(): Promise<LocalCommandResult> {
@@ -46,14 +83,67 @@ export class LocalCommandService {
       return blocked;
     }
 
-    const environment = await this.deps.inspector.inspect();
-    this.applyEnvironment(environment, "local_index", "running");
+    try {
+      const environment = await this.deps.inspector.inspect();
+      this.applyEnvironment(environment, "local_index", "running");
 
-    const snapshot = this.deps.store.getSnapshot();
-    const indexed = await this.deps.indexer.runIndex(snapshot);
-    const result = this.makeResult("local_index", "ok", indexed.message, indexed.details);
-    this.pushResult(result, false);
-    return result;
+      const health = await this.refreshPersistenceStatus();
+      if (!health.ok) {
+        const unavailable = this.makeResult(
+          "local_index",
+          "error",
+          "Persistencia PostgreSQL no disponible para Local Index.",
+          {
+            db_status: health.db_status,
+            db_error: health.error,
+          },
+        );
+        this.pushResult(unavailable, true);
+        return unavailable;
+      }
+
+      const project = await this.ensureProjectFromEnvironment(environment);
+      const indexRun = await this.deps.persistence.createIndexRun({
+        project_id: project.id,
+        status: "started",
+        summary: null,
+      });
+
+      try {
+        const snapshot = this.deps.store.getSnapshot();
+        const indexed = await this.deps.indexer.runIndex(snapshot);
+        await this.deps.persistence.completeIndexRun({
+          index_run_id: indexRun.id,
+          status: "completed",
+          summary: indexed.message,
+        });
+
+        const result = this.makeResult("local_index", "ok", indexed.message, {
+          ...indexed.details,
+          project_id: project.id,
+          index_run_id: indexRun.id,
+          db_status: health.db_status,
+        });
+        this.pushResult(result, false);
+        return result;
+      } catch (error) {
+        await this.deps.persistence.completeIndexRun({
+          index_run_id: indexRun.id,
+          status: "failed",
+          summary: toErrorMessage(error),
+        });
+        const failed = this.makeResult("local_index", "error", `Indexación local falló: ${toErrorMessage(error)}`, {
+          project_id: project.id,
+          index_run_id: indexRun.id,
+        });
+        this.pushResult(failed, true);
+        return failed;
+      }
+    } catch (error) {
+      const result = this.makeResult("local_index", "error", toErrorMessage(error), null);
+      this.pushResult(result, true);
+      return result;
+    }
   }
 
   public async localPrepareTask(intent: string): Promise<LocalCommandResult> {
@@ -74,28 +164,61 @@ export class LocalCommandService {
       return invalid;
     }
 
-    const environment = await this.deps.inspector.inspect();
-    this.applyEnvironment(environment, "local_prepare_task", "running");
+    try {
+      const environment = await this.deps.inspector.inspect();
+      this.applyEnvironment(environment, "local_prepare_task", "running");
 
-    const snapshot = this.deps.store.getSnapshot();
-    const context = await this.deps.retriever.retrieve(cleanIntent, snapshot);
-    const draft = await this.deps.taskBuilder.buildTask(cleanIntent, context, snapshot);
-    await this.deps.persistence.saveTask(draft);
+      const health = await this.refreshPersistenceStatus();
+      if (!health.ok) {
+        const unavailable = this.makeResult(
+          "local_prepare_task",
+          "error",
+          "Persistencia PostgreSQL no disponible para preparar tarea.",
+          {
+            db_status: health.db_status,
+            db_error: health.error,
+          },
+        );
+        this.pushResult(unavailable, true);
+        return unavailable;
+      }
 
-    this.deps.store.update((current) => ({
-      ...current,
-      task_draft: draft,
-      runtime_state: "ready",
-      updated_at: new Date().toISOString(),
-    }));
+      const project = await this.ensureProjectFromEnvironment(environment);
+      const snapshot = this.deps.store.getSnapshot();
+      const context = await this.deps.retriever.retrieve(cleanIntent, snapshot);
+      const draft = await this.deps.taskBuilder.buildTask(cleanIntent, context, snapshot);
 
-    const result = this.makeResult("local_prepare_task", "ok", "Tarea local preparada.", {
-      task_id: draft.id,
-      candidate_files: draft.candidate_files.length,
-      objective: draft.objective,
-    });
-    this.pushResult(result, false);
-    return result;
+      const savedTask = await this.deps.persistence.saveTask({
+        project_id: project.id,
+        task: draft,
+        status: "draft",
+      });
+      const savedTaskContext = await this.deps.persistence.saveTaskContext({
+        project_id: project.id,
+        task: draft,
+      });
+
+      this.deps.store.update((current) => ({
+        ...current,
+        task_draft: draft,
+        runtime_state: "ready",
+        updated_at: new Date().toISOString(),
+      }));
+
+      const result = this.makeResult("local_prepare_task", "ok", "Tarea local preparada.", {
+        project_id: project.id,
+        task_id: savedTask.id,
+        task_context_id: savedTaskContext.id,
+        candidate_files: draft.candidate_files.length,
+        objective: draft.objective,
+      });
+      this.pushResult(result, false);
+      return result;
+    } catch (error) {
+      const result = this.makeResult("local_prepare_task", "error", toErrorMessage(error), null);
+      this.pushResult(result, true);
+      return result;
+    }
   }
 
   public async localRunCodex(): Promise<LocalCommandResult> {
@@ -104,59 +227,155 @@ export class LocalCommandService {
       return blocked;
     }
 
-    const environment = await this.deps.inspector.inspect();
-    this.applyEnvironment(environment, "local_run_codex", "running");
+    try {
+      const environment = await this.deps.inspector.inspect();
+      this.applyEnvironment(environment, "local_run_codex", "running");
 
-    const snapshot = this.deps.store.getSnapshot();
-    const draft = snapshot.task_draft;
-    if (!draft) {
-      const missingTask = this.makeResult(
-        "local_run_codex",
-        "error",
-        "No hay task_draft. Ejecuta primero 'WIS: Local Prepare Task'.",
-        null,
-      );
-      this.pushResult(missingTask, true);
-      return missingTask;
-    }
+      const health = await this.refreshPersistenceStatus();
+      if (!health.ok) {
+        const unavailable = this.makeResult(
+          "local_run_codex",
+          "error",
+          "Persistencia PostgreSQL no disponible para ejecutar Codex.",
+          {
+            db_status: health.db_status,
+            db_error: health.error,
+          },
+        );
+        this.pushResult(unavailable, true);
+        return unavailable;
+      }
 
-    const command = this.deps.getCodexCliCommand().trim() || "codex";
-    const health = await this.deps.codexRunner.healthcheck(command);
-    if (!health.ok) {
-      const healthError = this.makeResult(
+      const snapshot = this.deps.store.getSnapshot();
+      const draft = snapshot.task_draft;
+      if (!draft) {
+        const missingTask = this.makeResult(
+          "local_run_codex",
+          "error",
+          "No hay task_draft. Ejecuta primero 'WIS: Local Prepare Task'.",
+          null,
+        );
+        this.pushResult(missingTask, true);
+        return missingTask;
+      }
+
+      const project = await this.ensureProjectFromEnvironment(environment);
+      const command = this.deps.getCodexCliCommand().trim() || "codex";
+      const healthResult = await this.deps.codexRunner.healthcheck(command);
+
+      const execution = healthResult.ok
+        ? await this.deps.codexRunner.run({ task: draft }, command)
+        : {
+            ...healthResult,
+            mode: "run" as const,
+            request_preview: {
+              task_id: draft.id,
+              objective: draft.objective,
+              health_error: healthResult.error,
+            },
+          };
+
+      const persisted = await this.deps.persistence.runInTransaction(async (tx) => {
+        const executionRecord = await tx.saveExecution({
+          project_id: project.id,
+          task_id: draft.id,
+          result: execution,
+        });
+
+        const artifactRecord = await tx.saveExecutionArtifact({
+          project_id: project.id,
+          execution_id: executionRecord.id,
+          artifact_type: "codex_cli_result",
+          content: JSON.stringify(
+            {
+              stdout: execution.stdout,
+              stderr: execution.stderr,
+            },
+            null,
+            2,
+          ),
+          metadata: {
+            command: execution.command,
+            command_line: execution.command_line,
+            mode: execution.mode,
+            exit_code: execution.exit_code,
+            duration_ms: execution.duration_ms,
+            error: execution.error,
+          },
+        });
+
+        const eventRecord = await tx.saveEvent({
+          project_id: project.id,
+          task_id: draft.id,
+          execution_id: executionRecord.id,
+          event_type: "local_run_codex",
+          severity: execution.ok ? "info" : "error",
+          message: execution.ok ? "Ejecución Codex completada." : "Ejecución Codex falló.",
+          payload: {
+            command: execution.command,
+            command_line: execution.command_line,
+            exit_code: execution.exit_code,
+            error: execution.error,
+          },
+        });
+
+        return {
+          execution: executionRecord,
+          artifact: artifactRecord,
+          event: eventRecord,
+        };
+      });
+
+      const result = this.makeResult(
         "local_run_codex",
-        "error",
-        `Healthcheck Codex falló. Verifica wisContextSync.codexCliCommand='${command}'.`,
+        execution.ok ? "ok" : "error",
+        execution.ok ? "Ejecución Codex completada." : "Ejecución Codex falló.",
         {
-          command,
-          error: health.error,
-          exit_code: health.exit_code,
-          stderr: health.stderr,
+          project_id: project.id,
+          task_id: draft.id,
+          execution_id: persisted.execution.id,
+          artifact_id: persisted.artifact.id,
+          event_id: persisted.event.id,
+          command: execution.command,
+          command_line: execution.command_line,
+          exit_code: execution.exit_code,
+          duration_ms: execution.duration_ms,
+          error: execution.error,
         },
       );
-      this.pushResult(healthError, true);
-      return healthError;
+      this.pushResult(result, !execution.ok);
+      return result;
+    } catch (error) {
+      const result = this.makeResult("local_run_codex", "error", toErrorMessage(error), null);
+      this.pushResult(result, true);
+      return result;
     }
+  }
 
-    const execution = await this.deps.codexRunner.run({ task: draft }, command);
-    if (execution.ok) {
-      await this.deps.persistence.saveExecution(draft.id, execution);
+  private async refreshPersistenceStatus(): Promise<PersistenceHealthcheck> {
+    try {
+      const health = await this.deps.persistence.healthcheck();
+      this.updateDbStatus(health.db_status, health.error);
+      return health;
+    } catch (error) {
+      const message = toErrorMessage(error);
+      this.updateDbStatus("disconnected", message);
+      return {
+        ok: false,
+        db_status: "disconnected",
+        error: message,
+        migrations_applied: 0,
+      };
     }
+  }
 
-    const result = this.makeResult(
-      "local_run_codex",
-      execution.ok ? "ok" : "error",
-      execution.ok ? "Ejecución Codex completada." : "Ejecución Codex falló.",
-      {
-        command: execution.command,
-        command_line: execution.command_line,
-        exit_code: execution.exit_code,
-        duration_ms: execution.duration_ms,
-        error: execution.error,
-      },
-    );
-    this.pushResult(result, !execution.ok);
-    return result;
+  private async ensureProjectFromEnvironment(environment: EnvironmentSnapshot): Promise<PersistedProject> {
+    return this.deps.persistence.ensureProject({
+      operation_profile: this.deps.getOperationProfile(),
+      workspace_root: environment.workspace_root,
+      repo_root: environment.repo_root,
+      branch: environment.branch,
+    });
   }
 
   private ensureLocalProfile(command: LocalCommandName): LocalCommandResult | null {
@@ -197,6 +416,15 @@ export class LocalCommandService {
       active_file: environment.active_file,
       runtime_state: nextState,
       last_action: action,
+      updated_at: new Date().toISOString(),
+    }));
+  }
+
+  private updateDbStatus(dbStatus: "connected" | "disconnected", dbError: string | null): void {
+    this.deps.store.update((current) => ({
+      ...current,
+      db_status: dbStatus,
+      db_error: dbError,
       updated_at: new Date().toISOString(),
     }));
   }

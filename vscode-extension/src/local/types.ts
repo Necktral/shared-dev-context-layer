@@ -50,6 +50,8 @@ export interface ProjectRuntimeSnapshot {
   repo_root: string | null;
   branch: string | null;
   active_file: string | null;
+  db_status: "unknown" | "connected" | "disconnected";
+  db_error: string | null;
   runtime_state: "idle" | "ready" | "running" | "error";
   last_action: LocalCommandName | null;
   task_draft: LocalTaskDraft | null;
@@ -65,6 +67,8 @@ export function createInitialProjectRuntimeSnapshot(profile: OperationProfile): 
     repo_root: null,
     branch: null,
     active_file: null,
+    db_status: "unknown",
+    db_error: null,
     runtime_state: "idle",
     last_action: null,
     task_draft: null,

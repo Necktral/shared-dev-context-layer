@@ -100,6 +100,8 @@ export class LocalRuntimePanelProvider implements vscode.WebviewViewProvider {
     <section>
       <h2>Runtime</h2>
       <div>State: <strong>${escapeHtml(renderValue(this.snapshot.runtime_state))}</strong></div>
+      <div>DB Status: <strong>${escapeHtml(renderValue(this.snapshot.db_status))}</strong></div>
+      <div>DB Error: ${escapeHtml(renderValue(this.snapshot.db_error))}</div>
       <div>Last Action: ${escapeHtml(renderValue(this.snapshot.last_action))}</div>
       <div class="muted">Updated: ${escapeHtml(renderValue(this.snapshot.updated_at))}</div>
     </section>
@@ -110,6 +112,7 @@ export class LocalRuntimePanelProvider implements vscode.WebviewViewProvider {
       <div>WIS: Local Prepare Task</div>
       <div>WIS: Local Run Codex</div>
       <div>WIS: Local Refresh</div>
+      <div>WIS: Local Configure DB Password</div>
     </section>
 
     <section>

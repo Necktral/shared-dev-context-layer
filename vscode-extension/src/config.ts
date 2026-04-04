@@ -5,11 +5,19 @@ import {
   DEFAULT_CODEX_CLI_COMMAND,
   DEFAULT_DIAGNOSTIC_MODE,
   DEFAULT_FIXTURE_SCENARIO,
+  DEFAULT_LOCAL_DB_DATABASE,
+  DEFAULT_LOCAL_DB_HOST,
+  DEFAULT_LOCAL_DB_PASSWORD,
+  DEFAULT_LOCAL_DB_PORT,
+  DEFAULT_LOCAL_DB_SCHEMA,
+  DEFAULT_LOCAL_DB_SSL,
+  DEFAULT_LOCAL_DB_USER,
   DEFAULT_MCP_ENDPOINT,
   DEFAULT_OPERATION_PROFILE,
   DEFAULT_REQUIRE_AUTHENTICATION,
   DEFAULT_REQUEST_TIMEOUT_MS,
   DEFAULT_RUNTIME_MODE,
+  LOCAL_DB_PASSWORD_STORAGE_KEY,
 } from "./constants";
 import type { RuntimeMode } from "./domain/operationalContext";
 import type { FixtureScenario } from "./infrastructure/wis/fixtureWISGateway";
@@ -24,6 +32,17 @@ const FIXTURE_SCENARIOS: readonly FixtureScenario[] = [
   "no_active_task",
   "validation_stale",
 ];
+
+export interface LocalDbConfig {
+  enabled: boolean;
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+  schema: string;
+  ssl: boolean;
+}
 
 function normalizeRuntimeMode(value: string | undefined): RuntimeMode {
   if (value === "mcp" || value === "offline_fixture") {
@@ -126,4 +145,88 @@ export function getCodexCliCommand(): string {
     return DEFAULT_CODEX_CLI_COMMAND;
   }
   return command;
+}
+
+function getLocalDbEnabled(profile: OperationProfile): boolean {
+  const configured = vscode.workspace.getConfiguration().get<boolean>("wisContextSync.localDb.enabled");
+  const enabled = configured ?? true;
+  if (profile !== "local_private") {
+    return false;
+  }
+  return enabled;
+}
+
+function getLocalDbHost(): string {
+  const configured = vscode.workspace.getConfiguration().get<string>("wisContextSync.localDb.host");
+  const host = configured?.trim();
+  if (!host) {
+    return DEFAULT_LOCAL_DB_HOST;
+  }
+  return host;
+}
+
+function getLocalDbPort(): number {
+  const configured = vscode.workspace.getConfiguration().get<number>("wisContextSync.localDb.port");
+  if (!configured || Number.isNaN(configured) || configured <= 0) {
+    return DEFAULT_LOCAL_DB_PORT;
+  }
+  return Math.floor(configured);
+}
+
+function getLocalDbDatabase(): string {
+  const configured = vscode.workspace.getConfiguration().get<string>("wisContextSync.localDb.database");
+  const database = configured?.trim();
+  if (!database) {
+    return DEFAULT_LOCAL_DB_DATABASE;
+  }
+  return database;
+}
+
+function getLocalDbUser(): string {
+  const configured = vscode.workspace.getConfiguration().get<string>("wisContextSync.localDb.user");
+  const user = configured?.trim();
+  if (!user) {
+    return DEFAULT_LOCAL_DB_USER;
+  }
+  return user;
+}
+
+function getLocalDbPasswordFromSettings(): string {
+  const configured = vscode.workspace.getConfiguration().get<string>("wisContextSync.localDb.password");
+  return configured?.trim() ?? DEFAULT_LOCAL_DB_PASSWORD;
+}
+
+function getLocalDbSchema(): string {
+  const configured = vscode.workspace.getConfiguration().get<string>("wisContextSync.localDb.schema");
+  const schema = configured?.trim();
+  if (!schema) {
+    return DEFAULT_LOCAL_DB_SCHEMA;
+  }
+  return schema;
+}
+
+function getLocalDbSsl(): boolean {
+  return vscode.workspace.getConfiguration().get<boolean>("wisContextSync.localDb.ssl") ?? DEFAULT_LOCAL_DB_SSL;
+}
+
+export async function resolveLocalDbConfig(
+  secretStorage: vscode.SecretStorage,
+  profile: OperationProfile = getOperationProfile(),
+): Promise<LocalDbConfig> {
+  let password = getLocalDbPasswordFromSettings();
+  if (!password) {
+    const fromSecret = await secretStorage.get(LOCAL_DB_PASSWORD_STORAGE_KEY);
+    password = fromSecret?.trim() ?? "";
+  }
+
+  return {
+    enabled: getLocalDbEnabled(profile),
+    host: getLocalDbHost(),
+    port: getLocalDbPort(),
+    database: getLocalDbDatabase(),
+    user: getLocalDbUser(),
+    password,
+    schema: getLocalDbSchema(),
+    ssl: getLocalDbSsl(),
+  };
 }

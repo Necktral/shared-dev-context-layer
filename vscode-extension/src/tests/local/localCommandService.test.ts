@@ -2,8 +2,34 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { LocalCommandService } from "../../local/localCommandService";
 import { InMemoryLocalRuntimeStore } from "../../local/localRuntimeStore";
-import { createInitialProjectRuntimeSnapshot, type CodexExecutionResult, type OperationProfile } from "../../local/types";
-import { NoopIndexer, NoopPersistence, NoopRetriever, NoopTaskBuilder } from "../../local/noopServices";
+import {
+  createInitialProjectRuntimeSnapshot,
+  type CodexExecutionResult,
+  type LocalTaskDraft,
+  type OperationProfile,
+} from "../../local/types";
+import { NoopIndexer, NoopRetriever, NoopTaskBuilder } from "../../local/noopServices";
+import type {
+  CreateIndexRunInput,
+  EnsureProjectInput,
+  PersistedDecision,
+  PersistedEvent,
+  PersistedExecution,
+  PersistedExecutionArtifact,
+  PersistedIndexRun,
+  PersistedProject,
+  PersistedTask,
+  PersistedTaskContext,
+  PersistencePort,
+  PersistenceTransactionPort,
+  SaveDecisionInput,
+  SaveEventInput,
+  SaveExecutionArtifactInput,
+  SaveExecutionInput,
+  SaveTaskContextInput,
+  SaveTaskInput,
+  CompleteIndexRunInput,
+} from "../../local/ports";
 
 function environment() {
   return {
@@ -34,9 +60,106 @@ function okExecution(mode: "healthcheck" | "run"): CodexExecutionResult {
   };
 }
 
+class FakePersistence implements PersistencePort {
+  public savedTaskId = "";
+
+  public savedExecutionTaskId = "";
+
+  public failHealth = false;
+
+  public failTransaction = false;
+
+  public async healthcheck() {
+    if (this.failHealth) {
+      return {
+        ok: false,
+        db_status: "disconnected" as const,
+        error: "db down",
+        migrations_applied: 0,
+      };
+    }
+    return {
+      ok: true,
+      db_status: "connected" as const,
+      error: null,
+      migrations_applied: 1,
+    };
+  }
+
+  public async ensureProject(input: EnsureProjectInput): Promise<PersistedProject> {
+    return {
+      id: "project-1",
+      project_key: `${input.operation_profile}:${input.repo_root}`,
+    };
+  }
+
+  public async createIndexRun(input: CreateIndexRunInput): Promise<PersistedIndexRun> {
+    return {
+      id: "index-run-1",
+      project_id: input.project_id,
+      status: input.status,
+    };
+  }
+
+  public async completeIndexRun(_input: CompleteIndexRunInput): Promise<void> {}
+
+  public async saveTask(input: SaveTaskInput): Promise<PersistedTask> {
+    this.savedTaskId = input.task.id;
+    return {
+      id: input.task.id,
+      project_id: input.project_id,
+    };
+  }
+
+  public async saveTaskContext(input: SaveTaskContextInput): Promise<PersistedTaskContext> {
+    return {
+      id: "task-context-1",
+      task_id: input.task.id,
+    };
+  }
+
+  public async saveExecution(input: SaveExecutionInput): Promise<PersistedExecution> {
+    this.savedExecutionTaskId = input.task_id;
+    return {
+      id: "execution-1",
+      task_id: input.task_id,
+      project_id: input.project_id,
+    };
+  }
+
+  public async saveExecutionArtifact(input: SaveExecutionArtifactInput): Promise<PersistedExecutionArtifact> {
+    return {
+      id: "artifact-1",
+      execution_id: input.execution_id,
+    };
+  }
+
+  public async saveDecision(input: SaveDecisionInput): Promise<PersistedDecision> {
+    return {
+      id: "decision-1",
+      project_id: input.project_id,
+    };
+  }
+
+  public async saveEvent(input: SaveEventInput): Promise<PersistedEvent> {
+    return {
+      id: "event-1",
+      project_id: input.project_id,
+    };
+  }
+
+  public async runInTransaction<T>(operation: (tx: PersistenceTransactionPort) => Promise<T>): Promise<T> {
+    if (this.failTransaction) {
+      throw new Error("tx failed");
+    }
+    return operation(this);
+  }
+}
+
 test("LocalCommandService bloquea comandos locales cuando profile no es local_private", async () => {
   let profile: OperationProfile = "phase3_control_plane";
   const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
+  const persistence = new FakePersistence();
   const service = new LocalCommandService({
     inspector: { inspect: async () => environment() },
     store,
@@ -47,7 +170,7 @@ test("LocalCommandService bloquea comandos locales cuando profile no es local_pr
       healthcheck: async () => okExecution("healthcheck"),
       run: async () => okExecution("run"),
     },
-    persistence: new NoopPersistence(),
+    persistence,
     getOperationProfile: () => profile,
     getCodexCliCommand: () => "codex",
   });
@@ -57,11 +180,10 @@ test("LocalCommandService bloquea comandos locales cuando profile no es local_pr
   assert.equal(store.getSnapshot().last_result?.status, "blocked");
 });
 
-test("LocalCommandService en local_private prepara tarea y ejecuta Codex", async () => {
+test("LocalCommandService en local_private prepara tarea y ejecuta Codex con persistencia", async () => {
   let profile: OperationProfile = "local_private";
   const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
-  let savedTaskId = "";
-  let savedExecutionTaskId = "";
+  const persistence = new FakePersistence();
 
   const service = new LocalCommandService({
     inspector: { inspect: async () => environment() },
@@ -73,24 +195,86 @@ test("LocalCommandService en local_private prepara tarea y ejecuta Codex", async
       healthcheck: async () => okExecution("healthcheck"),
       run: async () => okExecution("run"),
     },
-    persistence: {
-      async saveTask(task) {
-        savedTaskId = task.id;
-      },
-      async saveExecution(taskId) {
-        savedExecutionTaskId = taskId;
-      },
-    },
+    persistence,
     getOperationProfile: () => profile,
     getCodexCliCommand: () => "codex",
   });
 
+  const refreshed = await service.localRefresh();
+  assert.equal(refreshed.status, "ok");
+  assert.equal(store.getSnapshot().db_status, "connected");
+
   const prepared = await service.localPrepareTask("Ajustar baseline local");
   assert.equal(prepared.status, "ok");
-  assert.ok(savedTaskId.length > 0);
+  assert.ok(persistence.savedTaskId.length > 0);
 
   const executed = await service.localRunCodex();
   assert.equal(executed.status, "ok");
-  assert.equal(savedExecutionTaskId, savedTaskId);
+  assert.equal(persistence.savedExecutionTaskId, persistence.savedTaskId);
   assert.equal(store.getSnapshot().runtime_state, "ready");
+  assert.equal(typeof executed.details?.execution_id, "string");
+  assert.equal(typeof executed.details?.artifact_id, "string");
+});
+
+test("LocalCommandService reporta error cuando DB está desconectada", async () => {
+  let profile: OperationProfile = "local_private";
+  const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
+  const persistence = new FakePersistence();
+  persistence.failHealth = true;
+
+  const service = new LocalCommandService({
+    inspector: { inspect: async () => environment() },
+    store,
+    indexer: new NoopIndexer(),
+    retriever: new NoopRetriever(),
+    taskBuilder: new NoopTaskBuilder(),
+    codexRunner: {
+      healthcheck: async () => okExecution("healthcheck"),
+      run: async () => okExecution("run"),
+    },
+    persistence,
+    getOperationProfile: () => profile,
+    getCodexCliCommand: () => "codex",
+  });
+
+  const result = await service.localRefresh();
+  assert.equal(result.status, "error");
+  assert.equal(store.getSnapshot().db_status, "disconnected");
+});
+
+test("LocalCommandService reporta error cuando falla la transacción de ejecución", async () => {
+  let profile: OperationProfile = "local_private";
+  const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
+  const persistence = new FakePersistence();
+  persistence.failTransaction = true;
+
+  const draft: LocalTaskDraft = {
+    id: "task-fixed",
+    objective: "Test",
+    context_summary: "ctx",
+    candidate_files: ["/workspace/repo/src/index.ts"],
+    constraints: [],
+    acceptance_criteria: [],
+    created_at: new Date().toISOString(),
+  };
+  store.update((current) => ({ ...current, task_draft: draft }));
+
+  const service = new LocalCommandService({
+    inspector: { inspect: async () => environment() },
+    store,
+    indexer: new NoopIndexer(),
+    retriever: new NoopRetriever(),
+    taskBuilder: new NoopTaskBuilder(),
+    codexRunner: {
+      healthcheck: async () => okExecution("healthcheck"),
+      run: async () => okExecution("run"),
+    },
+    persistence,
+    getOperationProfile: () => profile,
+    getCodexCliCommand: () => "codex",
+  });
+
+  const result = await service.localRunCodex();
+  assert.equal(result.status, "error");
+  assert.match(result.message, /tx failed/);
 });

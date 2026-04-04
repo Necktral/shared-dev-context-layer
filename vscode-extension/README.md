@@ -27,6 +27,7 @@ Control plane autenticado para consumo y mutación controlada de contexto operat
 - `WIS: Local Prepare Task`
 - `WIS: Local Run Codex`
 - `WIS: Local Refresh`
+- `WIS: Local Configure DB Password`
 
 ## Runtime modes
 
@@ -54,8 +55,17 @@ Los comandos `WIS: Local *` requieren `wisContextSync.operationProfile=local_pri
 - `wisContextSync.requireAuthentication` (default: `false`)
 - `wisContextSync.operationProfile` (default: `phase3_control_plane`; enum: `phase3_control_plane | local_private`)
 - `wisContextSync.codexCliCommand` (default: `codex`)
+- `wisContextSync.localDb.enabled` (default: `true`, efectivo solo en `local_private`)
+- `wisContextSync.localDb.host` (default: `localhost`)
+- `wisContextSync.localDb.port` (default: `5432`)
+- `wisContextSync.localDb.database` (default: `wis_context`)
+- `wisContextSync.localDb.user` (default: `wis_admin`)
+- `wisContextSync.localDb.password` (default: `""`; si vacío usa `SecretStorage`)
+- `wisContextSync.localDb.schema` (default: `local_private`)
+- `wisContextSync.localDb.ssl` (default: `false`)
 
 Token de autenticación se guarda en `SecretStorage` (no en settings de texto plano) usando `WIS: Configure Authentication`.
+Password de PostgreSQL para `local_private` puede guardarse con `WIS: Local Configure DB Password` (`wisContextSync.localDbPassword`).
 
 ## Operational load states
 

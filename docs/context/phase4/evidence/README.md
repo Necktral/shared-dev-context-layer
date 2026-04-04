@@ -2,6 +2,8 @@
 
 Esta matriz consolida evidencia de cierre para read/write MCP con OAuth Auth0 y política `all_published`.
 
+Evidencia local Package 2 (`local_private` + PostgreSQL): `package-2-smoke.md`.
+
 ## 1. Conectividad y endpoint canónico
 
 - [ ] named tunnel activo
@@ -42,4 +44,3 @@ Esta matriz consolida evidencia de cierre para read/write MCP con OAuth Auth0 y 
 
 - [ ] GO: todos los checks en verde
 - [ ] NO-GO: bloqueadores documentados y plan de remediación
-

@@ -6,6 +6,7 @@ import {
   getOperationProfile,
   getRequestTimeoutMs,
   getRuntimeMode,
+  resolveLocalDbConfig,
   isDiagnosticModeEnabled,
 } from "./config";
 import {
@@ -14,6 +15,7 @@ import {
   COMMAND_ARCHIVE_CONTEXT_ITEM,
   COMMAND_CLEAR_AUTH,
   COMMAND_CONFIGURE_AUTH,
+  COMMAND_LOCAL_CONFIGURE_DB_PASSWORD,
   COMMAND_LOCAL_INDEX,
   COMMAND_LOCAL_PREPARE_TASK,
   COMMAND_LOCAL_REFRESH,
@@ -26,6 +28,7 @@ import {
   COMMAND_SET_CONTEXT_LABELS,
   COMMAND_UPSERT_CONTEXT_ITEM,
   EXTENSION_OUTPUT_CHANNEL,
+  LOCAL_DB_PASSWORD_STORAGE_KEY,
   LOCAL_RUNTIME_VIEW_ID,
 } from "./constants";
 import { DiagnosticsReporter, type DiagnosticsSnapshot } from "./diagnostics";
@@ -51,6 +54,8 @@ import { LocalRuntimeOutputRenderer } from "./presentation/renderers/localRuntim
 import { CodexCliRunner } from "./local/codexCliRunner";
 import { NoopIndexer, NoopPersistence, NoopRetriever, NoopTaskBuilder } from "./local/noopServices";
 import { LocalCommandService } from "./local/localCommandService";
+import { PostgresPersistenceAdapter } from "./local/persistence/postgresPersistenceAdapter";
+import type { PersistencePort } from "./local/ports";
 import type { LocalCommandResult } from "./local/types";
 
 let outputChannel: vscode.OutputChannel | undefined;
@@ -122,6 +127,39 @@ function labelsFromInput(raw: string): string[] {
     .filter((entry) => entry.length > 0);
 }
 
+async function createLocalPersistence(context: vscode.ExtensionContext): Promise<PersistencePort> {
+  const profile = getOperationProfile();
+  const dbConfig = await resolveLocalDbConfig(context.secrets, profile);
+
+  if (profile !== "local_private") {
+    return new NoopPersistence({
+      dbStatus: "disconnected",
+      reason: "Persistencia local solo aplica en operationProfile=local_private.",
+    });
+  }
+
+  if (!dbConfig.enabled) {
+    return new NoopPersistence({
+      dbStatus: "disconnected",
+      reason: "Persistencia local deshabilitada (wisContextSync.localDb.enabled=false).",
+    });
+  }
+
+  try {
+    return new PostgresPersistenceAdapter({
+      config: dbConfig,
+      extensionPath: context.extensionPath,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    outputChannel?.appendLine(`[WIS][LOCAL][DB] adapter_init_error: ${message}`);
+    return new NoopPersistence({
+      dbStatus: "disconnected",
+      reason: message,
+    });
+  }
+}
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   outputChannel = vscode.window.createOutputChannel(EXTENSION_OUTPUT_CHANNEL);
   context.subscriptions.push(outputChannel);
@@ -173,6 +211,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const localStore = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(getOperationProfile()));
   const localPanelProvider = new LocalRuntimePanelProvider(localStore.getSnapshot());
   const localOutputRenderer = new LocalRuntimeOutputRenderer(outputChannel);
+  const localPersistence = await createLocalPersistence(context);
   const localCommandService = new LocalCommandService({
     inspector: environmentInspector,
     store: localStore,
@@ -180,10 +219,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     retriever: new NoopRetriever(),
     taskBuilder: new NoopTaskBuilder(),
     codexRunner: new CodexCliRunner(),
-    persistence: new NoopPersistence(),
+    persistence: localPersistence,
     getOperationProfile,
     getCodexCliCommand,
   });
+
+  if (localPersistence instanceof PostgresPersistenceAdapter) {
+    context.subscriptions.push({
+      dispose: () => {
+        void localPersistence.dispose();
+      },
+    });
+  }
 
   localStore.update((current) => ({
     ...current,
@@ -536,6 +583,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await executeLocalCommand("WIS: Local Refresh", async () => localCommandService.localRefresh());
   });
 
+  const localConfigureDbPasswordDisposable = vscode.commands.registerCommand(
+    COMMAND_LOCAL_CONFIGURE_DB_PASSWORD,
+    async () => {
+      const password = await vscode.window.showInputBox({
+        placeHolder: "Password PostgreSQL",
+        prompt: "Guardar password de wisContextSync.localDb en SecretStorage.",
+        password: true,
+        ignoreFocusOut: true,
+      });
+
+      if (password === undefined) {
+        return;
+      }
+
+      if (!password.trim()) {
+        await context.secrets.delete(LOCAL_DB_PASSWORD_STORAGE_KEY);
+        outputChannel?.appendLine("[WIS][LOCAL][DB] SecretStorage password cleared.");
+        await vscode.window.showInformationMessage("Password de localDb eliminado de SecretStorage.");
+        return;
+      }
+
+      await context.secrets.store(LOCAL_DB_PASSWORD_STORAGE_KEY, password);
+      outputChannel?.appendLine("[WIS][LOCAL][DB] SecretStorage password updated.");
+      await vscode.window.showInformationMessage("Password de localDb guardado en SecretStorage.");
+    },
+  );
+
   context.subscriptions.push(
     loadDisposable,
     resetDisposable,
@@ -553,6 +627,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     localPrepareTaskDisposable,
     localRunCodexDisposable,
     localRefreshDisposable,
+    localConfigureDbPasswordDisposable,
   );
 }
 

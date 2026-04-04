@@ -26,6 +26,7 @@ test("package.json incluye comandos/settings de local_private sin remover comand
     "wisContextSync.localPrepareTask",
     "wisContextSync.localRunCodex",
     "wisContextSync.localRefresh",
+    "wisContextSync.localConfigureDbPassword",
   ];
 
   for (const command of requiredExisting) {
@@ -39,6 +40,14 @@ test("package.json incluye comandos/settings de local_private sin remover comand
   const properties = manifest.contributes.configuration.properties;
   assert.ok(Object.hasOwn(properties, "wisContextSync.operationProfile"));
   assert.ok(Object.hasOwn(properties, "wisContextSync.codexCliCommand"));
+  assert.ok(Object.hasOwn(properties, "wisContextSync.localDb.enabled"));
+  assert.ok(Object.hasOwn(properties, "wisContextSync.localDb.host"));
+  assert.ok(Object.hasOwn(properties, "wisContextSync.localDb.port"));
+  assert.ok(Object.hasOwn(properties, "wisContextSync.localDb.database"));
+  assert.ok(Object.hasOwn(properties, "wisContextSync.localDb.user"));
+  assert.ok(Object.hasOwn(properties, "wisContextSync.localDb.password"));
+  assert.ok(Object.hasOwn(properties, "wisContextSync.localDb.schema"));
+  assert.ok(Object.hasOwn(properties, "wisContextSync.localDb.ssl"));
 
   const explorerViews = manifest.contributes.views?.explorer ?? [];
   assert.ok(explorerViews.some((view) => view.id === "wisContextSync.localRuntimePanel"));

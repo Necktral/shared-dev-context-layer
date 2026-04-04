@@ -10,10 +10,18 @@ export const DEFAULT_AUTH_HEADER_NAME = "x-api-key";
 export const DEFAULT_REQUIRE_AUTHENTICATION = false;
 export const DEFAULT_OPERATION_PROFILE = "phase3_control_plane";
 export const DEFAULT_CODEX_CLI_COMMAND = "codex";
+export const DEFAULT_LOCAL_DB_HOST = "localhost";
+export const DEFAULT_LOCAL_DB_PORT = 5432;
+export const DEFAULT_LOCAL_DB_DATABASE = "wis_context";
+export const DEFAULT_LOCAL_DB_USER = "wis_admin";
+export const DEFAULT_LOCAL_DB_PASSWORD = "";
+export const DEFAULT_LOCAL_DB_SCHEMA = "local_private";
+export const DEFAULT_LOCAL_DB_SSL = false;
 
 export const SESSION_KEY_STORAGE_KEY = "wisContextSync.sessionKey";
 export const SESSION_CREATED_AT_STORAGE_KEY = "wisContextSync.sessionCreatedAt";
 export const AUTH_TOKEN_STORAGE_KEY = "wisContextSync.authToken";
+export const LOCAL_DB_PASSWORD_STORAGE_KEY = "wisContextSync.localDbPassword";
 
 export const COMMAND_LOAD_CONTEXT = "wisContextSync.loadOperationalContext";
 export const COMMAND_RESET_SESSION = "wisContextSync.resetSession";
@@ -31,5 +39,6 @@ export const COMMAND_LOCAL_INDEX = "wisContextSync.localIndex";
 export const COMMAND_LOCAL_PREPARE_TASK = "wisContextSync.localPrepareTask";
 export const COMMAND_LOCAL_RUN_CODEX = "wisContextSync.localRunCodex";
 export const COMMAND_LOCAL_REFRESH = "wisContextSync.localRefresh";
+export const COMMAND_LOCAL_CONFIGURE_DB_PASSWORD = "wisContextSync.localConfigureDbPassword";
 
 export const LOCAL_RUNTIME_VIEW_ID = "wisContextSync.localRuntimePanel";

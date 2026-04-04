@@ -1,0 +1,519 @@
+import { createHash, randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
+import * as path from "node:path";
+import { Pool } from "pg";
+import type { LocalDbConfig } from "../../config";
+import type {
+  CompleteIndexRunInput,
+  CreateIndexRunInput,
+  EnsureProjectInput,
+  PersistedDecision,
+  PersistedEvent,
+  PersistedExecution,
+  PersistedExecutionArtifact,
+  PersistedIndexRun,
+  PersistedProject,
+  PersistedTask,
+  PersistedTaskContext,
+  PersistenceHealthcheck,
+  PersistencePort,
+  PersistenceTransactionPort,
+  SaveDecisionInput,
+  SaveEventInput,
+  SaveExecutionArtifactInput,
+  SaveExecutionInput,
+  SaveTaskContextInput,
+  SaveTaskInput,
+} from "../ports";
+
+export interface PostgresPersistenceAdapterOptions {
+  config: LocalDbConfig;
+  extensionPath: string;
+}
+
+interface MigrationFile {
+  version: string;
+  fullPath: string;
+}
+
+interface QueryClient {
+  query: (text: string, values?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }>;
+}
+
+function quoteIdentifier(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
+function isValidSchemaName(schema: string): boolean {
+  return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(schema);
+}
+
+function ensureSchemaName(schema: string): string {
+  if (!isValidSchemaName(schema)) {
+    throw new Error(`localDb.schema inválido: '${schema}'.`);
+  }
+  return schema;
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+export function mapPostgresError(error: unknown): string {
+  if (error instanceof Error) {
+    const anyError = error as Error & { code?: string; detail?: string };
+    const code = anyError.code;
+
+    if (code === "ECONNREFUSED") {
+      return "No se pudo conectar a PostgreSQL (ECONNREFUSED).";
+    }
+    if (code === "28P01") {
+      return "Credenciales de PostgreSQL inválidas (28P01).";
+    }
+    if (code === "3D000") {
+      return "Base de datos PostgreSQL no existe (3D000).";
+    }
+    if (code === "3F000") {
+      return "Schema PostgreSQL no existe (3F000).";
+    }
+    if (code === "42P01") {
+      return "Tabla requerida no existe (42P01). Ejecuta Local Refresh para migrar.";
+    }
+    if (code === "23503") {
+      return "Violación de integridad referencial (23503).";
+    }
+    if (code === "23505") {
+      return "Conflicto por clave única duplicada (23505).";
+    }
+
+    if (anyError.message.includes("connect ECONNREFUSED")) {
+      return "No se pudo conectar a PostgreSQL en host/puerto configurado.";
+    }
+    if (anyError.message.includes("password authentication failed")) {
+      return "Autenticación PostgreSQL falló. Revisa usuario/password.";
+    }
+
+    return anyError.message;
+  }
+
+  return "Error desconocido de persistencia PostgreSQL.";
+}
+
+export class PostgresPersistenceAdapter implements PersistencePort {
+  private readonly config: LocalDbConfig;
+
+  private readonly pool: Pool;
+
+  private readonly schema: string;
+
+  private readonly schemaQuoted: string;
+
+  private readonly migrationsDir: string;
+
+  private migrationsReady = false;
+
+  constructor(options: PostgresPersistenceAdapterOptions) {
+    this.config = options.config;
+    this.schema = ensureSchemaName(options.config.schema);
+    this.schemaQuoted = quoteIdentifier(this.schema);
+    this.migrationsDir = path.join(options.extensionPath, "migrations", "local_private");
+
+    this.pool = new Pool({
+      host: this.config.host,
+      port: this.config.port,
+      database: this.config.database,
+      user: this.config.user,
+      password: this.config.password || undefined,
+      ssl: this.config.ssl ? { rejectUnauthorized: false } : false,
+      max: 4,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 5_000,
+    });
+  }
+
+  public async healthcheck(): Promise<PersistenceHealthcheck> {
+    if (!this.config.enabled) {
+      return {
+        ok: false,
+        db_status: "disconnected",
+        error: "Persistencia local deshabilitada por configuración (wisContextSync.localDb.enabled=false).",
+        migrations_applied: 0,
+      };
+    }
+
+    try {
+      await this.pool.query("SELECT 1");
+      const migrationsApplied = await this.ensureMigrations();
+      return {
+        ok: true,
+        db_status: "connected",
+        error: null,
+        migrations_applied: migrationsApplied,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        db_status: "disconnected",
+        error: mapPostgresError(error),
+        migrations_applied: 0,
+      };
+    }
+  }
+
+  public async ensureProject(input: EnsureProjectInput): Promise<PersistedProject> {
+    await this.ensureMigrations();
+    const projectKey = this.buildProjectKey(input);
+    const projectId = randomUUID();
+    const now = nowIso();
+    const table = this.table("projects");
+
+    const result = await this.query(
+      `INSERT INTO ${table} (id, project_key, operation_profile, workspace_root, repo_root, branch, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (project_key)
+       DO UPDATE SET
+         operation_profile = EXCLUDED.operation_profile,
+         workspace_root = EXCLUDED.workspace_root,
+         repo_root = EXCLUDED.repo_root,
+         branch = EXCLUDED.branch,
+         updated_at = EXCLUDED.updated_at
+       RETURNING id, project_key`,
+      [
+        projectId,
+        projectKey,
+        input.operation_profile,
+        input.workspace_root,
+        input.repo_root,
+        input.branch,
+        now,
+        now,
+      ],
+    );
+
+    const row = result.rows[0] as { id: string; project_key: string };
+    return {
+      id: row.id,
+      project_key: row.project_key,
+    };
+  }
+
+  public async createIndexRun(input: CreateIndexRunInput): Promise<PersistedIndexRun> {
+    await this.ensureMigrations();
+    const indexRunId = randomUUID();
+    const now = nowIso();
+    const table = this.table("index_runs");
+
+    await this.query(
+      `INSERT INTO ${table} (id, project_id, status, summary, started_at, finished_at, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [indexRunId, input.project_id, input.status, input.summary, now, null, now, now],
+    );
+
+    return {
+      id: indexRunId,
+      project_id: input.project_id,
+      status: input.status,
+    };
+  }
+
+  public async completeIndexRun(input: CompleteIndexRunInput): Promise<void> {
+    await this.ensureMigrations();
+    const now = nowIso();
+    const table = this.table("index_runs");
+    await this.query(
+      `UPDATE ${table}
+       SET status = $2,
+           summary = $3,
+           finished_at = $4,
+           updated_at = $4
+       WHERE id = $1`,
+      [input.index_run_id, input.status, input.summary, now],
+    );
+  }
+
+  public async saveTask(input: SaveTaskInput): Promise<PersistedTask> {
+    await this.ensureMigrations();
+    const table = this.table("tasks");
+    const payload = {
+      objective: input.task.objective,
+      context_summary: input.task.context_summary,
+      candidate_files: input.task.candidate_files,
+      constraints: input.task.constraints,
+      acceptance_criteria: input.task.acceptance_criteria,
+    };
+
+    await this.query(
+      `INSERT INTO ${table} (id, project_id, objective, context_summary, status, payload_json, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)
+       ON CONFLICT (id)
+       DO UPDATE SET
+         objective = EXCLUDED.objective,
+         context_summary = EXCLUDED.context_summary,
+         status = EXCLUDED.status,
+         payload_json = EXCLUDED.payload_json,
+         updated_at = EXCLUDED.updated_at`,
+      [
+        input.task.id,
+        input.project_id,
+        input.task.objective,
+        input.task.context_summary,
+        input.status,
+        JSON.stringify(payload),
+        input.task.created_at,
+        nowIso(),
+      ],
+    );
+
+    return {
+      id: input.task.id,
+      project_id: input.project_id,
+    };
+  }
+
+  public async saveTaskContext(input: SaveTaskContextInput): Promise<PersistedTaskContext> {
+    await this.ensureMigrations();
+    const contextId = randomUUID();
+    const table = this.table("task_context");
+
+    await this.query(
+      `INSERT INTO ${table} (id, task_id, project_id, summary, candidate_files, constraints, acceptance_criteria, created_at)
+       VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8)`,
+      [
+        contextId,
+        input.task.id,
+        input.project_id,
+        input.task.context_summary,
+        JSON.stringify(input.task.candidate_files),
+        JSON.stringify(input.task.constraints),
+        JSON.stringify(input.task.acceptance_criteria),
+        nowIso(),
+      ],
+    );
+
+    return {
+      id: contextId,
+      task_id: input.task.id,
+    };
+  }
+
+  public async saveExecution(input: SaveExecutionInput): Promise<PersistedExecution> {
+    await this.ensureMigrations();
+    return this.saveExecutionWithClient(this.pool, input);
+  }
+
+  public async saveExecutionArtifact(input: SaveExecutionArtifactInput): Promise<PersistedExecutionArtifact> {
+    await this.ensureMigrations();
+    return this.saveExecutionArtifactWithClient(this.pool, input);
+  }
+
+  public async saveDecision(input: SaveDecisionInput): Promise<PersistedDecision> {
+    await this.ensureMigrations();
+    const decisionId = randomUUID();
+    const table = this.table("decisions");
+    await this.query(
+      `INSERT INTO ${table} (id, project_id, title, statement, source, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [decisionId, input.project_id, input.title, input.statement, input.source, nowIso()],
+    );
+    return {
+      id: decisionId,
+      project_id: input.project_id,
+    };
+  }
+
+  public async saveEvent(input: SaveEventInput): Promise<PersistedEvent> {
+    await this.ensureMigrations();
+    return this.saveEventWithClient(this.pool, input);
+  }
+
+  public async runInTransaction<T>(operation: (tx: PersistenceTransactionPort) => Promise<T>): Promise<T> {
+    await this.ensureMigrations();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const txPort: PersistenceTransactionPort = {
+        saveExecution: (input) => this.saveExecutionWithClient(client, input),
+        saveExecutionArtifact: (input) => this.saveExecutionArtifactWithClient(client, input),
+        saveEvent: (input) => this.saveEventWithClient(client, input),
+      };
+      const result = await operation(txPort);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw new Error(mapPostgresError(error));
+    } finally {
+      client.release();
+    }
+  }
+
+  public async dispose(): Promise<void> {
+    await this.pool.end();
+  }
+
+  private table(name: string): string {
+    return `${this.schemaQuoted}.${quoteIdentifier(name)}`;
+  }
+
+  private async query(text: string, values: unknown[] = []): Promise<{ rows: Array<Record<string, unknown>> }> {
+    try {
+      return await this.pool.query(text, values);
+    } catch (error) {
+      throw new Error(mapPostgresError(error));
+    }
+  }
+
+  private buildProjectKey(input: EnsureProjectInput): string {
+    return createHash("sha256")
+      .update([input.operation_profile, input.workspace_root ?? "", input.repo_root ?? ""].join("|"))
+      .digest("hex");
+  }
+
+  private async ensureMigrations(): Promise<number> {
+    if (this.migrationsReady) {
+      return 0;
+    }
+
+    const pending = await this.listPendingMigrations();
+    let applied = 0;
+    for (const migration of pending) {
+      const sql = await fs.readFile(migration.fullPath, "utf8");
+      const client = await this.pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(`CREATE SCHEMA IF NOT EXISTS ${this.schemaQuoted}`);
+        await client.query(
+          `CREATE TABLE IF NOT EXISTS ${this.table("schema_migrations")} (
+             version text PRIMARY KEY,
+             applied_at timestamptz NOT NULL
+           )`,
+        );
+        await client.query(`SET LOCAL search_path TO ${this.schemaQuoted}, public`);
+        await client.query(sql);
+        await client.query(`INSERT INTO ${this.table("schema_migrations")} (version, applied_at) VALUES ($1,$2)`, [
+          migration.version,
+          nowIso(),
+        ]);
+        await client.query("COMMIT");
+        applied += 1;
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw new Error(mapPostgresError(error));
+      } finally {
+        client.release();
+      }
+    }
+
+    this.migrationsReady = true;
+    return applied;
+  }
+
+  private async listPendingMigrations(): Promise<MigrationFile[]> {
+    await this.pool.query(`CREATE SCHEMA IF NOT EXISTS ${this.schemaQuoted}`);
+    await this.pool.query(
+      `CREATE TABLE IF NOT EXISTS ${this.table("schema_migrations")} (
+         version text PRIMARY KEY,
+         applied_at timestamptz NOT NULL
+       )`,
+    );
+
+    const entries = await fs.readdir(this.migrationsDir, { withFileTypes: true });
+    const migrations = entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".sql"))
+      .map((entry) => ({
+        version: entry.name,
+        fullPath: path.join(this.migrationsDir, entry.name),
+      }))
+      .sort((a, b) => a.version.localeCompare(b.version));
+
+    const existing = await this.pool.query(`SELECT version FROM ${this.table("schema_migrations")}`);
+    const existingVersions = new Set(existing.rows.map((row: Record<string, unknown>) => String(row.version)));
+
+    return migrations.filter((migration) => !existingVersions.has(migration.version));
+  }
+
+  private async saveExecutionWithClient(client: QueryClient, input: SaveExecutionInput): Promise<PersistedExecution> {
+    const executionId = randomUUID();
+    const table = this.table("executions");
+    const status = input.result.ok ? "ok" : "error";
+    await client.query(
+      `INSERT INTO ${table}
+       (id, task_id, project_id, status, command, command_line, exit_code, duration_ms, stdout, stderr, error, started_at, finished_at, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      [
+        executionId,
+        input.task_id,
+        input.project_id,
+        status,
+        input.result.command,
+        input.result.command_line,
+        input.result.exit_code,
+        input.result.duration_ms,
+        input.result.stdout,
+        input.result.stderr,
+        input.result.error,
+        input.result.started_at,
+        input.result.finished_at,
+        nowIso(),
+      ],
+    );
+
+    return {
+      id: executionId,
+      task_id: input.task_id,
+      project_id: input.project_id,
+    };
+  }
+
+  private async saveExecutionArtifactWithClient(
+    client: QueryClient,
+    input: SaveExecutionArtifactInput,
+  ): Promise<PersistedExecutionArtifact> {
+    const artifactId = randomUUID();
+    const table = this.table("execution_artifacts");
+    await client.query(
+      `INSERT INTO ${table} (id, execution_id, project_id, artifact_type, content, metadata_json, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)`,
+      [
+        artifactId,
+        input.execution_id,
+        input.project_id,
+        input.artifact_type,
+        input.content,
+        JSON.stringify(input.metadata),
+        nowIso(),
+      ],
+    );
+
+    return {
+      id: artifactId,
+      execution_id: input.execution_id,
+    };
+  }
+
+  private async saveEventWithClient(client: QueryClient, input: SaveEventInput): Promise<PersistedEvent> {
+    const eventId = randomUUID();
+    const table = this.table("events");
+    await client.query(
+      `INSERT INTO ${table}
+       (id, project_id, task_id, execution_id, event_type, severity, message, payload_json, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)`,
+      [
+        eventId,
+        input.project_id,
+        input.task_id,
+        input.execution_id,
+        input.event_type,
+        input.severity,
+        input.message,
+        JSON.stringify(input.payload),
+        nowIso(),
+      ],
+    );
+
+    return {
+      id: eventId,
+      project_id: input.project_id,
+    };
+  }
+}
