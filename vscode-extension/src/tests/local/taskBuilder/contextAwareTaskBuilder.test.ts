@@ -9,17 +9,36 @@ test("ContextAwareTaskBuilder compone summary con evidencia de chunks", async ()
     {
       summary: "Retrieval local listo.",
       candidate_files: ["src/authService.ts"],
+      query_trace: {
+        raw_intent: "Ajustar auth service",
+        normalized_intent: "ajustar auth service",
+        tokens: ["auth", "service"],
+        path_hints: [],
+        filename_hints: ["authservice.ts"],
+      },
+      coarse_trace: [
+        {
+          stage: "coarse",
+          file_path: "src/authService.ts",
+          chunk_index: 0,
+          score: 92,
+          reasons: ["filename_exact_match", "content_token_match"],
+        },
+      ],
       selected_chunks: [
         {
           file_path: "src/authService.ts",
           chunk_index: 0,
           content: "export async function refreshToken() { return validateToken(); }",
+          content_hash: "hash-1",
           score: 120,
+          coarse_score: 92,
           evidence: ["filename_exact_match", "content_match"],
         },
       ],
       ranking_evidence: [
         {
+          stage: "final",
           file_path: "src/authService.ts",
           chunk_index: 0,
           score: 120,
@@ -35,7 +54,9 @@ test("ContextAwareTaskBuilder compone summary con evidencia de chunks", async ()
         selected_chunks: 1,
         selected_chars: 63,
         truncated: false,
+        truncation_reasons: [],
       },
+      fallback_trace: null,
     },
     {
       operation_profile: "local_private",

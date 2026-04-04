@@ -5,10 +5,15 @@ export interface RetrievedChunk {
   chunk_index: number;
   content: string;
   score: number;
+  coarse_score: number;
+  content_hash: string | null;
   evidence: string[];
 }
 
+export type RetrievalEvidenceStage = "coarse" | "final";
+
 export interface RetrievalRankingEvidence {
+  stage: RetrievalEvidenceStage;
   file_path: string;
   chunk_index?: number;
   score: number;
@@ -24,14 +29,32 @@ export interface RetrievalBudgetStats {
   selected_chunks: number;
   selected_chars: number;
   truncated: boolean;
+  truncation_reasons: string[];
+}
+
+export interface RetrievalQueryTrace {
+  raw_intent: string;
+  normalized_intent: string;
+  tokens: string[];
+  path_hints: string[];
+  filename_hints: string[];
+}
+
+export interface RetrievalFallbackTrace {
+  used: boolean;
+  reason: string;
+  source_file: string | null;
 }
 
 export interface RetrievedContext {
   summary: string;
   candidate_files: string[];
+  query_trace: RetrievalQueryTrace;
+  coarse_trace: RetrievalRankingEvidence[];
   selected_chunks: RetrievedChunk[];
   ranking_evidence: RetrievalRankingEvidence[];
   budget_stats: RetrievalBudgetStats;
+  fallback_trace: RetrievalFallbackTrace | null;
 }
 
 export interface RetrievalRequest {
@@ -161,6 +184,10 @@ export interface RetrievedIndexedFileCandidate {
   file_id: string;
   path: string;
   content_hash: string;
+  coarse_score: number;
+  coarse_reasons: string[];
+  path_token_hits: number;
+  filename_token_hits: number;
 }
 
 export interface RetrievedIndexedChunk {
@@ -169,6 +196,11 @@ export interface RetrievedIndexedChunk {
   chunk_index: number;
   content: string;
   content_hash: string;
+  coarse_score: number;
+  coarse_reasons: string[];
+  path_token_hits: number;
+  filename_token_hits: number;
+  content_token_hits: number;
 }
 
 export interface EnsureProjectInput {
@@ -225,12 +257,16 @@ export interface SaveTaskContextInput {
 export interface SearchIndexedFilesInput {
   projectId: string;
   tokens: string[];
+  pathHints: string[];
+  filenameHints: string[];
   limit: number;
 }
 
 export interface SearchFileChunksInput {
   projectId: string;
   tokens: string[];
+  pathHints: string[];
+  filenameHints: string[];
   limit: number;
   fileIds?: string[];
 }

@@ -76,10 +76,19 @@ export class NoopRetriever implements ContextRetrieverPort {
     return {
       summary: `Contexto stub para: ${request.intent}`,
       candidate_files: candidates,
+      query_trace: {
+        raw_intent: request.intent,
+        normalized_intent: request.intent.trim().toLowerCase(),
+        tokens: [],
+        path_hints: [],
+        filename_hints: [],
+      },
+      coarse_trace: [],
       selected_chunks: [],
       ranking_evidence: candidates.length > 0
         ? [
             {
+              stage: "final",
               file_path: candidates[0],
               score: 1,
               reasons: ["active_file_fallback"],
@@ -95,7 +104,19 @@ export class NoopRetriever implements ContextRetrieverPort {
         selected_chunks: 0,
         selected_chars: 0,
         truncated: false,
+        truncation_reasons: [],
       },
+      fallback_trace: candidates.length > 0
+        ? {
+            used: true,
+            reason: "active_file_fallback",
+            source_file: candidates[0],
+          }
+        : {
+            used: true,
+            reason: "no_index_hits",
+            source_file: null,
+          },
     };
   }
 }

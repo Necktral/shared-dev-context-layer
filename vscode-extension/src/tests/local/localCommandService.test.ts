@@ -216,17 +216,36 @@ function sampleRetrievedContext(): RetrievedContext {
   return {
     summary: "Retrieval listo.",
     candidate_files: ["src/index.ts", "src/retrieval.ts"],
+    query_trace: {
+      raw_intent: "Encontrar index.ts",
+      normalized_intent: "encontrar index.ts",
+      tokens: ["index.ts", "index"],
+      path_hints: ["src/index.ts"],
+      filename_hints: ["index.ts"],
+    },
+    coarse_trace: [
+      {
+        stage: "coarse",
+        file_path: "src/index.ts",
+        chunk_index: 0,
+        score: 90,
+        reasons: ["filename_exact_match", "content_token_match"],
+      },
+    ],
     selected_chunks: [
       {
         file_path: "src/index.ts",
         chunk_index: 0,
         content: "export const answer = 42;",
+        content_hash: "hash-c0",
         score: 120,
+        coarse_score: 90,
         evidence: ["filename_exact_match", "content_match"],
       },
     ],
     ranking_evidence: [
       {
+        stage: "final",
         file_path: "src/index.ts",
         chunk_index: 0,
         score: 120,
@@ -242,7 +261,9 @@ function sampleRetrievedContext(): RetrievedContext {
       selected_chunks: 1,
       selected_chars: 25,
       truncated: false,
+      truncation_reasons: [],
     },
+    fallback_trace: null,
   };
 }
 

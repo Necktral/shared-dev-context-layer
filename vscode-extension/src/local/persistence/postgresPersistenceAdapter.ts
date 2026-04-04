@@ -298,20 +298,62 @@ export class PostgresPersistenceAdapter implements PersistencePort {
   public async searchIndexedFiles(input: SearchIndexedFilesInput): Promise<RetrievedIndexedFileCandidate[]> {
     await this.ensureMigrations();
     const normalizedTokens = this.normalizeTokens(input.tokens);
-    if (normalizedTokens.length === 0 || input.limit <= 0) {
+    const normalizedPathHints = this.normalizeTokens(input.pathHints);
+    const normalizedFilenameHints = this.normalizeTokens(input.filenameHints);
+    if (
+      input.limit <= 0 ||
+      (normalizedTokens.length === 0 && normalizedPathHints.length === 0 && normalizedFilenameHints.length === 0)
+    ) {
       return [];
     }
 
     const table = this.table("files");
     const values: unknown[] = [input.projectId];
-    const likeClause = this.buildLikeClause("path", normalizedTokens, values, false);
+    const pathExpr = "LOWER(f.path)";
+    const filenameExpr = "LOWER(regexp_replace(f.path, '^.*/', ''))";
+    const pathExactExpr = this.buildAnyEqualsExpr(pathExpr, normalizedPathHints, values);
+    const filenameExactExpr = this.buildAnyEqualsExpr(filenameExpr, normalizedFilenameHints, values);
+    const pathPrefixHitsExpr = this.buildLikeHitsExpression(
+      pathExpr,
+      normalizedPathHints.map((hint) => `${this.escapeLikePattern(hint)}%`),
+      values,
+      false,
+    );
+    const pathTokenHitsExpr = this.buildLikeHitsExpression(
+      pathExpr,
+      normalizedTokens.map((token) => `%${this.escapeLikePattern(token)}%`),
+      values,
+      false,
+    );
+    const filenameTokenHitsExpr = this.buildLikeHitsExpression(
+      filenameExpr,
+      normalizedTokens.map((token) => `%${this.escapeLikePattern(token)}%`),
+      values,
+      false,
+    );
+    const coarseScoreExpr = `
+      (${pathExactExpr} * 600) +
+      (${filenameExactExpr} * 420) +
+      (${pathPrefixHitsExpr} * 120) +
+      (${filenameTokenHitsExpr} * 80) +
+      (${pathTokenHitsExpr} * 40)
+    `;
     const result = await this.query(
-      `SELECT id AS file_id, path, COALESCE(content_hash, '') AS content_hash
-       FROM ${table}
-       WHERE project_id = $1
-         AND is_deleted = false
-         AND (${likeClause})
-       ORDER BY path ASC
+      `SELECT
+         f.id AS file_id,
+         f.path,
+         COALESCE(f.content_hash, '') AS content_hash,
+         ${pathTokenHitsExpr} AS path_token_hits,
+         ${filenameTokenHitsExpr} AS filename_token_hits,
+         ${coarseScoreExpr} AS coarse_score,
+         ${pathExactExpr} AS path_exact_hit,
+         ${filenameExactExpr} AS filename_exact_hit,
+         ${pathPrefixHitsExpr} AS path_prefix_hits
+       FROM ${table} f
+       WHERE f.project_id = $1
+         AND f.is_deleted = false
+         AND (${coarseScoreExpr}) > 0
+       ORDER BY coarse_score DESC, f.path ASC
        LIMIT $${values.length + 1}`,
       [...values, input.limit],
     );
@@ -320,24 +362,73 @@ export class PostgresPersistenceAdapter implements PersistencePort {
       file_id: String(row.file_id),
       path: String(row.path),
       content_hash: String(row.content_hash),
+      coarse_score: Number(row.coarse_score),
+      path_token_hits: Number(row.path_token_hits),
+      filename_token_hits: Number(row.filename_token_hits),
+      coarse_reasons: this.buildCoarseReasons({
+        pathExactHit: Number(row.path_exact_hit) > 0,
+        filenameExactHit: Number(row.filename_exact_hit) > 0,
+        pathPrefixHits: Number(row.path_prefix_hits),
+        pathTokenHits: Number(row.path_token_hits),
+        filenameTokenHits: Number(row.filename_token_hits),
+        contentTokenHits: 0,
+      }),
     }));
   }
 
   public async searchFileChunks(input: SearchFileChunksInput): Promise<RetrievedIndexedChunk[]> {
     await this.ensureMigrations();
     const normalizedTokens = this.normalizeTokens(input.tokens);
-    if (normalizedTokens.length === 0 || input.limit <= 0) {
+    const normalizedPathHints = this.normalizeTokens(input.pathHints);
+    const normalizedFilenameHints = this.normalizeTokens(input.filenameHints);
+    if (
+      input.limit <= 0 ||
+      (normalizedTokens.length === 0 && normalizedPathHints.length === 0 && normalizedFilenameHints.length === 0)
+    ) {
       return [];
     }
 
     const fileTable = this.table("files");
     const chunkTable = this.table("file_chunks");
     const values: unknown[] = [input.projectId];
-    const conditions = [
-      "f.project_id = $1",
-      "f.is_deleted = false",
-      this.buildLikeClause("fc.content", normalizedTokens, values, false),
-    ];
+    const pathExpr = "LOWER(f.path)";
+    const filenameExpr = "LOWER(regexp_replace(f.path, '^.*/', ''))";
+    const contentExpr = "LOWER(fc.content)";
+    const pathExactExpr = this.buildAnyEqualsExpr(pathExpr, normalizedPathHints, values);
+    const filenameExactExpr = this.buildAnyEqualsExpr(filenameExpr, normalizedFilenameHints, values);
+    const pathPrefixHitsExpr = this.buildLikeHitsExpression(
+      pathExpr,
+      normalizedPathHints.map((hint) => `${this.escapeLikePattern(hint)}%`),
+      values,
+      false,
+    );
+    const pathTokenHitsExpr = this.buildLikeHitsExpression(
+      pathExpr,
+      normalizedTokens.map((token) => `%${this.escapeLikePattern(token)}%`),
+      values,
+      false,
+    );
+    const filenameTokenHitsExpr = this.buildLikeHitsExpression(
+      filenameExpr,
+      normalizedTokens.map((token) => `%${this.escapeLikePattern(token)}%`),
+      values,
+      false,
+    );
+    const contentTokenHitsExpr = this.buildLikeHitsExpression(
+      contentExpr,
+      normalizedTokens.map((token) => `%${this.escapeLikePattern(token)}%`),
+      values,
+      false,
+    );
+    const coarseScoreExpr = `
+      (${pathExactExpr} * 500) +
+      (${filenameExactExpr} * 360) +
+      (${pathPrefixHitsExpr} * 100) +
+      (${filenameTokenHitsExpr} * 70) +
+      (${pathTokenHitsExpr} * 35) +
+      (${contentTokenHitsExpr} * 40)
+    `;
+    const conditions = ["f.project_id = $1", "f.is_deleted = false", `(${coarseScoreExpr}) > 0`];
 
     if (input.fileIds && input.fileIds.length > 0) {
       conditions.push(`fc.file_id = ANY($${values.length + 1}::text[])`);
@@ -345,11 +436,23 @@ export class PostgresPersistenceAdapter implements PersistencePort {
     }
 
     const result = await this.query(
-      `SELECT fc.file_id, f.path AS file_path, fc.chunk_index, fc.content, COALESCE(fc.content_hash, '') AS content_hash
+      `SELECT
+         fc.file_id,
+         f.path AS file_path,
+         fc.chunk_index,
+         fc.content,
+         COALESCE(fc.content_hash, '') AS content_hash,
+         ${pathTokenHitsExpr} AS path_token_hits,
+         ${filenameTokenHitsExpr} AS filename_token_hits,
+         ${contentTokenHitsExpr} AS content_token_hits,
+         ${coarseScoreExpr} AS coarse_score,
+         ${pathExactExpr} AS path_exact_hit,
+         ${filenameExactExpr} AS filename_exact_hit,
+         ${pathPrefixHitsExpr} AS path_prefix_hits
        FROM ${chunkTable} fc
        INNER JOIN ${fileTable} f ON f.id = fc.file_id
        WHERE ${conditions.join("\n         AND ")}
-       ORDER BY f.path ASC, fc.chunk_index ASC
+       ORDER BY coarse_score DESC, f.path ASC, fc.chunk_index ASC
        LIMIT $${values.length + 1}`,
       [...values, input.limit],
     );
@@ -360,6 +463,18 @@ export class PostgresPersistenceAdapter implements PersistencePort {
       chunk_index: Number(row.chunk_index),
       content: String(row.content),
       content_hash: String(row.content_hash),
+      coarse_score: Number(row.coarse_score),
+      path_token_hits: Number(row.path_token_hits),
+      filename_token_hits: Number(row.filename_token_hits),
+      content_token_hits: Number(row.content_token_hits),
+      coarse_reasons: this.buildCoarseReasons({
+        pathExactHit: Number(row.path_exact_hit) > 0,
+        filenameExactHit: Number(row.filename_exact_hit) > 0,
+        pathPrefixHits: Number(row.path_prefix_hits),
+        pathTokenHits: Number(row.path_token_hits),
+        filenameTokenHits: Number(row.filename_token_hits),
+        contentTokenHits: Number(row.content_token_hits),
+      }),
     }));
   }
 
@@ -398,6 +513,11 @@ export class PostgresPersistenceAdapter implements PersistencePort {
       chunk_index: Number(row.chunk_index),
       content: String(row.content),
       content_hash: String(row.content_hash),
+      coarse_score: 0,
+      path_token_hits: 0,
+      filename_token_hits: 0,
+      content_token_hits: 0,
+      coarse_reasons: [],
     }));
   }
 
@@ -564,10 +684,27 @@ export class PostgresPersistenceAdapter implements PersistencePort {
     await this.ensureMigrations();
     const contextId = randomUUID();
     const table = this.table("task_context");
+    const selectedChunkTrace = input.retrieved_context.selected_chunks.map((chunk) => ({
+      file_path: chunk.file_path,
+      chunk_index: chunk.chunk_index,
+      score: chunk.score,
+      coarse_score: chunk.coarse_score,
+      evidence: chunk.evidence,
+      content_hash: chunk.content_hash,
+      snippet: this.compactSnippet(chunk.content, 240),
+      content_chars: chunk.content.length,
+    }));
     const payload = {
-      selected_chunks: input.retrieved_context.selected_chunks,
-      ranking_evidence: input.retrieved_context.ranking_evidence,
-      budget_stats: input.retrieved_context.budget_stats,
+      version: "retrieval_trace_v1",
+      query_trace: input.retrieved_context.query_trace,
+      coarse_trace: input.retrieved_context.coarse_trace.slice(0, 40),
+      final_trace: {
+        summary: input.retrieved_context.summary,
+        selected_chunks: selectedChunkTrace,
+        ranking_evidence: input.retrieved_context.ranking_evidence.slice(0, 40),
+        budget_stats: input.retrieved_context.budget_stats,
+      },
+      fallback_trace: input.retrieved_context.fallback_trace,
     };
 
     await this.query(
@@ -669,17 +806,68 @@ export class PostgresPersistenceAdapter implements PersistencePort {
     return [...new Set(tokens.map((token) => token.trim().toLowerCase()).filter((token) => token.length > 0))];
   }
 
-  private buildLikeClause(column: string, tokens: string[], values: unknown[], caseSensitive: boolean): string {
+  private buildAnyEqualsExpr(column: string, valuesToMatch: string[], values: unknown[]): string {
+    if (valuesToMatch.length === 0) {
+      return "0";
+    }
+    values.push(valuesToMatch);
+    return `(CASE WHEN ${column} = ANY($${values.length}::text[]) THEN 1 ELSE 0 END)`;
+  }
+
+  private buildLikeHitsExpression(
+    column: string,
+    patterns: string[],
+    values: unknown[],
+    caseSensitive: boolean,
+  ): string {
+    if (patterns.length === 0) {
+      return "0";
+    }
     const operator = caseSensitive ? "LIKE" : "ILIKE";
     const clauses: string[] = [];
-    for (const token of tokens) {
-      values.push(`%${this.escapeLikePattern(token)}%`);
-      clauses.push(`${column} ${operator} $${values.length} ESCAPE '\\'`);
+    for (const pattern of patterns) {
+      values.push(pattern);
+      clauses.push(`CASE WHEN ${column} ${operator} $${values.length} ESCAPE '\\' THEN 1 ELSE 0 END`);
     }
-    if (clauses.length === 0) {
-      return "false";
+    return `(${clauses.join(" + ")})`;
+  }
+
+  private buildCoarseReasons(input: {
+    pathExactHit: boolean;
+    filenameExactHit: boolean;
+    pathPrefixHits: number;
+    pathTokenHits: number;
+    filenameTokenHits: number;
+    contentTokenHits: number;
+  }): string[] {
+    const reasons: string[] = [];
+    if (input.pathExactHit) {
+      reasons.push("path_exact_match");
     }
-    return clauses.join(" OR ");
+    if (input.filenameExactHit) {
+      reasons.push("filename_exact_match");
+    }
+    if (input.pathPrefixHits > 0) {
+      reasons.push("path_prefix_match");
+    }
+    if (input.pathTokenHits > 0) {
+      reasons.push("path_token_match");
+    }
+    if (input.filenameTokenHits > 0) {
+      reasons.push("filename_token_match");
+    }
+    if (input.contentTokenHits > 0) {
+      reasons.push("content_token_match");
+    }
+    return reasons;
+  }
+
+  private compactSnippet(content: string, limit: number): string {
+    const normalized = content.replace(/\s+/g, " ").trim();
+    if (normalized.length <= limit) {
+      return normalized;
+    }
+    return `${normalized.slice(0, Math.max(0, limit - 1)).trimEnd()}...`;
   }
 
   private escapeLikePattern(value: string): string {

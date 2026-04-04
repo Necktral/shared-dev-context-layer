@@ -105,17 +105,36 @@ function makeRetrievedContext(): RetrievedContext {
   return {
     summary: "retrieval ok",
     candidate_files: ["src/index.ts"],
+    query_trace: {
+      raw_intent: "index.ts",
+      normalized_intent: "index.ts",
+      tokens: ["index.ts", "index"],
+      path_hints: ["src/index.ts"],
+      filename_hints: ["index.ts"],
+    },
+    coarse_trace: [
+      {
+        stage: "coarse",
+        file_path: "src/index.ts",
+        chunk_index: 0,
+        score: 88,
+        reasons: ["filename_exact_match", "content_token_match"],
+      },
+    ],
     selected_chunks: [
       {
         file_path: "src/index.ts",
         chunk_index: 0,
         content: "export const value = 1;",
+        content_hash: "hash-c0",
         score: 90,
+        coarse_score: 88,
         evidence: ["content_match"],
       },
     ],
     ranking_evidence: [
       {
+        stage: "final",
         file_path: "src/index.ts",
         chunk_index: 0,
         score: 90,
@@ -131,7 +150,9 @@ function makeRetrievedContext(): RetrievedContext {
       selected_chunks: 1,
       selected_chars: 23,
       truncated: false,
+      truncation_reasons: [],
     },
+    fallback_trace: null,
   };
 }
 
@@ -286,8 +307,13 @@ run("I-05/I-06 save task + task_context", async () => {
   assert.equal(await countRows(config, schema, "tasks"), 1);
   assert.equal(await countRows(config, schema, "task_context"), 1);
   const payload = await readTaskContextPayload(config, schema);
-  assert.ok(Array.isArray(payload?.selected_chunks));
-  assert.ok(Array.isArray(payload?.ranking_evidence));
+  assert.equal(payload?.version, "retrieval_trace_v1");
+  assert.equal(typeof payload?.query_trace, "object");
+  assert.equal(typeof payload?.final_trace, "object");
+  assert.ok(Array.isArray((payload?.coarse_trace as unknown[] | undefined) ?? []));
+  const finalTrace = payload?.final_trace as Record<string, unknown> | undefined;
+  assert.ok(Array.isArray((finalTrace?.selected_chunks as unknown[] | undefined) ?? []));
+  assert.ok(Array.isArray((finalTrace?.ranking_evidence as unknown[] | undefined) ?? []));
 
   await adapter.dispose();
 });
@@ -570,16 +596,25 @@ run("I-13 retrieval queries leen activos y excluyen soft delete", async () => {
   const fileHits = await adapter.searchIndexedFiles({
     projectId: project.id,
     tokens: ["authservice.ts"],
+    pathHints: ["src/authservice.ts"],
+    filenameHints: ["authservice.ts"],
     limit: 5,
   });
   assert.deepEqual(fileHits.map((entry) => entry.path), ["src/authService.ts"]);
+  assert.ok(fileHits[0].coarse_score > 0);
+  assert.ok(fileHits[0].coarse_reasons.includes("filename_exact_match"));
 
   const chunkHits = await adapter.searchFileChunks({
     projectId: project.id,
     tokens: ["token"],
+    pathHints: [],
+    filenameHints: ["authservice.ts"],
     limit: 10,
   });
-  assert.deepEqual(chunkHits.map((entry) => entry.file_path), ["src/authService.ts"]);
+  assert.ok(chunkHits.length >= 1);
+  assert.ok(chunkHits.every((entry) => entry.file_path === "src/authService.ts"));
+  assert.ok(chunkHits[0].coarse_score > 0);
+  assert.ok(chunkHits[0].coarse_reasons.includes("content_token_match"));
 
   const lookupChunks = await adapter.getFileChunksByFileIds({
     projectId: project.id,
@@ -588,6 +623,109 @@ run("I-13 retrieval queries leen activos y excluyen soft delete", async () => {
   });
   assert.deepEqual(lookupChunks.map((entry) => entry.file_path), ["src/authService.ts"]);
   assert.deepEqual(lookupChunks.map((entry) => entry.chunk_index), [0]);
+
+  await adapter.dispose();
+});
+
+run("I-14 retrieval coarse ranking se mantiene determinista en corpus grande", async () => {
+  const schema = makeSchemaName("local_private_it");
+  const config = baseConfig(schema);
+  const adapter = new PostgresPersistenceAdapter({ config, extensionPath: process.cwd() });
+  await adapter.healthcheck();
+
+  const project = await adapter.ensureProject({
+    operation_profile: "local_private",
+    workspace_root: "/workspace",
+    repo_root: "/workspace/repo",
+    branch: "main",
+  });
+
+  const seededFileIds: string[] = [];
+  for (let index = 0; index < 60; index += 1) {
+    const filePath = index === 7 ? "src/payments/paymentService.ts" : `src/module${index}/file${index}.ts`;
+    const file = await adapter.upsertIndexedFile({
+      project_id: project.id,
+      path: filePath,
+      content_hash: `hash-${index}`,
+      size_bytes: 200 + index,
+      modified_at: new Date().toISOString(),
+      language: "ts",
+    });
+    seededFileIds.push(file.id);
+    await adapter.replaceFileChunks(file.id, project.id, [
+      {
+        chunkIndex: 0,
+        content: index === 7 ? "payment retry token validation workflow" : `noise token ${index}`,
+        contentHash: `chunk-${index}-0`,
+      },
+      {
+        chunkIndex: 1,
+        content: index === 7 ? "payment service exact filename primary chunk" : `other content ${index}`,
+        contentHash: `chunk-${index}-1`,
+      },
+      {
+        chunkIndex: 2,
+        content: `fallback chunk ${index}`,
+        contentHash: `chunk-${index}-2`,
+      },
+      {
+        chunkIndex: 3,
+        content: `detail chunk ${index}`,
+        contentHash: `chunk-${index}-3`,
+      },
+    ]);
+  }
+
+  const firstFiles = await adapter.searchIndexedFiles({
+    projectId: project.id,
+    tokens: ["payment", "service", "token"],
+    pathHints: ["src/payments/paymentservice.ts"],
+    filenameHints: ["paymentservice.ts"],
+    limit: 10,
+  });
+  const secondFiles = await adapter.searchIndexedFiles({
+    projectId: project.id,
+    tokens: ["payment", "service", "token"],
+    pathHints: ["src/payments/paymentservice.ts"],
+    filenameHints: ["paymentservice.ts"],
+    limit: 10,
+  });
+  assert.deepEqual(
+    firstFiles.map((entry) => `${entry.path}:${entry.coarse_score}`),
+    secondFiles.map((entry) => `${entry.path}:${entry.coarse_score}`),
+  );
+  assert.equal(firstFiles[0]?.path, "src/payments/paymentService.ts");
+
+  const firstChunks = await adapter.searchFileChunks({
+    projectId: project.id,
+    tokens: ["payment", "retry", "token"],
+    pathHints: ["src/payments/paymentservice.ts"],
+    filenameHints: ["paymentservice.ts"],
+    limit: 25,
+  });
+  const secondChunks = await adapter.searchFileChunks({
+    projectId: project.id,
+    tokens: ["payment", "retry", "token"],
+    pathHints: ["src/payments/paymentservice.ts"],
+    filenameHints: ["paymentservice.ts"],
+    limit: 25,
+  });
+  assert.deepEqual(
+    firstChunks.map((entry) => `${entry.file_path}#${entry.chunk_index}:${entry.coarse_score}`),
+    secondChunks.map((entry) => `${entry.file_path}#${entry.chunk_index}:${entry.coarse_score}`),
+  );
+  assert.equal(firstChunks[0]?.file_path, "src/payments/paymentService.ts");
+  assert.ok(firstChunks[0].coarse_reasons.includes("filename_exact_match"));
+  assert.ok(firstChunks[0].coarse_reasons.includes("content_token_match"));
+
+  const byIds = await adapter.getFileChunksByFileIds({
+    projectId: project.id,
+    fileIds: seededFileIds,
+    limitPerFile: 2,
+  });
+  assert.equal(byIds.length, 120);
+  assert.equal(byIds[0].chunk_index, 0);
+  assert.equal(byIds[1].chunk_index, 1);
 
   await adapter.dispose();
 });

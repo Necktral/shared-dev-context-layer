@@ -18,8 +18,12 @@ export function applyRetrievalBudget(files: RankedFileCandidate[]): BudgetedRetr
   const candidateFiles = files.slice(0, DEFAULT_RETRIEVAL_BUDGET.max_files).map((file) => file.file_path);
   const selectedChunks: RetrievedChunk[] = [];
   const selectedByFile = new Map<string, number>();
+  const truncationReasons = new Set<string>();
   let selectedChars = 0;
   let truncated = files.length > candidateFiles.length;
+  if (files.length > candidateFiles.length) {
+    truncationReasons.add("max_files");
+  }
 
   const limitedFiles = files.slice(0, DEFAULT_RETRIEVAL_BUDGET.max_files);
   const cursors = new Map<string, number>(limitedFiles.map((file) => [file.file_id, 0]));
@@ -30,6 +34,7 @@ export function applyRetrievalBudget(files: RankedFileCandidate[]): BudgetedRetr
     for (const file of limitedFiles) {
       const selectedForFile = selectedByFile.get(file.file_id) ?? 0;
       if (selectedForFile >= DEFAULT_RETRIEVAL_BUDGET.max_chunks_per_file) {
+        truncationReasons.add("max_chunks_per_file");
         continue;
       }
 
@@ -43,6 +48,7 @@ export function applyRetrievalBudget(files: RankedFileCandidate[]): BudgetedRetr
 
       if (selectedChars + chunk.content.length > DEFAULT_RETRIEVAL_BUDGET.max_total_chars) {
         truncated = true;
+        truncationReasons.add("max_total_chars");
         continue;
       }
 
@@ -53,6 +59,7 @@ export function applyRetrievalBudget(files: RankedFileCandidate[]): BudgetedRetr
 
       if (selectedChunks.length >= DEFAULT_RETRIEVAL_BUDGET.max_chunks) {
         truncated = truncated || file.chunks.length > cursor + 1;
+        truncationReasons.add("max_chunks");
         break;
       }
     }
@@ -78,6 +85,7 @@ export function applyRetrievalBudget(files: RankedFileCandidate[]): BudgetedRetr
       selected_chunks: selectedChunks.length,
       selected_chars: selectedChars,
       truncated,
+      truncation_reasons: [...truncationReasons],
     },
   };
 }

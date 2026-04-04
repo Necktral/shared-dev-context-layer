@@ -1,4 +1,6 @@
 import * as path from "node:path";
+import type { ProjectPathRoots } from "../pathNormalization";
+import { normalizeProjectPath, toProjectRelativePath } from "../pathNormalization";
 
 const STOP_WORDS = new Set([
   "a",
@@ -26,6 +28,7 @@ const STOP_WORDS = new Set([
 ]);
 
 export interface ParsedRetrievalQuery {
+  raw_intent: string;
   normalized_intent: string;
   tokens: string[];
   path_hints: string[];
@@ -52,9 +55,25 @@ function unique(items: string[]): string[] {
 }
 
 export function parseRetrievalQuery(intent: string): ParsedRetrievalQuery {
+  return parseRetrievalQueryWithRoots(intent, {
+    repo_root: null,
+    workspace_root: null,
+  });
+}
+
+function normalizePathHint(raw: string, roots: ProjectPathRoots): string | null {
+  const projectRelative = toProjectRelativePath(raw, roots);
+  if (!projectRelative) {
+    return null;
+  }
+  return normalizeProjectPath(projectRelative);
+}
+
+export function parseRetrievalQueryWithRoots(intent: string, roots: ProjectPathRoots): ParsedRetrievalQuery {
   const normalizedIntent = normalizeCandidate(intent).replace(/\s+/g, " ").trim();
   if (!normalizedIntent) {
     return {
+      raw_intent: intent,
       normalized_intent: "",
       tokens: [],
       path_hints: [],
@@ -73,13 +92,16 @@ export function parseRetrievalQuery(intent: string): ParsedRetrievalQuery {
     }
 
     if (normalizedPart.includes("/") || normalizedPart.includes(".")) {
-      pathHints.push(normalizedPart);
-      const basename = path.posix.basename(normalizedPart);
+      const pathHint = normalizePathHint(normalizedPart, roots);
+      if (pathHint) {
+        pathHints.push(pathHint);
+      }
+      const basename = path.posix.basename(pathHint ?? normalizedPart);
       if (isUsefulToken(basename)) {
         filenameHints.push(basename);
       }
-      if (isUsefulToken(normalizedPart)) {
-        tokens.push(normalizedPart);
+      if (isUsefulToken(pathHint ?? normalizedPart)) {
+        tokens.push(pathHint ?? normalizedPart);
       }
     }
 
@@ -105,6 +127,7 @@ export function parseRetrievalQuery(intent: string): ParsedRetrievalQuery {
   }
 
   return {
+    raw_intent: intent,
     normalized_intent: normalizedIntent,
     tokens: unique(expandedTokens),
     path_hints: unique(pathHints),

@@ -1,5 +1,5 @@
-import * as path from "node:path";
 import type { RetrievedChunk, RetrievedIndexedChunk, RetrievedIndexedFileCandidate, RetrievalRankingEvidence } from "../ports";
+import { toComparablePathKey } from "../pathNormalization";
 import type { ParsedRetrievalQuery } from "./retrievalQueryParser";
 
 export interface RankedFileCandidate {
@@ -24,10 +24,6 @@ function unique(items: string[]): string[] {
   return [...new Set(items)];
 }
 
-function basename(filePath: string): string {
-  return path.posix.basename(filePath.replace(/\\/g, "/").toLowerCase());
-}
-
 function countOccurrences(text: string, token: string): number {
   let count = 0;
   let cursor = 0;
@@ -42,38 +38,44 @@ function countOccurrences(text: string, token: string): number {
   return count;
 }
 
-function scoreFileCandidate(filePath: string, query: ParsedRetrievalQuery): FileScoreBreakdown {
-  const normalizedPath = filePath.toLowerCase();
-  const normalizedFilename = basename(filePath);
-  const reasons: string[] = [];
-  let score = 0;
+function compareChunks(
+  left: { score: number; file_path: string; chunk_index: number; content_hash: string | null },
+  right: { score: number; file_path: string; chunk_index: number; content_hash: string | null },
+): number {
+  return (
+    right.score - left.score ||
+    toComparablePathKey(left.file_path).localeCompare(toComparablePathKey(right.file_path)) ||
+    left.chunk_index - right.chunk_index ||
+    (left.content_hash ?? "").localeCompare(right.content_hash ?? "")
+  );
+}
 
-  if (query.path_hints.includes(normalizedPath)) {
-    score += 120;
-    reasons.push("path_exact_match");
+function compareFiles(
+  left: { score: number; file_path: string; file_id: string },
+  right: { score: number; file_path: string; file_id: string },
+): number {
+  return (
+    right.score - left.score ||
+    toComparablePathKey(left.file_path).localeCompare(toComparablePathKey(right.file_path)) ||
+    left.file_id.localeCompare(right.file_id)
+  );
+}
+
+function scoreFileCandidate(file: RetrievedIndexedFileCandidate, query: ParsedRetrievalQuery): FileScoreBreakdown {
+  const reasons = [...file.coarse_reasons];
+  let score = file.coarse_score;
+
+  if (file.path_token_hits > 1) {
+    score += Math.min(24, file.path_token_hits * 4);
+    reasons.push("path_multi_token_density");
+  }
+  if (file.filename_token_hits > 0) {
+    score += Math.min(18, file.filename_token_hits * 6);
+    reasons.push("filename_token_density");
   }
 
-  if (query.filename_hints.includes(normalizedFilename)) {
-    score += 110;
-    reasons.push("filename_exact_match");
-  }
-
-  for (const token of query.tokens) {
-    if (normalizedFilename.includes(token)) {
-      score += normalizedFilename === token ? 80 : 35;
-      reasons.push(normalizedFilename === token ? "filename_exact_match" : "filename_partial_match");
-      continue;
-    }
-
-    if (normalizedPath.includes(token)) {
-      score += 20;
-      reasons.push("path_partial_match");
-    }
-  }
-
-  if (query.normalized_intent.includes(normalizedPath)) {
-    score += 40;
-    reasons.push("path_embedded_in_intent");
+  if (query.path_hints.length > 0 && file.path_token_hits === 0) {
+    score -= 6;
   }
 
   return {
@@ -88,7 +90,7 @@ function scoreChunkCandidate(
   fileScore: FileScoreBreakdown,
 ): ChunkScoreBreakdown {
   const normalizedContent = chunk.content.toLowerCase();
-  const reasons = [...fileScore.reasons];
+  const reasons = [...fileScore.reasons, ...chunk.coarse_reasons];
   let matchedTerms = 0;
   let totalOccurrences = 0;
 
@@ -101,20 +103,25 @@ function scoreChunkCandidate(
     totalOccurrences += occurrences;
   }
 
-  let score = fileScore.score;
+  let score = Math.max(fileScore.score, chunk.coarse_score);
   if (matchedTerms > 0) {
-    score += matchedTerms * 18;
-    score += Math.min(24, totalOccurrences * 4);
+    score += matchedTerms * 12;
+    score += Math.min(24, totalOccurrences * 3);
     reasons.push("content_match");
   }
 
+  if (chunk.content_token_hits > 1) {
+    score += Math.min(20, chunk.content_token_hits * 4);
+    reasons.push("coarse_content_density");
+  }
+
   if (matchedTerms > 1) {
-    score += 18;
+    score += 14;
     reasons.push("multi_term_match");
   }
 
   if (totalOccurrences >= 3) {
-    score += 12;
+    score += 10;
     reasons.push("high_term_density");
   }
 
@@ -139,6 +146,10 @@ export function rankRetrievalCandidates(input: {
         file_id: chunk.file_id,
         path: chunk.file_path,
         content_hash: "",
+        coarse_score: chunk.coarse_score,
+        coarse_reasons: chunk.coarse_reasons,
+        path_token_hits: chunk.path_token_hits,
+        filename_token_hits: chunk.filename_token_hits,
       });
     }
   }
@@ -152,38 +163,49 @@ export function rankRetrievalCandidates(input: {
 
   const ranked: RankedFileCandidate[] = [];
   for (const file of fileMap.values()) {
-    const fileScore = scoreFileCandidate(file.path, input.query);
-    const fileChunks = (chunksByFileId.get(file.file_id) ?? [])
+    const fileScore = scoreFileCandidate(file, input.query);
+    const scoredChunks = (chunksByFileId.get(file.file_id) ?? [])
       .map((chunk) => {
         const chunkScore = scoreChunkCandidate(chunk, input.query, fileScore);
         return {
           file_path: chunk.file_path,
           chunk_index: chunk.chunk_index,
           content: chunk.content,
+          content_hash: chunk.content_hash || null,
+          coarse_score: chunk.coarse_score,
           score: chunkScore.score,
           evidence: chunkScore.reasons,
         };
       })
       .filter((chunk) => chunk.score > 0)
-      .sort((left, right) => right.score - left.score || left.file_path.localeCompare(right.file_path) || left.chunk_index - right.chunk_index);
+      .sort(compareChunks)
+      .map((chunk, index) => {
+        const saturationPenalty = index * 4;
+        const nextScore = Math.max(0, chunk.score - saturationPenalty);
+        return {
+          ...chunk,
+          score: nextScore,
+          evidence: saturationPenalty > 0 ? unique([...chunk.evidence, "same_file_saturation"]) : chunk.evidence,
+        };
+      })
+      .sort(compareChunks);
 
-    if (fileScore.score === 0 && fileChunks.length === 0) {
+    if (fileScore.score === 0 && scoredChunks.length === 0) {
       continue;
     }
 
-    const bestChunkScore = fileChunks[0]?.score ?? 0;
+    const bestChunkScore = scoredChunks[0]?.score ?? 0;
+    const fileCompositeScore = Math.max(fileScore.score, bestChunkScore) + Math.min(4, scoredChunks.length) * 3;
     ranked.push({
       file_id: file.file_id,
       file_path: file.path,
-      score: Math.max(fileScore.score, bestChunkScore),
-      reasons: fileScore.reasons,
-      chunks: fileChunks,
+      score: fileCompositeScore,
+      reasons: unique(scoredChunks.length > 0 ? [...fileScore.reasons, "has_ranked_chunks"] : fileScore.reasons),
+      chunks: scoredChunks,
     });
   }
 
-  return ranked.sort(
-    (left, right) => right.score - left.score || left.file_path.localeCompare(right.file_path),
-  );
+  return ranked.sort(compareFiles);
 }
 
 export function toRankingEvidence(files: RankedFileCandidate[], maxItems: number): RetrievalRankingEvidence[] {
@@ -192,6 +214,7 @@ export function toRankingEvidence(files: RankedFileCandidate[], maxItems: number
     if (file.chunks.length > 0) {
       for (const chunk of file.chunks) {
         evidence.push({
+          stage: "final",
           file_path: chunk.file_path,
           chunk_index: chunk.chunk_index,
           score: chunk.score,
@@ -205,6 +228,7 @@ export function toRankingEvidence(files: RankedFileCandidate[], maxItems: number
     }
 
     evidence.push({
+      stage: "final",
       file_path: file.file_path,
       score: file.score,
       reasons: file.reasons,
