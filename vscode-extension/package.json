@@ -225,6 +225,80 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "Enable SSL when connecting to PostgreSQL for local_private profile."
+        },
+        "wisContextSync.localIndex.excludeDirs": {
+          "type": "array",
+          "default": [
+            ".git",
+            "node_modules",
+            "dist",
+            "build",
+            ".next",
+            "coverage",
+            ".turbo",
+            ".cache",
+            "out",
+            "tmp",
+            "vendor"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "Directory names excluded by local incremental indexer."
+        },
+        "wisContextSync.localIndex.includeExtensions": {
+          "type": "array",
+          "default": [
+            ".ts",
+            ".tsx",
+            ".js",
+            ".jsx",
+            ".mjs",
+            ".cjs",
+            ".json",
+            ".yml",
+            ".yaml",
+            ".md",
+            ".mdx",
+            ".txt",
+            ".py",
+            ".go",
+            ".rs",
+            ".java",
+            ".kt",
+            ".sql",
+            ".sh",
+            ".toml",
+            ".ini",
+            ".cfg",
+            ".env",
+            ".css",
+            ".scss",
+            ".html",
+            ".xml"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "Allowed file extensions for local incremental indexer."
+        },
+        "wisContextSync.localIndex.maxFileBytes": {
+          "type": "number",
+          "default": 2097152,
+          "minimum": 1024,
+          "markdownDescription": "Maximum file size in bytes indexed by local indexer."
+        },
+        "wisContextSync.localIndex.chunkSizeChars": {
+          "type": "number",
+          "default": 1200,
+          "minimum": 100,
+          "markdownDescription": "Chunk size in characters for file_chunks generation."
+        },
+        "wisContextSync.localIndex.chunkOverlapChars": {
+          "type": "number",
+          "default": 120,
+          "minimum": 0,
+          "markdownDescription": "Chunk overlap in characters for file_chunks generation."
         }
       }
     }

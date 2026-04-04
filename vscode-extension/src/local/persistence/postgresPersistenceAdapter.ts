@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { Pool } from "pg";
 import type { LocalDbConfig } from "../../config";
 import type {
+  ChunkRecord,
   CompleteIndexRunInput,
   CreateIndexRunInput,
   EnsureProjectInput,
@@ -12,6 +13,7 @@ import type {
   PersistedExecution,
   PersistedExecutionArtifact,
   PersistedIndexRun,
+  PersistedIndexedFile,
   PersistedProject,
   PersistedTask,
   PersistedTaskContext,
@@ -24,6 +26,8 @@ import type {
   SaveExecutionInput,
   SaveTaskContextInput,
   SaveTaskInput,
+  UpdateIndexRunMetricsInput,
+  UpsertIndexedFileInput,
 } from "../ports";
 
 export interface PostgresPersistenceAdapterOptions {
@@ -123,7 +127,7 @@ export class PostgresPersistenceAdapter implements PersistencePort {
       port: this.config.port,
       database: this.config.database,
       user: this.config.user,
-      password: this.config.password || undefined,
+      password: this.config.password,
       ssl: this.config.ssl ? { rejectUnauthorized: false } : false,
       max: 4,
       idleTimeoutMillis: 10_000,
@@ -229,6 +233,181 @@ export class PostgresPersistenceAdapter implements PersistencePort {
        WHERE id = $1`,
       [input.index_run_id, input.status, input.summary, now],
     );
+  }
+
+  public async createOrUpdateIndexRunMetrics(input: UpdateIndexRunMetricsInput): Promise<void> {
+    await this.ensureMigrations();
+    const table = this.table("index_runs");
+    await this.query(
+      `UPDATE ${table}
+       SET scanned_count = $2,
+           new_count = $3,
+           modified_count = $4,
+           deleted_count = $5,
+           skipped_count = $6,
+           chunk_count = $7,
+           error_count = $8,
+           updated_at = $9
+       WHERE id = $1`,
+      [
+        input.index_run_id,
+        input.scanned_count,
+        input.new_count,
+        input.modified_count,
+        input.deleted_count,
+        input.skipped_count,
+        input.chunk_count,
+        input.error_count,
+        nowIso(),
+      ],
+    );
+  }
+
+  public async listProjectFiles(project_id: string, includeDeleted = false): Promise<PersistedIndexedFile[]> {
+    await this.ensureMigrations();
+    const table = this.table("files");
+    const result = includeDeleted
+      ? await this.query(
+          `SELECT id, path, COALESCE(content_hash, '') AS content_hash, is_deleted
+           FROM ${table}
+           WHERE project_id = $1
+           ORDER BY path ASC`,
+          [project_id],
+        )
+      : await this.query(
+          `SELECT id, path, COALESCE(content_hash, '') AS content_hash, is_deleted
+           FROM ${table}
+           WHERE project_id = $1 AND is_deleted = false
+           ORDER BY path ASC`,
+          [project_id],
+        );
+
+    return result.rows.map((row) => ({
+      id: String(row.id),
+      path: String(row.path),
+      content_hash: String(row.content_hash),
+      is_deleted: Boolean(row.is_deleted),
+    }));
+  }
+
+  public async upsertIndexedFile(input: UpsertIndexedFileInput): Promise<PersistedIndexedFile> {
+    await this.ensureMigrations();
+    const table = this.table("files");
+    const now = nowIso();
+    const fileId = randomUUID();
+
+    const result = await this.query(
+      `INSERT INTO ${table}
+       (id, project_id, path, content_hash, language, size_bytes, modified_at, is_deleted, deleted_at, last_indexed_at, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,false,NULL,$8,$8,$8)
+       ON CONFLICT (project_id, path)
+       DO UPDATE SET
+         content_hash = EXCLUDED.content_hash,
+         language = EXCLUDED.language,
+         size_bytes = EXCLUDED.size_bytes,
+         modified_at = EXCLUDED.modified_at,
+         is_deleted = false,
+         deleted_at = NULL,
+         last_indexed_at = EXCLUDED.last_indexed_at,
+         updated_at = EXCLUDED.updated_at
+       RETURNING id, path, COALESCE(content_hash, '') AS content_hash, is_deleted`,
+      [
+        fileId,
+        input.project_id,
+        input.path,
+        input.content_hash,
+        input.language,
+        input.size_bytes,
+        input.modified_at,
+        now,
+      ],
+    );
+
+    const row = result.rows[0];
+    return {
+      id: String(row.id),
+      path: String(row.path),
+      content_hash: String(row.content_hash),
+      is_deleted: Boolean(row.is_deleted),
+    };
+  }
+
+  public async markFilesDeleted(project_id: string, paths: string[]): Promise<string[]> {
+    await this.ensureMigrations();
+    if (paths.length === 0) {
+      return [];
+    }
+
+    const table = this.table("files");
+    const now = nowIso();
+    const result = await this.query(
+      `UPDATE ${table}
+       SET is_deleted = true,
+           deleted_at = $3,
+           updated_at = $3
+       WHERE project_id = $1
+         AND path = ANY($2::text[])
+         AND is_deleted = false
+       RETURNING id`,
+      [project_id, paths, now],
+    );
+
+    return result.rows.map((row) => String(row.id));
+  }
+
+  public async replaceFileChunks(file_id: string, project_id: string, chunks: ChunkRecord[]): Promise<number> {
+    await this.ensureMigrations();
+    const table = this.table("file_chunks");
+    const client = await this.pool.connect();
+    const now = nowIso();
+
+    try {
+      await client.query("BEGIN");
+      await client.query(`DELETE FROM ${table} WHERE file_id = $1`, [file_id]);
+
+      for (const chunk of chunks) {
+        await client.query(
+          `INSERT INTO ${table}
+           (id, file_id, project_id, chunk_index, content, content_hash, embedding_status, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$7)`,
+          [
+            randomUUID(),
+            file_id,
+            project_id,
+            chunk.chunkIndex,
+            chunk.content,
+            chunk.contentHash,
+            now,
+          ],
+        );
+      }
+
+      await client.query("COMMIT");
+      return chunks.length;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw new Error(mapPostgresError(error));
+    } finally {
+      client.release();
+    }
+  }
+
+  public async deleteChunksByFileIds(file_ids: string[]): Promise<number> {
+    await this.ensureMigrations();
+    if (file_ids.length === 0) {
+      return 0;
+    }
+    const table = this.table("file_chunks");
+    try {
+      const result = await this.pool.query(
+        `DELETE FROM ${table}
+         WHERE file_id = ANY($1::text[])`,
+        [file_ids],
+      );
+      return result.rowCount ?? 0;
+    } catch (error) {
+      throw new Error(mapPostgresError(error));
+    }
   }
 
   public async saveTask(input: SaveTaskInput): Promise<PersistedTask> {

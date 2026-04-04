@@ -3,6 +3,7 @@ import {
   getCodexCliCommand,
   getFixtureScenario,
   getMcpEndpoint,
+  getLocalIndexConfig,
   getOperationProfile,
   getRequestTimeoutMs,
   getRuntimeMode,
@@ -52,11 +53,12 @@ import { createInitialProjectRuntimeSnapshot } from "./local/types";
 import { LocalRuntimePanelProvider } from "./presentation/local/localRuntimePanelProvider";
 import { LocalRuntimeOutputRenderer } from "./presentation/renderers/localRuntimeOutputRenderer";
 import { CodexCliRunner } from "./local/codexCliRunner";
-import { NoopIndexer, NoopPersistence, NoopRetriever, NoopTaskBuilder } from "./local/noopServices";
+import { NoopPersistence, NoopRetriever, NoopTaskBuilder } from "./local/noopServices";
 import { LocalCommandService } from "./local/localCommandService";
 import { PostgresPersistenceAdapter } from "./local/persistence/postgresPersistenceAdapter";
 import type { PersistencePort } from "./local/ports";
 import type { LocalCommandResult } from "./local/types";
+import { IncrementalWorkspaceIndexer } from "./local/indexing/incrementalWorkspaceIndexer";
 
 let outputChannel: vscode.OutputChannel | undefined;
 
@@ -212,10 +214,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const localPanelProvider = new LocalRuntimePanelProvider(localStore.getSnapshot());
   const localOutputRenderer = new LocalRuntimeOutputRenderer(outputChannel);
   const localPersistence = await createLocalPersistence(context);
+  const localIndexer = new IncrementalWorkspaceIndexer({
+    persistence: localPersistence,
+    getIndexConfig: getLocalIndexConfig,
+  });
   const localCommandService = new LocalCommandService({
     inspector: environmentInspector,
     store: localStore,
-    indexer: new NoopIndexer(),
+    indexer: localIndexer,
     retriever: new NoopRetriever(),
     taskBuilder: new NoopTaskBuilder(),
     codexRunner: new CodexCliRunner(),

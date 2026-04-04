@@ -7,6 +7,11 @@ import {
   DEFAULT_FIXTURE_SCENARIO,
   DEFAULT_LOCAL_DB_DATABASE,
   DEFAULT_LOCAL_DB_HOST,
+  DEFAULT_LOCAL_INDEX_CHUNK_OVERLAP_CHARS,
+  DEFAULT_LOCAL_INDEX_CHUNK_SIZE_CHARS,
+  DEFAULT_LOCAL_INDEX_EXCLUDE_DIRS,
+  DEFAULT_LOCAL_INDEX_INCLUDE_EXTENSIONS,
+  DEFAULT_LOCAL_INDEX_MAX_FILE_BYTES,
   DEFAULT_LOCAL_DB_PASSWORD,
   DEFAULT_LOCAL_DB_PORT,
   DEFAULT_LOCAL_DB_SCHEMA,
@@ -42,6 +47,14 @@ export interface LocalDbConfig {
   password: string;
   schema: string;
   ssl: boolean;
+}
+
+export interface LocalIndexConfig {
+  excludeDirs: string[];
+  includeExtensions: string[];
+  maxFileBytes: number;
+  chunkSizeChars: number;
+  chunkOverlapChars: number;
 }
 
 function normalizeRuntimeMode(value: string | undefined): RuntimeMode {
@@ -207,6 +220,62 @@ function getLocalDbSchema(): string {
 
 function getLocalDbSsl(): boolean {
   return vscode.workspace.getConfiguration().get<boolean>("wisContextSync.localDb.ssl") ?? DEFAULT_LOCAL_DB_SSL;
+}
+
+function normalizeStringArray(raw: unknown, fallback: readonly string[]): string[] {
+  if (!Array.isArray(raw)) {
+    return [...fallback];
+  }
+  const normalized = raw
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  if (normalized.length === 0) {
+    return [...fallback];
+  }
+  return [...new Set(normalized)];
+}
+
+function normalizePositiveNumber(value: number | undefined, fallback: number): number {
+  if (!value || Number.isNaN(value) || value <= 0) {
+    return fallback;
+  }
+  return Math.floor(value);
+}
+
+export function getLocalIndexConfig(): LocalIndexConfig {
+  const config = vscode.workspace.getConfiguration();
+  const excludeDirs = normalizeStringArray(
+    config.get<unknown>("wisContextSync.localIndex.excludeDirs"),
+    DEFAULT_LOCAL_INDEX_EXCLUDE_DIRS,
+  );
+  const includeExtensions = normalizeStringArray(
+    config.get<unknown>("wisContextSync.localIndex.includeExtensions"),
+    DEFAULT_LOCAL_INDEX_INCLUDE_EXTENSIONS,
+  ).map((ext) => (ext.startsWith(".") ? ext.toLowerCase() : `.${ext.toLowerCase()}`));
+
+  const maxFileBytes = normalizePositiveNumber(
+    config.get<number>("wisContextSync.localIndex.maxFileBytes"),
+    DEFAULT_LOCAL_INDEX_MAX_FILE_BYTES,
+  );
+  const chunkSizeChars = normalizePositiveNumber(
+    config.get<number>("wisContextSync.localIndex.chunkSizeChars"),
+    DEFAULT_LOCAL_INDEX_CHUNK_SIZE_CHARS,
+  );
+  const chunkOverlapCharsRaw = normalizePositiveNumber(
+    config.get<number>("wisContextSync.localIndex.chunkOverlapChars"),
+    DEFAULT_LOCAL_INDEX_CHUNK_OVERLAP_CHARS,
+  );
+
+  const chunkOverlapChars = Math.min(chunkOverlapCharsRaw, Math.max(1, chunkSizeChars - 1));
+
+  return {
+    excludeDirs,
+    includeExtensions,
+    maxFileBytes,
+    chunkSizeChars,
+    chunkOverlapChars,
+  };
 }
 
 export async function resolveLocalDbConfig(

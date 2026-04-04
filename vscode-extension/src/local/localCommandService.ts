@@ -111,7 +111,20 @@ export class LocalCommandService {
 
       try {
         const snapshot = this.deps.store.getSnapshot();
-        const indexed = await this.deps.indexer.runIndex(snapshot);
+        const indexed = await this.deps.indexer.runIndex({
+          projectId: project.id,
+          snapshot,
+        });
+        await this.deps.persistence.createOrUpdateIndexRunMetrics({
+          index_run_id: indexRun.id,
+          scanned_count: indexed.metrics.scanned,
+          new_count: indexed.metrics.new,
+          modified_count: indexed.metrics.modified,
+          deleted_count: indexed.metrics.deleted,
+          skipped_count: indexed.metrics.skipped,
+          chunk_count: indexed.metrics.chunksWritten,
+          error_count: indexed.metrics.errors,
+        });
         await this.deps.persistence.completeIndexRun({
           index_run_id: indexRun.id,
           status: "completed",
@@ -119,14 +132,31 @@ export class LocalCommandService {
         });
 
         const result = this.makeResult("local_index", "ok", indexed.message, {
-          ...indexed.details,
           project_id: project.id,
           index_run_id: indexRun.id,
+          root_path: indexed.details.root_path ?? null,
+          scanned: indexed.metrics.scanned,
+          new: indexed.metrics.new,
+          modified: indexed.metrics.modified,
+          deleted: indexed.metrics.deleted,
+          skipped: indexed.metrics.skipped,
+          chunks_written: indexed.metrics.chunksWritten,
+          errors: indexed.metrics.errors,
           db_status: health.db_status,
         });
         this.pushResult(result, false);
         return result;
       } catch (error) {
+        await this.deps.persistence.createOrUpdateIndexRunMetrics({
+          index_run_id: indexRun.id,
+          scanned_count: 0,
+          new_count: 0,
+          modified_count: 0,
+          deleted_count: 0,
+          skipped_count: 0,
+          chunk_count: 0,
+          error_count: 1,
+        });
         await this.deps.persistence.completeIndexRun({
           index_run_id: indexRun.id,
           status: "failed",

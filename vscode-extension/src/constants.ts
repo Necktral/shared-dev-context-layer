@@ -17,6 +17,51 @@ export const DEFAULT_LOCAL_DB_USER = "wis_admin";
 export const DEFAULT_LOCAL_DB_PASSWORD = "";
 export const DEFAULT_LOCAL_DB_SCHEMA = "local_private";
 export const DEFAULT_LOCAL_DB_SSL = false;
+export const DEFAULT_LOCAL_INDEX_EXCLUDE_DIRS = [
+  ".git",
+  "node_modules",
+  "dist",
+  "build",
+  ".next",
+  "coverage",
+  ".turbo",
+  ".cache",
+  "out",
+  "tmp",
+  "vendor",
+] as const;
+export const DEFAULT_LOCAL_INDEX_INCLUDE_EXTENSIONS = [
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".json",
+  ".yml",
+  ".yaml",
+  ".md",
+  ".mdx",
+  ".txt",
+  ".py",
+  ".go",
+  ".rs",
+  ".java",
+  ".kt",
+  ".sql",
+  ".sh",
+  ".toml",
+  ".ini",
+  ".cfg",
+  ".env",
+  ".css",
+  ".scss",
+  ".html",
+  ".xml",
+] as const;
+export const DEFAULT_LOCAL_INDEX_MAX_FILE_BYTES = 2_097_152;
+export const DEFAULT_LOCAL_INDEX_CHUNK_SIZE_CHARS = 1200;
+export const DEFAULT_LOCAL_INDEX_CHUNK_OVERLAP_CHARS = 120;
 
 export const SESSION_KEY_STORAGE_KEY = "wisContextSync.sessionKey";
 export const SESSION_CREATED_AT_STORAGE_KEY = "wisContextSync.sessionCreatedAt";

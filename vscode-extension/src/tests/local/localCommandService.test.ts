@@ -10,6 +10,7 @@ import {
 } from "../../local/types";
 import { NoopIndexer, NoopRetriever, NoopTaskBuilder } from "../../local/noopServices";
 import type {
+  ChunkRecord,
   CreateIndexRunInput,
   EnsureProjectInput,
   PersistedDecision,
@@ -17,6 +18,7 @@ import type {
   PersistedExecution,
   PersistedExecutionArtifact,
   PersistedIndexRun,
+  PersistedIndexedFile,
   PersistedProject,
   PersistedTask,
   PersistedTaskContext,
@@ -29,6 +31,8 @@ import type {
   SaveTaskContextInput,
   SaveTaskInput,
   CompleteIndexRunInput,
+  UpdateIndexRunMetricsInput,
+  UpsertIndexedFileInput,
 } from "../../local/ports";
 
 function environment() {
@@ -69,6 +73,8 @@ class FakePersistence implements PersistencePort {
 
   public failTransaction = false;
 
+  public lastIndexMetrics: UpdateIndexRunMetricsInput | null = null;
+
   public async healthcheck() {
     if (this.failHealth) {
       return {
@@ -102,6 +108,35 @@ class FakePersistence implements PersistencePort {
   }
 
   public async completeIndexRun(_input: CompleteIndexRunInput): Promise<void> {}
+
+  public async createOrUpdateIndexRunMetrics(input: UpdateIndexRunMetricsInput): Promise<void> {
+    this.lastIndexMetrics = input;
+  }
+
+  public async listProjectFiles(_project_id: string, _includeDeleted = false): Promise<PersistedIndexedFile[]> {
+    return [];
+  }
+
+  public async upsertIndexedFile(input: UpsertIndexedFileInput): Promise<PersistedIndexedFile> {
+    return {
+      id: "file-1",
+      path: input.path,
+      content_hash: input.content_hash,
+      is_deleted: false,
+    };
+  }
+
+  public async markFilesDeleted(_project_id: string, _paths: string[]): Promise<string[]> {
+    return [];
+  }
+
+  public async replaceFileChunks(_file_id: string, _project_id: string, chunks: ChunkRecord[]): Promise<number> {
+    return chunks.length;
+  }
+
+  public async deleteChunksByFileIds(_file_ids: string[]): Promise<number> {
+    return 0;
+  }
 
   public async saveTask(input: SaveTaskInput): Promise<PersistedTask> {
     this.savedTaskId = input.task.id;
@@ -203,6 +238,11 @@ test("LocalCommandService en local_private prepara tarea y ejecuta Codex con per
   const refreshed = await service.localRefresh();
   assert.equal(refreshed.status, "ok");
   assert.equal(store.getSnapshot().db_status, "connected");
+
+  const indexed = await service.localIndex();
+  assert.equal(indexed.status, "ok");
+  assert.ok(persistence.lastIndexMetrics !== null);
+  assert.equal(persistence.lastIndexMetrics?.scanned_count, 0);
 
   const prepared = await service.localPrepareTask("Ajustar baseline local");
   assert.equal(prepared.status, "ok");

@@ -5,8 +5,52 @@ export interface RetrievedContext {
   candidate_files: string[];
 }
 
+export interface IndexedFileCandidate {
+  absolutePath: string;
+  relativePath: string;
+  extension: string;
+  sizeBytes: number;
+  contentHash: string;
+  content: string;
+  modifiedAt: string;
+}
+
+export interface ChunkRecord {
+  chunkIndex: number;
+  content: string;
+  contentHash: string;
+}
+
+export type FileChangeKind = "new" | "modified" | "unchanged" | "deleted" | "skipped" | "reactivated";
+
+export interface FileChangeSet {
+  kind: FileChangeKind;
+  path: string;
+}
+
+export interface IndexRunMetrics {
+  scanned: number;
+  new: number;
+  modified: number;
+  deleted: number;
+  skipped: number;
+  chunksWritten: number;
+  errors: number;
+}
+
+export interface WorkspaceIndexRequest {
+  projectId: string;
+  snapshot: ProjectRuntimeSnapshot;
+}
+
+export interface WorkspaceIndexResult {
+  message: string;
+  details: Record<string, unknown>;
+  metrics: IndexRunMetrics;
+}
+
 export interface WorkspaceIndexerPort {
-  runIndex(snapshot: ProjectRuntimeSnapshot): Promise<{ message: string; details: Record<string, unknown> }>;
+  runIndex(request: WorkspaceIndexRequest): Promise<WorkspaceIndexResult>;
 }
 
 export interface ContextRetrieverPort {
@@ -71,6 +115,13 @@ export interface PersistedEvent {
   project_id: string;
 }
 
+export interface PersistedIndexedFile {
+  id: string;
+  path: string;
+  content_hash: string;
+  is_deleted: boolean;
+}
+
 export interface EnsureProjectInput {
   operation_profile: string;
   workspace_root: string | null;
@@ -88,6 +139,26 @@ export interface CompleteIndexRunInput {
   index_run_id: string;
   status: string;
   summary: string | null;
+}
+
+export interface UpdateIndexRunMetricsInput {
+  index_run_id: string;
+  scanned_count: number;
+  new_count: number;
+  modified_count: number;
+  deleted_count: number;
+  skipped_count: number;
+  chunk_count: number;
+  error_count: number;
+}
+
+export interface UpsertIndexedFileInput {
+  project_id: string;
+  path: string;
+  content_hash: string;
+  size_bytes: number;
+  modified_at: string;
+  language: string | null;
 }
 
 export interface SaveTaskInput {
@@ -143,6 +214,12 @@ export interface PersistencePort extends PersistenceTransactionPort {
   ensureProject(input: EnsureProjectInput): Promise<PersistedProject>;
   createIndexRun(input: CreateIndexRunInput): Promise<PersistedIndexRun>;
   completeIndexRun(input: CompleteIndexRunInput): Promise<void>;
+  createOrUpdateIndexRunMetrics(input: UpdateIndexRunMetricsInput): Promise<void>;
+  listProjectFiles(project_id: string, includeDeleted?: boolean): Promise<PersistedIndexedFile[]>;
+  upsertIndexedFile(input: UpsertIndexedFileInput): Promise<PersistedIndexedFile>;
+  markFilesDeleted(project_id: string, paths: string[]): Promise<string[]>;
+  replaceFileChunks(file_id: string, project_id: string, chunks: ChunkRecord[]): Promise<number>;
+  deleteChunksByFileIds(file_ids: string[]): Promise<number>;
   saveTask(input: SaveTaskInput): Promise<PersistedTask>;
   saveTaskContext(input: SaveTaskContextInput): Promise<PersistedTaskContext>;
   saveDecision(input: SaveDecisionInput): Promise<PersistedDecision>;

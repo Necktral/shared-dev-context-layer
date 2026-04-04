@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  ChunkRecord,
   ContextRetrieverPort,
   CreateIndexRunInput,
   EnsureProjectInput,
@@ -8,6 +9,7 @@ import type {
   PersistedExecution,
   PersistedExecutionArtifact,
   PersistedIndexRun,
+  PersistedIndexedFile,
   PersistedProject,
   PersistedTask,
   PersistedTaskContext,
@@ -24,17 +26,39 @@ import type {
   TaskBuilderPort,
   WorkspaceIndexerPort,
   CompleteIndexRunInput,
+  WorkspaceIndexRequest,
+  WorkspaceIndexResult,
+  UpsertIndexedFileInput,
+  UpdateIndexRunMetricsInput,
 } from "./ports";
 import type { LocalTaskDraft, ProjectRuntimeSnapshot } from "./types";
 
 export class NoopIndexer implements WorkspaceIndexerPort {
-  public async runIndex(snapshot: ProjectRuntimeSnapshot): Promise<{ message: string; details: Record<string, unknown> }> {
+  public async runIndex(request: WorkspaceIndexRequest): Promise<WorkspaceIndexResult> {
+    const snapshot = request.snapshot;
     return {
       message: "Indexación local no implementada aún (Paquete 1 baseline).",
       details: {
         workspace_root: snapshot.workspace_root,
         repo_root: snapshot.repo_root,
+        project_id: request.projectId,
         mode: "noop",
+        scanned: 0,
+        new: 0,
+        modified: 0,
+        deleted: 0,
+        skipped: 0,
+        chunks_written: 0,
+        errors: 0,
+      },
+      metrics: {
+        scanned: 0,
+        new: 0,
+        modified: 0,
+        deleted: 0,
+        skipped: 0,
+        chunksWritten: 0,
+        errors: 0,
       },
     };
   }
@@ -112,6 +136,35 @@ export class NoopPersistence implements PersistencePort {
 
   public async completeIndexRun(_input: CompleteIndexRunInput): Promise<void> {
     // No-op by design.
+  }
+
+  public async createOrUpdateIndexRunMetrics(_input: UpdateIndexRunMetricsInput): Promise<void> {
+    // No-op by design.
+  }
+
+  public async listProjectFiles(_project_id: string, _includeDeleted = false): Promise<PersistedIndexedFile[]> {
+    return [];
+  }
+
+  public async upsertIndexedFile(input: UpsertIndexedFileInput): Promise<PersistedIndexedFile> {
+    return {
+      id: randomUUID(),
+      path: input.path,
+      content_hash: input.content_hash,
+      is_deleted: false,
+    };
+  }
+
+  public async markFilesDeleted(_project_id: string, _paths: string[]): Promise<string[]> {
+    return [];
+  }
+
+  public async replaceFileChunks(_file_id: string, _project_id: string, chunks: ChunkRecord[]): Promise<number> {
+    return chunks.length;
+  }
+
+  public async deleteChunksByFileIds(_file_ids: string[]): Promise<number> {
+    return 0;
   }
 
   public async saveTask(input: SaveTaskInput): Promise<PersistedTask> {
