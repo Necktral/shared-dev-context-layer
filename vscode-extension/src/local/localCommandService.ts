@@ -215,7 +215,11 @@ export class LocalCommandService {
 
       const project = await this.ensureProjectFromEnvironment(environment);
       const snapshot = this.deps.store.getSnapshot();
-      const context = await this.deps.retriever.retrieve(cleanIntent, snapshot);
+      const context = await this.deps.retriever.retrieve({
+        intent: cleanIntent,
+        projectId: project.id,
+        snapshot,
+      });
       const draft = await this.deps.taskBuilder.buildTask(cleanIntent, context, snapshot);
 
       const savedTask = await this.deps.persistence.saveTask({
@@ -226,6 +230,7 @@ export class LocalCommandService {
       const savedTaskContext = await this.deps.persistence.saveTaskContext({
         project_id: project.id,
         task: draft,
+        retrieved_context: context,
       });
 
       this.deps.store.update((current) => ({
@@ -240,6 +245,8 @@ export class LocalCommandService {
         task_id: savedTask.id,
         task_context_id: savedTaskContext.id,
         candidate_files: draft.candidate_files.length,
+        selected_chunks: context.selected_chunks.length,
+        evidence_items: context.ranking_evidence.length,
         objective: draft.objective,
       });
       this.pushResult(result, false);

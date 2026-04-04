@@ -15,6 +15,7 @@ import type {
   CompleteIndexRunInput,
   CreateIndexRunInput,
   EnsureProjectInput,
+  GetFileChunksByFileIdsInput,
   PersistedDecision,
   PersistedEvent,
   PersistedExecution,
@@ -27,12 +28,16 @@ import type {
   PersistenceHealthcheck,
   PersistencePort,
   PersistenceTransactionPort,
+  RetrievedIndexedChunk,
+  RetrievedIndexedFileCandidate,
   SaveDecisionInput,
   SaveEventInput,
   SaveExecutionArtifactInput,
   SaveExecutionInput,
   SaveTaskContextInput,
   SaveTaskInput,
+  SearchFileChunksInput,
+  SearchIndexedFilesInput,
   UpdateIndexRunMetricsInput,
   UpsertIndexedFileInput,
 } from "../../local/ports";
@@ -76,6 +81,18 @@ class InMemoryPersistence implements PersistencePort {
   public async listProjectFiles(_project_id: string, includeDeleted = false): Promise<PersistedIndexedFile[]> {
     const items = [...this.filesByPath.values()];
     return includeDeleted ? items : items.filter((item) => !item.is_deleted);
+  }
+
+  public async searchIndexedFiles(_input: SearchIndexedFilesInput): Promise<RetrievedIndexedFileCandidate[]> {
+    return [];
+  }
+
+  public async searchFileChunks(_input: SearchFileChunksInput): Promise<RetrievedIndexedChunk[]> {
+    return [];
+  }
+
+  public async getFileChunksByFileIds(_input: GetFileChunksByFileIdsInput): Promise<RetrievedIndexedChunk[]> {
+    return [];
   }
 
   public async upsertIndexedFile(input: UpsertIndexedFileInput): Promise<PersistedIndexedFile> {
@@ -126,6 +143,7 @@ class InMemoryPersistence implements PersistencePort {
   }
 
   public async saveTaskContext(input: SaveTaskContextInput): Promise<PersistedTaskContext> {
+    void input.retrieved_context;
     return { id: "task-context", task_id: input.task.id };
   }
 

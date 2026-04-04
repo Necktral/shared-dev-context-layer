@@ -8,6 +8,7 @@ import type {
   CompleteIndexRunInput,
   CreateIndexRunInput,
   EnsureProjectInput,
+  GetFileChunksByFileIdsInput,
   PersistedDecision,
   PersistedEvent,
   PersistedExecution,
@@ -20,12 +21,16 @@ import type {
   PersistenceHealthcheck,
   PersistencePort,
   PersistenceTransactionPort,
+  RetrievedIndexedChunk,
+  RetrievedIndexedFileCandidate,
   SaveDecisionInput,
   SaveEventInput,
   SaveExecutionArtifactInput,
   SaveExecutionInput,
   SaveTaskContextInput,
   SaveTaskInput,
+  SearchFileChunksInput,
+  SearchIndexedFilesInput,
   UpdateIndexRunMetricsInput,
   UpsertIndexedFileInput,
 } from "../ports";
@@ -41,7 +46,7 @@ interface MigrationFile {
 }
 
 interface QueryClient {
-  query: (text: string, values?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }>;
+  query: (text: string, values?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number | null }>;
 }
 
 function quoteIdentifier(identifier: string): string {
@@ -290,6 +295,112 @@ export class PostgresPersistenceAdapter implements PersistencePort {
     }));
   }
 
+  public async searchIndexedFiles(input: SearchIndexedFilesInput): Promise<RetrievedIndexedFileCandidate[]> {
+    await this.ensureMigrations();
+    const normalizedTokens = this.normalizeTokens(input.tokens);
+    if (normalizedTokens.length === 0 || input.limit <= 0) {
+      return [];
+    }
+
+    const table = this.table("files");
+    const values: unknown[] = [input.projectId];
+    const likeClause = this.buildLikeClause("path", normalizedTokens, values, false);
+    const result = await this.query(
+      `SELECT id AS file_id, path, COALESCE(content_hash, '') AS content_hash
+       FROM ${table}
+       WHERE project_id = $1
+         AND is_deleted = false
+         AND (${likeClause})
+       ORDER BY path ASC
+       LIMIT $${values.length + 1}`,
+      [...values, input.limit],
+    );
+
+    return result.rows.map((row) => ({
+      file_id: String(row.file_id),
+      path: String(row.path),
+      content_hash: String(row.content_hash),
+    }));
+  }
+
+  public async searchFileChunks(input: SearchFileChunksInput): Promise<RetrievedIndexedChunk[]> {
+    await this.ensureMigrations();
+    const normalizedTokens = this.normalizeTokens(input.tokens);
+    if (normalizedTokens.length === 0 || input.limit <= 0) {
+      return [];
+    }
+
+    const fileTable = this.table("files");
+    const chunkTable = this.table("file_chunks");
+    const values: unknown[] = [input.projectId];
+    const conditions = [
+      "f.project_id = $1",
+      "f.is_deleted = false",
+      this.buildLikeClause("fc.content", normalizedTokens, values, false),
+    ];
+
+    if (input.fileIds && input.fileIds.length > 0) {
+      conditions.push(`fc.file_id = ANY($${values.length + 1}::text[])`);
+      values.push(input.fileIds);
+    }
+
+    const result = await this.query(
+      `SELECT fc.file_id, f.path AS file_path, fc.chunk_index, fc.content, COALESCE(fc.content_hash, '') AS content_hash
+       FROM ${chunkTable} fc
+       INNER JOIN ${fileTable} f ON f.id = fc.file_id
+       WHERE ${conditions.join("\n         AND ")}
+       ORDER BY f.path ASC, fc.chunk_index ASC
+       LIMIT $${values.length + 1}`,
+      [...values, input.limit],
+    );
+
+    return result.rows.map((row) => ({
+      file_id: String(row.file_id),
+      file_path: String(row.file_path),
+      chunk_index: Number(row.chunk_index),
+      content: String(row.content),
+      content_hash: String(row.content_hash),
+    }));
+  }
+
+  public async getFileChunksByFileIds(input: GetFileChunksByFileIdsInput): Promise<RetrievedIndexedChunk[]> {
+    await this.ensureMigrations();
+    if (input.fileIds.length === 0 || input.limitPerFile <= 0) {
+      return [];
+    }
+
+    const fileTable = this.table("files");
+    const chunkTable = this.table("file_chunks");
+    const result = await this.query(
+      `SELECT ranked.file_id, ranked.file_path, ranked.chunk_index, ranked.content, ranked.content_hash
+       FROM (
+         SELECT
+           fc.file_id,
+           f.path AS file_path,
+           fc.chunk_index,
+           fc.content,
+           COALESCE(fc.content_hash, '') AS content_hash,
+           ROW_NUMBER() OVER (PARTITION BY fc.file_id ORDER BY fc.chunk_index ASC) AS row_number
+         FROM ${chunkTable} fc
+         INNER JOIN ${fileTable} f ON f.id = fc.file_id
+         WHERE f.project_id = $1
+           AND f.is_deleted = false
+           AND fc.file_id = ANY($2::text[])
+       ) ranked
+       WHERE ranked.row_number <= $3
+       ORDER BY ranked.file_path ASC, ranked.chunk_index ASC`,
+      [input.projectId, input.fileIds, input.limitPerFile],
+    );
+
+    return result.rows.map((row) => ({
+      file_id: String(row.file_id),
+      file_path: String(row.file_path),
+      chunk_index: Number(row.chunk_index),
+      content: String(row.content),
+      content_hash: String(row.content_hash),
+    }));
+  }
+
   public async upsertIndexedFile(input: UpsertIndexedFileInput): Promise<PersistedIndexedFile> {
     await this.ensureMigrations();
     const table = this.table("files");
@@ -453,10 +564,15 @@ export class PostgresPersistenceAdapter implements PersistencePort {
     await this.ensureMigrations();
     const contextId = randomUUID();
     const table = this.table("task_context");
+    const payload = {
+      selected_chunks: input.retrieved_context.selected_chunks,
+      ranking_evidence: input.retrieved_context.ranking_evidence,
+      budget_stats: input.retrieved_context.budget_stats,
+    };
 
     await this.query(
-      `INSERT INTO ${table} (id, task_id, project_id, summary, candidate_files, constraints, acceptance_criteria, created_at)
-       VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8)`,
+      `INSERT INTO ${table} (id, task_id, project_id, summary, candidate_files, constraints, acceptance_criteria, payload_json, created_at)
+       VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9)`,
       [
         contextId,
         input.task.id,
@@ -465,6 +581,7 @@ export class PostgresPersistenceAdapter implements PersistencePort {
         JSON.stringify(input.task.candidate_files),
         JSON.stringify(input.task.constraints),
         JSON.stringify(input.task.acceptance_criteria),
+        JSON.stringify(payload),
         nowIso(),
       ],
     );
@@ -546,6 +663,27 @@ export class PostgresPersistenceAdapter implements PersistencePort {
     return createHash("sha256")
       .update([input.operation_profile, input.workspace_root ?? "", input.repo_root ?? ""].join("|"))
       .digest("hex");
+  }
+
+  private normalizeTokens(tokens: string[]): string[] {
+    return [...new Set(tokens.map((token) => token.trim().toLowerCase()).filter((token) => token.length > 0))];
+  }
+
+  private buildLikeClause(column: string, tokens: string[], values: unknown[], caseSensitive: boolean): string {
+    const operator = caseSensitive ? "LIKE" : "ILIKE";
+    const clauses: string[] = [];
+    for (const token of tokens) {
+      values.push(`%${this.escapeLikePattern(token)}%`);
+      clauses.push(`${column} ${operator} $${values.length} ESCAPE '\\'`);
+    }
+    if (clauses.length === 0) {
+      return "false";
+    }
+    return clauses.join(" OR ");
+  }
+
+  private escapeLikePattern(value: string): string {
+    return value.replace(/([\\%_])/g, "\\$1");
   }
 
   private async ensureMigrations(): Promise<number> {

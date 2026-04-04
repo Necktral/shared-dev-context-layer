@@ -1,8 +1,43 @@
 import type { CodexExecutionRequest, CodexExecutionResult, LocalTaskDraft, ProjectRuntimeSnapshot } from "./types";
 
+export interface RetrievedChunk {
+  file_path: string;
+  chunk_index: number;
+  content: string;
+  score: number;
+  evidence: string[];
+}
+
+export interface RetrievalRankingEvidence {
+  file_path: string;
+  chunk_index?: number;
+  score: number;
+  reasons: string[];
+}
+
+export interface RetrievalBudgetStats {
+  max_files: number;
+  max_chunks: number;
+  max_chunks_per_file: number;
+  max_total_chars: number;
+  selected_files: number;
+  selected_chunks: number;
+  selected_chars: number;
+  truncated: boolean;
+}
+
 export interface RetrievedContext {
   summary: string;
   candidate_files: string[];
+  selected_chunks: RetrievedChunk[];
+  ranking_evidence: RetrievalRankingEvidence[];
+  budget_stats: RetrievalBudgetStats;
+}
+
+export interface RetrievalRequest {
+  intent: string;
+  projectId: string;
+  snapshot: ProjectRuntimeSnapshot;
 }
 
 export interface IndexedFileCandidate {
@@ -54,7 +89,7 @@ export interface WorkspaceIndexerPort {
 }
 
 export interface ContextRetrieverPort {
-  retrieve(intent: string, snapshot: ProjectRuntimeSnapshot): Promise<RetrievedContext>;
+  retrieve(request: RetrievalRequest): Promise<RetrievedContext>;
 }
 
 export interface TaskBuilderPort {
@@ -122,6 +157,20 @@ export interface PersistedIndexedFile {
   is_deleted: boolean;
 }
 
+export interface RetrievedIndexedFileCandidate {
+  file_id: string;
+  path: string;
+  content_hash: string;
+}
+
+export interface RetrievedIndexedChunk {
+  file_id: string;
+  file_path: string;
+  chunk_index: number;
+  content: string;
+  content_hash: string;
+}
+
 export interface EnsureProjectInput {
   operation_profile: string;
   workspace_root: string | null;
@@ -170,6 +219,26 @@ export interface SaveTaskInput {
 export interface SaveTaskContextInput {
   project_id: string;
   task: LocalTaskDraft;
+  retrieved_context: RetrievedContext;
+}
+
+export interface SearchIndexedFilesInput {
+  projectId: string;
+  tokens: string[];
+  limit: number;
+}
+
+export interface SearchFileChunksInput {
+  projectId: string;
+  tokens: string[];
+  limit: number;
+  fileIds?: string[];
+}
+
+export interface GetFileChunksByFileIdsInput {
+  projectId: string;
+  fileIds: string[];
+  limitPerFile: number;
 }
 
 export interface SaveExecutionInput {
@@ -216,6 +285,9 @@ export interface PersistencePort extends PersistenceTransactionPort {
   completeIndexRun(input: CompleteIndexRunInput): Promise<void>;
   createOrUpdateIndexRunMetrics(input: UpdateIndexRunMetricsInput): Promise<void>;
   listProjectFiles(project_id: string, includeDeleted?: boolean): Promise<PersistedIndexedFile[]>;
+  searchIndexedFiles(input: SearchIndexedFilesInput): Promise<RetrievedIndexedFileCandidate[]>;
+  searchFileChunks(input: SearchFileChunksInput): Promise<RetrievedIndexedChunk[]>;
+  getFileChunksByFileIds(input: GetFileChunksByFileIdsInput): Promise<RetrievedIndexedChunk[]>;
   upsertIndexedFile(input: UpsertIndexedFileInput): Promise<PersistedIndexedFile>;
   markFilesDeleted(project_id: string, paths: string[]): Promise<string[]>;
   replaceFileChunks(file_id: string, project_id: string, chunks: ChunkRecord[]): Promise<number>;

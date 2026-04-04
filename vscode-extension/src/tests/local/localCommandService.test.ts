@@ -13,6 +13,7 @@ import type {
   ChunkRecord,
   CreateIndexRunInput,
   EnsureProjectInput,
+  GetFileChunksByFileIdsInput,
   PersistedDecision,
   PersistedEvent,
   PersistedExecution,
@@ -24,12 +25,17 @@ import type {
   PersistedTaskContext,
   PersistencePort,
   PersistenceTransactionPort,
+  RetrievedContext,
+  RetrievedIndexedChunk,
+  RetrievedIndexedFileCandidate,
   SaveDecisionInput,
   SaveEventInput,
   SaveExecutionArtifactInput,
   SaveExecutionInput,
   SaveTaskContextInput,
   SaveTaskInput,
+  SearchFileChunksInput,
+  SearchIndexedFilesInput,
   CompleteIndexRunInput,
   UpdateIndexRunMetricsInput,
   UpsertIndexedFileInput,
@@ -68,6 +74,8 @@ class FakePersistence implements PersistencePort {
   public savedTaskId = "";
 
   public savedExecutionTaskId = "";
+
+  public lastSavedTaskContextInput: SaveTaskContextInput | null = null;
 
   public failHealth = false;
 
@@ -117,6 +125,18 @@ class FakePersistence implements PersistencePort {
     return [];
   }
 
+  public async searchIndexedFiles(_input: SearchIndexedFilesInput): Promise<RetrievedIndexedFileCandidate[]> {
+    return [];
+  }
+
+  public async searchFileChunks(_input: SearchFileChunksInput): Promise<RetrievedIndexedChunk[]> {
+    return [];
+  }
+
+  public async getFileChunksByFileIds(_input: GetFileChunksByFileIdsInput): Promise<RetrievedIndexedChunk[]> {
+    return [];
+  }
+
   public async upsertIndexedFile(input: UpsertIndexedFileInput): Promise<PersistedIndexedFile> {
     return {
       id: "file-1",
@@ -147,6 +167,7 @@ class FakePersistence implements PersistencePort {
   }
 
   public async saveTaskContext(input: SaveTaskContextInput): Promise<PersistedTaskContext> {
+    this.lastSavedTaskContextInput = input;
     return {
       id: "task-context-1",
       task_id: input.task.id,
@@ -189,6 +210,40 @@ class FakePersistence implements PersistencePort {
     }
     return operation(this);
   }
+}
+
+function sampleRetrievedContext(): RetrievedContext {
+  return {
+    summary: "Retrieval listo.",
+    candidate_files: ["src/index.ts", "src/retrieval.ts"],
+    selected_chunks: [
+      {
+        file_path: "src/index.ts",
+        chunk_index: 0,
+        content: "export const answer = 42;",
+        score: 120,
+        evidence: ["filename_exact_match", "content_match"],
+      },
+    ],
+    ranking_evidence: [
+      {
+        file_path: "src/index.ts",
+        chunk_index: 0,
+        score: 120,
+        reasons: ["filename_exact_match", "content_match"],
+      },
+    ],
+    budget_stats: {
+      max_files: 5,
+      max_chunks: 8,
+      max_chunks_per_file: 3,
+      max_total_chars: 6000,
+      selected_files: 2,
+      selected_chunks: 1,
+      selected_chars: 25,
+      truncated: false,
+    },
+  };
 }
 
 test("LocalCommandService bloquea comandos locales cuando profile no es local_private", async () => {
@@ -254,6 +309,41 @@ test("LocalCommandService en local_private prepara tarea y ejecuta Codex con per
   assert.equal(store.getSnapshot().runtime_state, "ready");
   assert.equal(typeof executed.details?.execution_id, "string");
   assert.equal(typeof executed.details?.artifact_id, "string");
+});
+
+test("LocalCommandService pasa projectId al retriever y persiste retrieved_context", async () => {
+  let profile: OperationProfile = "local_private";
+  const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
+  const persistence = new FakePersistence();
+  let capturedProjectId = "";
+
+  const service = new LocalCommandService({
+    inspector: { inspect: async () => environment() },
+    store,
+    indexer: new NoopIndexer(),
+    retriever: {
+      retrieve: async (request) => {
+        capturedProjectId = request.projectId;
+        return sampleRetrievedContext();
+      },
+    },
+    taskBuilder: new NoopTaskBuilder(),
+    codexRunner: {
+      healthcheck: async () => okExecution("healthcheck"),
+      run: async () => okExecution("run"),
+    },
+    persistence,
+    getOperationProfile: () => profile,
+    getCodexCliCommand: () => "codex",
+  });
+
+  const prepared = await service.localPrepareTask("Encontrar index.ts");
+  assert.equal(prepared.status, "ok");
+  assert.equal(capturedProjectId, "project-1");
+  assert.equal(prepared.details?.selected_chunks, 1);
+  assert.equal(prepared.details?.evidence_items, 1);
+  assert.equal(persistence.lastSavedTaskContextInput?.retrieved_context.selected_chunks.length, 1);
+  assert.equal(persistence.lastSavedTaskContextInput?.retrieved_context.candidate_files[0], "src/index.ts");
 });
 
 test("LocalCommandService reporta error cuando DB está desconectada", async () => {

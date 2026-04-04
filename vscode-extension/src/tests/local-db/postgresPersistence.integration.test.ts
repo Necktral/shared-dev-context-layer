@@ -7,6 +7,7 @@ import { Pool } from "pg";
 import { PostgresPersistenceAdapter } from "../../local/persistence/postgresPersistenceAdapter";
 import type { LocalDbConfig } from "../../config";
 import type { CodexExecutionResult, LocalTaskDraft } from "../../local/types";
+import type { RetrievedContext } from "../../local/ports";
 
 const run = process.env.LOCAL_DB_TESTS === "1" ? test : test.skip;
 
@@ -100,6 +101,40 @@ function makeExecution(): CodexExecutionResult {
   };
 }
 
+function makeRetrievedContext(): RetrievedContext {
+  return {
+    summary: "retrieval ok",
+    candidate_files: ["src/index.ts"],
+    selected_chunks: [
+      {
+        file_path: "src/index.ts",
+        chunk_index: 0,
+        content: "export const value = 1;",
+        score: 90,
+        evidence: ["content_match"],
+      },
+    ],
+    ranking_evidence: [
+      {
+        file_path: "src/index.ts",
+        chunk_index: 0,
+        score: 90,
+        reasons: ["content_match"],
+      },
+    ],
+    budget_stats: {
+      max_files: 5,
+      max_chunks: 8,
+      max_chunks_per_file: 3,
+      max_total_chars: 6000,
+      selected_files: 1,
+      selected_chunks: 1,
+      selected_chars: 23,
+      truncated: false,
+    },
+  };
+}
+
 async function countRows(config: LocalDbConfig, schema: string, table: string): Promise<number> {
   const pool = new Pool({
     host: config.host,
@@ -143,6 +178,28 @@ async function readFileRow(
       content_hash: String(result.rows[0].content_hash),
       last_indexed_at: String(result.rows[0].last_indexed_at),
     };
+  } finally {
+    await pool.end();
+  }
+}
+
+async function readTaskContextPayload(
+  config: LocalDbConfig,
+  schema: string,
+): Promise<Record<string, unknown> | null> {
+  const pool = new Pool({
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    password: config.password,
+    ssl: false,
+  });
+
+  try {
+    const query = `SELECT payload_json FROM "${schema}"."task_context" LIMIT 1`;
+    const result = await pool.query(query);
+    return (result.rows[0]?.payload_json as Record<string, unknown> | undefined) ?? null;
   } finally {
     await pool.end();
   }
@@ -221,12 +278,16 @@ run("I-05/I-06 save task + task_context", async () => {
   const savedContext = await adapter.saveTaskContext({
     project_id: project.id,
     task,
+    retrieved_context: makeRetrievedContext(),
   });
 
   assert.equal(savedTask.id, task.id);
   assert.equal(savedContext.task_id, task.id);
   assert.equal(await countRows(config, schema, "tasks"), 1);
   assert.equal(await countRows(config, schema, "task_context"), 1);
+  const payload = await readTaskContextPayload(config, schema);
+  assert.ok(Array.isArray(payload?.selected_chunks));
+  assert.ok(Array.isArray(payload?.ranking_evidence));
 
   await adapter.dispose();
 });
@@ -464,4 +525,69 @@ run("I-12 index_runs guarda métricas reales de indexación", async () => {
     await pool.end();
     await adapter.dispose();
   }
+});
+
+run("I-13 retrieval queries leen activos y excluyen soft delete", async () => {
+  const schema = makeSchemaName("local_private_it");
+  const config = baseConfig(schema);
+  const adapter = new PostgresPersistenceAdapter({ config, extensionPath: process.cwd() });
+  await adapter.healthcheck();
+
+  const project = await adapter.ensureProject({
+    operation_profile: "local_private",
+    workspace_root: "/workspace",
+    repo_root: "/workspace/repo",
+    branch: "main",
+  });
+
+  const authFile = await adapter.upsertIndexedFile({
+    project_id: project.id,
+    path: "src/authService.ts",
+    content_hash: "hash-auth",
+    size_bytes: 120,
+    modified_at: new Date().toISOString(),
+    language: "ts",
+  });
+  await adapter.replaceFileChunks(authFile.id, project.id, [
+    { chunkIndex: 0, content: "refresh token validation token", contentHash: "auth-c0" },
+    { chunkIndex: 1, content: "audit trail", contentHash: "auth-c1" },
+  ]);
+
+  const deletedFile = await adapter.upsertIndexedFile({
+    project_id: project.id,
+    path: "src/deletedService.ts",
+    content_hash: "hash-deleted",
+    size_bytes: 90,
+    modified_at: new Date().toISOString(),
+    language: "ts",
+  });
+  await adapter.replaceFileChunks(deletedFile.id, project.id, [
+    { chunkIndex: 0, content: "token should disappear", contentHash: "deleted-c0" },
+  ]);
+  const deletedIds = await adapter.markFilesDeleted(project.id, ["src/deletedService.ts"]);
+  await adapter.deleteChunksByFileIds(deletedIds);
+
+  const fileHits = await adapter.searchIndexedFiles({
+    projectId: project.id,
+    tokens: ["authservice.ts"],
+    limit: 5,
+  });
+  assert.deepEqual(fileHits.map((entry) => entry.path), ["src/authService.ts"]);
+
+  const chunkHits = await adapter.searchFileChunks({
+    projectId: project.id,
+    tokens: ["token"],
+    limit: 10,
+  });
+  assert.deepEqual(chunkHits.map((entry) => entry.file_path), ["src/authService.ts"]);
+
+  const lookupChunks = await adapter.getFileChunksByFileIds({
+    projectId: project.id,
+    fileIds: [authFile.id, deletedFile.id],
+    limitPerFile: 1,
+  });
+  assert.deepEqual(lookupChunks.map((entry) => entry.file_path), ["src/authService.ts"]);
+  assert.deepEqual(lookupChunks.map((entry) => entry.chunk_index), [0]);
+
+  await adapter.dispose();
 });

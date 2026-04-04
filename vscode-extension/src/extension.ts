@@ -53,12 +53,14 @@ import { createInitialProjectRuntimeSnapshot } from "./local/types";
 import { LocalRuntimePanelProvider } from "./presentation/local/localRuntimePanelProvider";
 import { LocalRuntimeOutputRenderer } from "./presentation/renderers/localRuntimeOutputRenderer";
 import { CodexCliRunner } from "./local/codexCliRunner";
-import { NoopPersistence, NoopRetriever, NoopTaskBuilder } from "./local/noopServices";
+import { NoopPersistence } from "./local/noopServices";
 import { LocalCommandService } from "./local/localCommandService";
 import { PostgresPersistenceAdapter } from "./local/persistence/postgresPersistenceAdapter";
 import type { PersistencePort } from "./local/ports";
 import type { LocalCommandResult } from "./local/types";
 import { IncrementalWorkspaceIndexer } from "./local/indexing/incrementalWorkspaceIndexer";
+import { HybridContextRetriever } from "./local/retrieval/hybridContextRetriever";
+import { ContextAwareTaskBuilder } from "./local/taskBuilder/contextAwareTaskBuilder";
 
 let outputChannel: vscode.OutputChannel | undefined;
 
@@ -222,8 +224,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     inspector: environmentInspector,
     store: localStore,
     indexer: localIndexer,
-    retriever: new NoopRetriever(),
-    taskBuilder: new NoopTaskBuilder(),
+    retriever: new HybridContextRetriever({ persistence: localPersistence }),
+    taskBuilder: new ContextAwareTaskBuilder(),
     codexRunner: new CodexCliRunner(),
     persistence: localPersistence,
     getOperationProfile,

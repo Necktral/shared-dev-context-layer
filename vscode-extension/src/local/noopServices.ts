@@ -4,6 +4,7 @@ import type {
   ContextRetrieverPort,
   CreateIndexRunInput,
   EnsureProjectInput,
+  GetFileChunksByFileIdsInput,
   PersistedDecision,
   PersistedEvent,
   PersistedExecution,
@@ -16,6 +17,7 @@ import type {
   PersistenceHealthcheck,
   PersistencePort,
   PersistenceTransactionPort,
+  RetrievalRequest,
   RetrievedContext,
   SaveDecisionInput,
   SaveEventInput,
@@ -23,9 +25,13 @@ import type {
   SaveExecutionInput,
   SaveTaskContextInput,
   SaveTaskInput,
+  SearchFileChunksInput,
+  SearchIndexedFilesInput,
   TaskBuilderPort,
   WorkspaceIndexerPort,
   CompleteIndexRunInput,
+  RetrievedIndexedChunk,
+  RetrievedIndexedFileCandidate,
   WorkspaceIndexRequest,
   WorkspaceIndexResult,
   UpsertIndexedFileInput,
@@ -65,17 +71,37 @@ export class NoopIndexer implements WorkspaceIndexerPort {
 }
 
 export class NoopRetriever implements ContextRetrieverPort {
-  public async retrieve(intent: string, snapshot: ProjectRuntimeSnapshot): Promise<RetrievedContext> {
-    const candidates = snapshot.active_file ? [snapshot.active_file] : [];
+  public async retrieve(request: RetrievalRequest): Promise<RetrievedContext> {
+    const candidates = request.snapshot.active_file ? [request.snapshot.active_file] : [];
     return {
-      summary: `Contexto stub para: ${intent}`,
+      summary: `Contexto stub para: ${request.intent}`,
       candidate_files: candidates,
+      selected_chunks: [],
+      ranking_evidence: candidates.length > 0
+        ? [
+            {
+              file_path: candidates[0],
+              score: 1,
+              reasons: ["active_file_fallback"],
+            },
+          ]
+        : [],
+      budget_stats: {
+        max_files: 5,
+        max_chunks: 8,
+        max_chunks_per_file: 3,
+        max_total_chars: 6000,
+        selected_files: candidates.length,
+        selected_chunks: 0,
+        selected_chars: 0,
+        truncated: false,
+      },
     };
   }
 }
 
 export class NoopTaskBuilder implements TaskBuilderPort {
-  public async buildTask(intent: string, context: RetrievedContext): Promise<LocalTaskDraft> {
+  public async buildTask(intent: string, context: RetrievedContext, _snapshot: ProjectRuntimeSnapshot): Promise<LocalTaskDraft> {
     const now = new Date().toISOString();
     return {
       id: randomUUID(),
@@ -146,6 +172,18 @@ export class NoopPersistence implements PersistencePort {
     return [];
   }
 
+  public async searchIndexedFiles(_input: SearchIndexedFilesInput): Promise<RetrievedIndexedFileCandidate[]> {
+    return [];
+  }
+
+  public async searchFileChunks(_input: SearchFileChunksInput): Promise<RetrievedIndexedChunk[]> {
+    return [];
+  }
+
+  public async getFileChunksByFileIds(_input: GetFileChunksByFileIdsInput): Promise<RetrievedIndexedChunk[]> {
+    return [];
+  }
+
   public async upsertIndexedFile(input: UpsertIndexedFileInput): Promise<PersistedIndexedFile> {
     return {
       id: randomUUID(),
@@ -175,6 +213,7 @@ export class NoopPersistence implements PersistencePort {
   }
 
   public async saveTaskContext(input: SaveTaskContextInput): Promise<PersistedTaskContext> {
+    void input.retrieved_context;
     return {
       id: randomUUID(),
       task_id: input.task.id,
