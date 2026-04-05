@@ -124,19 +124,30 @@ export class NoopRetriever implements ContextRetrieverPort {
 export class NoopTaskBuilder implements TaskBuilderPort {
   public async buildTask(intent: string, context: RetrievedContext, _snapshot: ProjectRuntimeSnapshot): Promise<LocalTaskDraft> {
     const now = new Date().toISOString();
+    const candidateFiles = context.candidate_files.slice(0, 5);
+    const constraints = [
+      "Paquete 1 baseline: no ejecutar mutaciones automáticas de dominio.",
+      "Mantener ejecución supervisada por usuario.",
+    ];
+    const acceptanceCriteria = [
+      "Resultado estructurado generado por adapter Codex.",
+      "Registro de estado y salida disponible en panel/output.",
+    ];
     return {
       id: randomUUID(),
       objective: intent,
       context_summary: context.summary,
-      candidate_files: context.candidate_files.slice(0, 5),
-      constraints: [
-        "Paquete 1 baseline: no ejecutar mutaciones automáticas de dominio.",
-        "Mantener ejecución supervisada por usuario.",
-      ],
-      acceptance_criteria: [
-        "Resultado estructurado generado por adapter Codex.",
-        "Registro de estado y salida disponible en panel/output.",
-      ],
+      candidate_files: candidateFiles,
+      constraints,
+      acceptance_criteria: acceptanceCriteria,
+      execution_brief: {
+        version: "v2",
+        objective_compact: intent,
+        candidate_files: candidateFiles,
+        key_evidence: [context.summary],
+        run_constraints: constraints,
+        acceptance_checks: acceptanceCriteria,
+      },
       created_at: now,
     };
   }

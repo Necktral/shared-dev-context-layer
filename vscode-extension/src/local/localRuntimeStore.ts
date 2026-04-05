@@ -12,6 +12,15 @@ function cloneSnapshot(snapshot: ProjectRuntimeSnapshot): ProjectRuntimeSnapshot
           candidate_files: [...snapshot.task_draft.candidate_files],
           constraints: [...snapshot.task_draft.constraints],
           acceptance_criteria: [...snapshot.task_draft.acceptance_criteria],
+          execution_brief: snapshot.task_draft.execution_brief
+            ? {
+                ...snapshot.task_draft.execution_brief,
+                candidate_files: [...snapshot.task_draft.execution_brief.candidate_files],
+                key_evidence: [...snapshot.task_draft.execution_brief.key_evidence],
+                run_constraints: [...snapshot.task_draft.execution_brief.run_constraints],
+                acceptance_checks: [...snapshot.task_draft.execution_brief.acceptance_checks],
+              }
+            : undefined,
         }
       : null,
     last_result: snapshot.last_result

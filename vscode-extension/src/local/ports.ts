@@ -119,9 +119,17 @@ export interface TaskBuilderPort {
   buildTask(intent: string, context: RetrievedContext, snapshot: ProjectRuntimeSnapshot): Promise<LocalTaskDraft>;
 }
 
+export interface CodexRunnerExecuteOptions {
+  abortSignal?: AbortSignal;
+}
+
 export interface CodexRunnerPort {
-  healthcheck(command: string): Promise<CodexExecutionResult>;
-  run(request: CodexExecutionRequest, command: string): Promise<CodexExecutionResult>;
+  healthcheck(command: string, options?: CodexRunnerExecuteOptions): Promise<CodexExecutionResult>;
+  run(
+    request: CodexExecutionRequest,
+    command: string,
+    options?: CodexRunnerExecuteOptions,
+  ): Promise<CodexExecutionResult>;
 }
 
 export interface PersistenceHealthcheck {

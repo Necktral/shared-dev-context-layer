@@ -20,23 +20,49 @@ export interface LocalTaskDraft {
   candidate_files: string[];
   constraints: string[];
   acceptance_criteria: string[];
+  execution_brief?: LocalTaskExecutionBrief;
   created_at: string;
+}
+
+export interface LocalTaskExecutionBrief {
+  version: "v2";
+  objective_compact: string;
+  candidate_files: string[];
+  key_evidence: string[];
+  run_constraints: string[];
+  acceptance_checks: string[];
 }
 
 export interface CodexExecutionRequest {
   task: LocalTaskDraft;
+  repo_root: string | null;
+  workspace_root: string | null;
+  branch: string | null;
+  active_file: string | null;
 }
 
 export type CodexExecutionMode = "healthcheck" | "run";
 
+export interface CodexUsageTokens {
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+}
+
 export interface CodexExecutionResult {
   mode: CodexExecutionMode;
   ok: boolean;
+  cancelled: boolean;
   command: string;
   command_line: string;
   exit_code: number | null;
   stdout: string;
   stderr: string;
+  final_message: string | null;
+  thread_id: string | null;
+  events_count: number;
+  warnings_count: number;
+  usage_tokens: CodexUsageTokens | null;
   started_at: string;
   finished_at: string;
   duration_ms: number;

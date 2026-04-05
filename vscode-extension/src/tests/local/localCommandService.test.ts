@@ -57,11 +57,17 @@ function okExecution(mode: "healthcheck" | "run"): CodexExecutionResult {
   return {
     mode,
     ok: true,
+    cancelled: false,
     command: "codex",
-    command_line: "codex --help",
+    command_line: mode === "healthcheck" ? "codex --version" : "codex exec --json",
     exit_code: 0,
-    stdout: "ok",
+    stdout: mode === "healthcheck" ? "codex-cli 0.116.0" : '{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}',
     stderr: "",
+    final_message: mode === "run" ? "ok" : null,
+    thread_id: mode === "run" ? "thread-1" : null,
+    events_count: mode === "run" ? 1 : 0,
+    warnings_count: 0,
+    usage_tokens: null,
     started_at: new Date().toISOString(),
     finished_at: new Date().toISOString(),
     duration_ms: 10,
@@ -82,6 +88,10 @@ class FakePersistence implements PersistencePort {
   public failTransaction = false;
 
   public lastIndexMetrics: UpdateIndexRunMetricsInput | null = null;
+
+  public savedExecutionArtifacts: SaveExecutionArtifactInput[] = [];
+
+  public savedEvents: SaveEventInput[] = [];
 
   public async healthcheck() {
     if (this.failHealth) {
@@ -184,8 +194,9 @@ class FakePersistence implements PersistencePort {
   }
 
   public async saveExecutionArtifact(input: SaveExecutionArtifactInput): Promise<PersistedExecutionArtifact> {
+    this.savedExecutionArtifacts.push(input);
     return {
-      id: "artifact-1",
+      id: `artifact-${this.savedExecutionArtifacts.length}`,
       execution_id: input.execution_id,
     };
   }
@@ -198,6 +209,7 @@ class FakePersistence implements PersistencePort {
   }
 
   public async saveEvent(input: SaveEventInput): Promise<PersistedEvent> {
+    this.savedEvents.push(input);
     return {
       id: "event-1",
       project_id: input.project_id,
@@ -330,6 +342,16 @@ test("LocalCommandService en local_private prepara tarea y ejecuta Codex con per
   assert.equal(store.getSnapshot().runtime_state, "ready");
   assert.equal(typeof executed.details?.execution_id, "string");
   assert.equal(typeof executed.details?.artifact_id, "string");
+  assert.equal(typeof executed.details?.prompt_artifact_id, "string");
+  assert.equal(typeof executed.details?.trace_artifact_id, "string");
+  assert.equal(typeof executed.details?.result_artifact_id, "string");
+  assert.equal(executed.details?.warnings_count, 0);
+  assert.equal(persistence.savedExecutionArtifacts.length, 3);
+  assert.deepEqual(
+    persistence.savedExecutionArtifacts.map((artifact) => artifact.artifact_type),
+    ["codex_exec_prompt", "codex_exec_trace", "codex_exec_result"],
+  );
+  assert.equal(persistence.savedEvents[0]?.severity, "info");
 });
 
 test("LocalCommandService pasa projectId al retriever y persiste retrieved_context", async () => {
@@ -365,6 +387,45 @@ test("LocalCommandService pasa projectId al retriever y persiste retrieved_conte
   assert.equal(prepared.details?.evidence_items, 1);
   assert.equal(persistence.lastSavedTaskContextInput?.retrieved_context.selected_chunks.length, 1);
   assert.equal(persistence.lastSavedTaskContextInput?.retrieved_context.candidate_files[0], "src/index.ts");
+});
+
+test("LocalCommandService pasa contexto operativo extendido al codexRunner", async () => {
+  let profile: OperationProfile = "local_private";
+  const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
+  const persistence = new FakePersistence();
+  let capturedRepoRoot: string | null = null;
+  let capturedWorkspaceRoot: string | null = null;
+  let capturedBranch: string | null = null;
+  let capturedActiveFile: string | null = null;
+
+  const service = new LocalCommandService({
+    inspector: { inspect: async () => environment() },
+    store,
+    indexer: new NoopIndexer(),
+    retriever: new NoopRetriever(),
+    taskBuilder: new NoopTaskBuilder(),
+    codexRunner: {
+      healthcheck: async () => okExecution("healthcheck"),
+      run: async (request: any, _command: string) => {
+        capturedRepoRoot = typeof request?.repo_root === "string" ? request.repo_root : null;
+        capturedWorkspaceRoot = typeof request?.workspace_root === "string" ? request.workspace_root : null;
+        capturedBranch = typeof request?.branch === "string" ? request.branch : null;
+        capturedActiveFile = typeof request?.active_file === "string" ? request.active_file : null;
+        return okExecution("run");
+      },
+    },
+    persistence,
+    getOperationProfile: () => profile,
+    getCodexCliCommand: () => "codex",
+  });
+
+  await service.localPrepareTask("Run with full context");
+  const executed = await service.localRunCodex();
+  assert.equal(executed.status, "ok");
+  assert.equal(capturedRepoRoot, "/workspace/repo");
+  assert.equal(capturedWorkspaceRoot, "/workspace");
+  assert.equal(capturedBranch, "main");
+  assert.equal(capturedActiveFile, "/workspace/repo/src/index.ts");
 });
 
 test("LocalCommandService reporta error cuando DB está desconectada", async () => {
@@ -428,4 +489,65 @@ test("LocalCommandService reporta error cuando falla la transacción de ejecuci�
   const result = await service.localRunCodex();
   assert.equal(result.status, "error");
   assert.match(result.message, /tx failed/);
+});
+
+test("LocalCommandService conserva ok con warnings y sube severidad warning", async () => {
+  let profile: OperationProfile = "local_private";
+  const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
+  const persistence = new FakePersistence();
+  const warningExecution: CodexExecutionResult = {
+    ...okExecution("run"),
+    stderr: "WARN unstable warning\nERROR non fatal",
+    warnings_count: 2,
+  };
+
+  const service = new LocalCommandService({
+    inspector: { inspect: async () => environment() },
+    store,
+    indexer: new NoopIndexer(),
+    retriever: new NoopRetriever(),
+    taskBuilder: new NoopTaskBuilder(),
+    codexRunner: {
+      healthcheck: async () => okExecution("healthcheck"),
+      run: async () => warningExecution,
+    },
+    persistence,
+    getOperationProfile: () => profile,
+    getCodexCliCommand: () => "codex",
+  });
+
+  await service.localPrepareTask("Revisar warning flow");
+  const result = await service.localRunCodex();
+  assert.equal(result.status, "ok");
+  assert.equal(result.details?.warnings_count, 2);
+  assert.equal(persistence.savedEvents[0]?.severity, "warning");
+});
+
+test("LocalCommandService marca cancelación cuando signal ya está abortada", async () => {
+  let profile: OperationProfile = "local_private";
+  const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
+  const persistence = new FakePersistence();
+  const controller = new AbortController();
+  controller.abort();
+
+  const service = new LocalCommandService({
+    inspector: { inspect: async () => environment() },
+    store,
+    indexer: new NoopIndexer(),
+    retriever: new NoopRetriever(),
+    taskBuilder: new NoopTaskBuilder(),
+    codexRunner: {
+      healthcheck: async () => okExecution("healthcheck"),
+      run: async () => okExecution("run"),
+    },
+    persistence,
+    getOperationProfile: () => profile,
+    getCodexCliCommand: () => "codex",
+  });
+
+  await service.localPrepareTask("Cancelar run");
+  const result = await service.localRunCodex({ abortSignal: controller.signal });
+  assert.equal(result.status, "error");
+  assert.equal(result.details?.cancelled, true);
+  assert.equal(persistence.savedEvents[0]?.severity, "error");
 });

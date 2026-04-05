@@ -650,6 +650,7 @@ export class PostgresPersistenceAdapter implements PersistencePort {
       candidate_files: input.task.candidate_files,
       constraints: input.task.constraints,
       acceptance_criteria: input.task.acceptance_criteria,
+      execution_brief: input.task.execution_brief ?? null,
     };
 
     await this.query(
@@ -940,7 +941,7 @@ export class PostgresPersistenceAdapter implements PersistencePort {
   private async saveExecutionWithClient(client: QueryClient, input: SaveExecutionInput): Promise<PersistedExecution> {
     const executionId = randomUUID();
     const table = this.table("executions");
-    const status = input.result.ok ? "ok" : "error";
+    const status = input.result.cancelled ? "cancelled" : input.result.ok ? "ok" : "error";
     await client.query(
       `INSERT INTO ${table}
        (id, task_id, project_id, status, command, command_line, exit_code, duration_ms, stdout, stderr, error, started_at, finished_at, created_at)

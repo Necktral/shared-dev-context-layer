@@ -80,6 +80,14 @@ function makeTask(): LocalTaskDraft {
     candidate_files: ["/workspace/repo/src/index.ts"],
     constraints: ["none"],
     acceptance_criteria: ["saved"],
+    execution_brief: {
+      version: "v2",
+      objective_compact: "Persistir draft local",
+      candidate_files: ["src/index.ts"],
+      key_evidence: ["src/index.ts#0: export const value = 1;"],
+      run_constraints: ["none"],
+      acceptance_checks: ["saved"],
+    },
     created_at: new Date().toISOString(),
   };
 }
@@ -88,11 +96,21 @@ function makeExecution(): CodexExecutionResult {
   return {
     mode: "run",
     ok: true,
+    cancelled: false,
     command: "node",
     command_line: "node --version",
     exit_code: 0,
     stdout: "v20",
     stderr: "",
+    final_message: "ok",
+    thread_id: "thread-1",
+    events_count: 3,
+    warnings_count: 0,
+    usage_tokens: {
+      input_tokens: 10,
+      cached_input_tokens: 0,
+      output_tokens: 4,
+    },
     started_at: new Date().toISOString(),
     finished_at: new Date().toISOString(),
     duration_ms: 12,
@@ -221,6 +239,44 @@ async function readTaskContextPayload(
     const query = `SELECT payload_json FROM "${schema}"."task_context" LIMIT 1`;
     const result = await pool.query(query);
     return (result.rows[0]?.payload_json as Record<string, unknown> | undefined) ?? null;
+  } finally {
+    await pool.end();
+  }
+}
+
+async function readExecutionStatuses(config: LocalDbConfig, schema: string): Promise<string[]> {
+  const pool = new Pool({
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    password: config.password,
+    ssl: false,
+  });
+
+  try {
+    const query = `SELECT status FROM "${schema}"."executions" ORDER BY created_at ASC`;
+    const result = await pool.query(query);
+    return result.rows.map((row) => String(row.status));
+  } finally {
+    await pool.end();
+  }
+}
+
+async function readExecutionArtifactTypes(config: LocalDbConfig, schema: string): Promise<string[]> {
+  const pool = new Pool({
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    password: config.password,
+    ssl: false,
+  });
+
+  try {
+    const query = `SELECT artifact_type FROM "${schema}"."execution_artifacts" ORDER BY created_at ASC`;
+    const result = await pool.query(query);
+    return result.rows.map((row) => String(row.artifact_type));
   } finally {
     await pool.end();
   }
@@ -726,6 +782,83 @@ run("I-14 retrieval coarse ranking se mantiene determinista en corpus grande", a
   assert.equal(byIds.length, 120);
   assert.equal(byIds[0].chunk_index, 0);
   assert.equal(byIds[1].chunk_index, 1);
+
+  await adapter.dispose();
+});
+
+run("I-15 executions soporta estados ok/error/cancelled y artifacts tematicos", async () => {
+  const schema = makeSchemaName("local_private_it");
+  const config = baseConfig(schema);
+  const adapter = new PostgresPersistenceAdapter({ config, extensionPath: process.cwd() });
+  await adapter.healthcheck();
+
+  const project = await adapter.ensureProject({
+    operation_profile: "local_private",
+    workspace_root: "/workspace",
+    repo_root: "/workspace/repo",
+    branch: "main",
+  });
+  const task = makeTask();
+  await adapter.saveTask({ project_id: project.id, task, status: "draft" });
+
+  const okExecution = makeExecution();
+  const errorExecution: CodexExecutionResult = {
+    ...makeExecution(),
+    ok: false,
+    cancelled: false,
+    exit_code: 2,
+    error: "Command exited with code 2",
+  };
+  const cancelledExecution: CodexExecutionResult = {
+    ...makeExecution(),
+    ok: false,
+    cancelled: true,
+    exit_code: null,
+    error: "Execution cancelled by user.",
+  };
+
+  const runOk = await adapter.saveExecution({
+    project_id: project.id,
+    task_id: task.id,
+    result: okExecution,
+  });
+  await adapter.saveExecution({
+    project_id: project.id,
+    task_id: task.id,
+    result: errorExecution,
+  });
+  await adapter.saveExecution({
+    project_id: project.id,
+    task_id: task.id,
+    result: cancelledExecution,
+  });
+
+  await adapter.saveExecutionArtifact({
+    project_id: project.id,
+    execution_id: runOk.id,
+    artifact_type: "codex_exec_prompt",
+    content: "prompt",
+    metadata: { v: 1 },
+  });
+  await adapter.saveExecutionArtifact({
+    project_id: project.id,
+    execution_id: runOk.id,
+    artifact_type: "codex_exec_trace",
+    content: "trace",
+    metadata: { v: 1 },
+  });
+  await adapter.saveExecutionArtifact({
+    project_id: project.id,
+    execution_id: runOk.id,
+    artifact_type: "codex_exec_result",
+    content: "result",
+    metadata: { v: 1 },
+  });
+
+  const statuses = await readExecutionStatuses(config, schema);
+  assert.deepEqual(statuses, ["ok", "error", "cancelled"]);
+  const artifactTypes = await readExecutionArtifactTypes(config, schema);
+  assert.deepEqual(artifactTypes, ["codex_exec_prompt", "codex_exec_trace", "codex_exec_result"]);
 
   await adapter.dispose();
 });

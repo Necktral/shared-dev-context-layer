@@ -8,8 +8,9 @@ import type {
   TaskBuilderPort,
   WorkspaceIndexerPort,
 } from "./ports";
+import { capText, countLines, sha256Hex } from "./execution/codexExecutionUtils";
 import { InMemoryLocalRuntimeStore } from "./localRuntimeStore";
-import type { LocalCommandName, LocalCommandResult, OperationProfile, ProjectRuntimeSnapshot } from "./types";
+import type { CodexExecutionResult, LocalCommandName, LocalCommandResult, OperationProfile, ProjectRuntimeSnapshot } from "./types";
 
 export interface EnvironmentInspectorPort {
   inspect(): Promise<EnvironmentSnapshot>;
@@ -26,6 +27,14 @@ export interface LocalCommandServiceDeps {
   getOperationProfile: () => OperationProfile;
   getCodexCliCommand: () => string;
 }
+
+export interface LocalRunCodexOptions {
+  abortSignal?: AbortSignal;
+}
+
+const PROMPT_ARTIFACT_MAX_CHARS = 12_000;
+const TRACE_ARTIFACT_MAX_CHARS = 18_000;
+const RESULT_ARTIFACT_MAX_CHARS = 6_000;
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -258,7 +267,7 @@ export class LocalCommandService {
     }
   }
 
-  public async localRunCodex(): Promise<LocalCommandResult> {
+  public async localRunCodex(options?: LocalRunCodexOptions): Promise<LocalCommandResult> {
     const blocked = this.ensureLocalProfile("local_run_codex");
     if (blocked) {
       return blocked;
@@ -298,19 +307,28 @@ export class LocalCommandService {
 
       const project = await this.ensureProjectFromEnvironment(environment);
       const command = this.deps.getCodexCliCommand().trim() || "codex";
-      const healthResult = await this.deps.codexRunner.healthcheck(command);
+      const healthResult = await this.deps.codexRunner.healthcheck(command, {
+        abortSignal: options?.abortSignal,
+      });
+
+      const executionRequest = {
+        task: draft,
+        repo_root: environment.repo_root,
+        workspace_root: environment.workspace_root,
+        branch: environment.branch,
+        active_file: environment.active_file,
+      };
 
       const execution = healthResult.ok
-        ? await this.deps.codexRunner.run({ task: draft }, command)
-        : {
-            ...healthResult,
-            mode: "run" as const,
-            request_preview: {
-              task_id: draft.id,
-              objective: draft.objective,
-              health_error: healthResult.error,
-            },
-          };
+        ? options?.abortSignal?.aborted
+          ? this.cancelledExecution(command, draft.id, draft.objective, "Cancelled before run started.")
+          : await this.deps.codexRunner.run(executionRequest, command, {
+              abortSignal: options?.abortSignal,
+            })
+        : this.failedRunFromHealthcheck(healthResult, draft.id, draft.objective);
+
+      const executionMessage = this.executionMessage(execution);
+      const executionSeverity = this.executionSeverity(execution);
 
       const persisted = await this.deps.persistence.runInTransaction(async (tx) => {
         const executionRecord = await tx.saveExecution({
@@ -319,24 +337,72 @@ export class LocalCommandService {
           result: execution,
         });
 
-        const artifactRecord = await tx.saveExecutionArtifact({
+        const prompt = this.extractPromptFromPreview(execution.request_preview);
+        const promptContent = capText(prompt, PROMPT_ARTIFACT_MAX_CHARS);
+        const promptArtifact = await tx.saveExecutionArtifact({
           project_id: project.id,
           execution_id: executionRecord.id,
-          artifact_type: "codex_cli_result",
-          content: JSON.stringify(
+          artifact_type: "codex_exec_prompt",
+          content: promptContent,
+          metadata: {
+            version: "codex_exec_prompt_v1",
+            prompt_hash: sha256Hex(promptContent),
+            prompt_chars: promptContent.length,
+            prompt_lines: countLines(promptContent),
+            capped: prompt.length > promptContent.length,
+          },
+        });
+
+        const traceContent = capText(
+          JSON.stringify(
             {
-              stdout: execution.stdout,
+              version: "codex_exec_trace_v1",
+              thread_id: execution.thread_id,
+              events_count: execution.events_count,
+              warnings_count: execution.warnings_count,
+              usage_tokens: execution.usage_tokens,
+              stdout_jsonl: execution.stdout,
               stderr: execution.stderr,
+              warning_reasons: this.extractWarningReasonsFromPreview(execution.request_preview),
             },
             null,
             2,
           ),
+          TRACE_ARTIFACT_MAX_CHARS,
+        );
+        const traceArtifact = await tx.saveExecutionArtifact({
+          project_id: project.id,
+          execution_id: executionRecord.id,
+          artifact_type: "codex_exec_trace",
+          content: traceContent,
           metadata: {
+            version: "codex_exec_trace_v1",
+            trace_hash: sha256Hex(traceContent),
+            trace_chars: traceContent.length,
+            trace_lines: countLines(traceContent),
+          },
+        });
+
+        const finalMessage = execution.final_message ?? "";
+        const resultContent = capText(finalMessage, RESULT_ARTIFACT_MAX_CHARS);
+        const resultArtifact = await tx.saveExecutionArtifact({
+          project_id: project.id,
+          execution_id: executionRecord.id,
+          artifact_type: "codex_exec_result",
+          content: resultContent,
+          metadata: {
+            version: "codex_exec_result_v1",
+            final_message_hash: sha256Hex(resultContent),
+            final_message_chars: resultContent.length,
+            final_message_lines: countLines(resultContent),
+            capped: finalMessage.length > resultContent.length,
             command: execution.command,
             command_line: execution.command_line,
             mode: execution.mode,
             exit_code: execution.exit_code,
             duration_ms: execution.duration_ms,
+            cancelled: execution.cancelled,
+            warnings_count: execution.warnings_count,
             error: execution.error,
           },
         });
@@ -346,19 +412,23 @@ export class LocalCommandService {
           task_id: draft.id,
           execution_id: executionRecord.id,
           event_type: "local_run_codex",
-          severity: execution.ok ? "info" : "error",
-          message: execution.ok ? "Ejecución Codex completada." : "Ejecución Codex falló.",
+          severity: executionSeverity,
+          message: executionMessage,
           payload: {
             command: execution.command,
             command_line: execution.command_line,
             exit_code: execution.exit_code,
+            cancelled: execution.cancelled,
+            warnings_count: execution.warnings_count,
             error: execution.error,
           },
         });
 
         return {
           execution: executionRecord,
-          artifact: artifactRecord,
+          promptArtifact,
+          traceArtifact,
+          resultArtifact,
           event: eventRecord,
         };
       });
@@ -366,17 +436,26 @@ export class LocalCommandService {
       const result = this.makeResult(
         "local_run_codex",
         execution.ok ? "ok" : "error",
-        execution.ok ? "Ejecución Codex completada." : "Ejecución Codex falló.",
+        executionMessage,
         {
           project_id: project.id,
           task_id: draft.id,
           execution_id: persisted.execution.id,
-          artifact_id: persisted.artifact.id,
+          artifact_id: persisted.resultArtifact.id,
+          prompt_artifact_id: persisted.promptArtifact.id,
+          trace_artifact_id: persisted.traceArtifact.id,
+          result_artifact_id: persisted.resultArtifact.id,
           event_id: persisted.event.id,
           command: execution.command,
           command_line: execution.command_line,
           exit_code: execution.exit_code,
           duration_ms: execution.duration_ms,
+          cancelled: execution.cancelled,
+          final_message: execution.final_message,
+          thread_id: execution.thread_id,
+          events_count: execution.events_count,
+          warnings_count: execution.warnings_count,
+          usage_tokens: execution.usage_tokens,
           error: execution.error,
         },
       );
@@ -491,5 +570,97 @@ export class LocalCommandService {
       errors: isError ? [...current.errors, result.message].slice(-8) : current.errors,
       updated_at: new Date().toISOString(),
     }));
+  }
+
+  private failedRunFromHealthcheck(
+    healthcheck: CodexExecutionResult,
+    taskId: string,
+    objective: string,
+  ): CodexExecutionResult {
+    return {
+      ...healthcheck,
+      mode: "run",
+      ok: false,
+      cancelled: healthcheck.cancelled,
+      final_message: null,
+      thread_id: null,
+      events_count: 0,
+      usage_tokens: null,
+      request_preview: {
+        task_id: taskId,
+        objective,
+        health_error: healthcheck.error,
+      },
+    };
+  }
+
+  private cancelledExecution(
+    command: string,
+    taskId: string,
+    objective: string,
+    reason: string,
+  ): CodexExecutionResult {
+    const now = new Date().toISOString();
+    return {
+      mode: "run",
+      ok: false,
+      cancelled: true,
+      command,
+      command_line: command,
+      exit_code: null,
+      stdout: "",
+      stderr: "",
+      final_message: null,
+      thread_id: null,
+      events_count: 0,
+      warnings_count: 0,
+      usage_tokens: null,
+      started_at: now,
+      finished_at: now,
+      duration_ms: 0,
+      error: reason,
+      request_preview: {
+        task_id: taskId,
+        objective,
+        cancel_reason: reason,
+      },
+    };
+  }
+
+  private executionSeverity(execution: CodexExecutionResult): "info" | "warning" | "error" {
+    if (execution.cancelled || !execution.ok) {
+      return "error";
+    }
+    if (execution.warnings_count > 0) {
+      return "warning";
+    }
+    return "info";
+  }
+
+  private executionMessage(execution: CodexExecutionResult): string {
+    if (execution.cancelled) {
+      return "Ejecucion Codex cancelada por usuario.";
+    }
+    if (execution.ok && execution.warnings_count > 0) {
+      return "Ejecucion Codex completada con advertencias.";
+    }
+    return execution.ok ? "Ejecucion Codex completada." : "Ejecucion Codex fallo.";
+  }
+
+  private extractPromptFromPreview(preview: Record<string, unknown> | null): string {
+    if (!preview || typeof preview.prompt !== "string") {
+      return "";
+    }
+    return preview.prompt;
+  }
+
+  private extractWarningReasonsFromPreview(preview: Record<string, unknown> | null): string[] {
+    if (!preview || !Array.isArray(preview.stderr_warning_reasons)) {
+      return [];
+    }
+    return preview.stderr_warning_reasons
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
   }
 }
