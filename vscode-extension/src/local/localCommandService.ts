@@ -8,6 +8,7 @@ import type {
   TaskBuilderPort,
   WorkspaceIndexerPort,
 } from "./ports";
+import { validateCodexExecutableCommand } from "./codexCommandValidation";
 import { capText, countLines, sha256Hex } from "./execution/codexExecutionUtils";
 import { InMemoryLocalRuntimeStore } from "./localRuntimeStore";
 import type { CodexExecutionResult, LocalCommandName, LocalCommandResult, OperationProfile, ProjectRuntimeSnapshot } from "./types";
@@ -306,7 +307,26 @@ export class LocalCommandService {
       }
 
       const project = await this.ensureProjectFromEnvironment(environment);
-      const command = this.deps.getCodexCliCommand().trim() || "codex";
+      const commandValidation = validateCodexExecutableCommand(this.deps.getCodexCliCommand());
+      if (!commandValidation.ok) {
+        const eventId = await this.recordInvalidCommandConfigurationEvent(project.id, draft.id, commandValidation);
+        const invalidConfig = this.makeResult(
+          "local_run_codex",
+          "error",
+          "Configuración inválida de wisContextSync.codexCliCommand. Usa solo el ejecutable/ruta, sin argumentos embebidos.",
+          {
+            project_id: project.id,
+            task_id: draft.id,
+            event_id: eventId,
+            error_code: commandValidation.error_code,
+            configured_command: commandValidation.configured_command,
+            error: commandValidation.reason,
+          },
+        );
+        this.pushResult(invalidConfig, true);
+        return invalidConfig;
+      }
+      const command = commandValidation.executable;
       const healthResult = await this.deps.codexRunner.healthcheck(command, {
         abortSignal: options?.abortSignal,
       });
@@ -662,5 +682,34 @@ export class LocalCommandService {
       .filter((entry): entry is string => typeof entry === "string")
       .map((entry) => entry.trim())
       .filter((entry) => entry.length > 0);
+  }
+
+  private async recordInvalidCommandConfigurationEvent(
+    projectId: string,
+    taskId: string,
+    invalidCommand: {
+      error_code: "invalid_command_configuration";
+      configured_command: string;
+      reason: string;
+    },
+  ): Promise<string | null> {
+    try {
+      const event = await this.deps.persistence.saveEvent({
+        project_id: projectId,
+        task_id: taskId,
+        execution_id: null,
+        event_type: "local_run_codex",
+        severity: "error",
+        message: "Configuración inválida de codexCliCommand.",
+        payload: {
+          error_code: invalidCommand.error_code,
+          configured_command: invalidCommand.configured_command,
+          reason: invalidCommand.reason,
+        },
+      });
+      return event.id;
+    } catch {
+      return null;
+    }
   }
 }

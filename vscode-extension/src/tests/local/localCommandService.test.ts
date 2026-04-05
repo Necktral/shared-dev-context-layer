@@ -551,3 +551,40 @@ test("LocalCommandService marca cancelación cuando signal ya está abortada", a
   assert.equal(result.details?.cancelled, true);
   assert.equal(persistence.savedEvents[0]?.severity, "error");
 });
+
+test("LocalCommandService rechaza codexCliCommand compuesto con error trazable", async () => {
+  let profile: OperationProfile = "local_private";
+  const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
+  const persistence = new FakePersistence();
+  let runnerInvoked = false;
+
+  const service = new LocalCommandService({
+    inspector: { inspect: async () => environment() },
+    store,
+    indexer: new NoopIndexer(),
+    retriever: new NoopRetriever(),
+    taskBuilder: new NoopTaskBuilder(),
+    codexRunner: {
+      healthcheck: async () => {
+        runnerInvoked = true;
+        return okExecution("healthcheck");
+      },
+      run: async () => {
+        runnerInvoked = true;
+        return okExecution("run");
+      },
+    },
+    persistence,
+    getOperationProfile: () => profile,
+    getCodexCliCommand: () => "codex --profile dev",
+  });
+
+  await service.localPrepareTask("Probar invalid command");
+  const result = await service.localRunCodex();
+  assert.equal(result.status, "error");
+  assert.equal(result.details?.error_code, "invalid_command_configuration");
+  assert.match(String(result.details?.error ?? ""), /sin argumentos embebidos/i);
+  assert.equal(runnerInvoked, false);
+  assert.equal(persistence.savedEvents[0]?.severity, "error");
+  assert.equal(persistence.savedEvents[0]?.event_type, "local_run_codex");
+});
