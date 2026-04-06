@@ -1239,3 +1239,92 @@ run("I-20 idempotency claim-at-start soporta claimed/in_progress/completed/recla
 
   await adapter.dispose();
 });
+
+run("I-21 operator review persistence guarda decision + artifact coherentes con execution/task", async () => {
+  const schema = makeSchemaName("local_private_it");
+  const config = baseConfig(schema);
+  const adapter = new PostgresPersistenceAdapter({ config, extensionPath: process.cwd() });
+  await adapter.healthcheck();
+
+  const project = await adapter.ensureProject({
+    operation_profile: "local_private",
+    workspace_root: "/workspace",
+    repo_root: "/workspace/repo",
+    branch: "main",
+  });
+  const task = makeTask();
+  await adapter.saveTask({
+    project_id: project.id,
+    task,
+    status: "draft",
+    lifecycle_state: "prepared",
+  });
+  const execution = await adapter.saveExecution({
+    project_id: project.id,
+    task_id: task.id,
+    result: makeExecution(),
+    idempotency_key: "idem-op-review",
+  });
+
+  await adapter.saveExecutionArtifact({
+    project_id: project.id,
+    execution_id: execution.id,
+    artifact_type: "post_run_operator_decision",
+    content: JSON.stringify(
+      {
+        review_decision: "accept",
+        source_execution_id: execution.id,
+        source_task_id: task.id,
+      },
+      null,
+      2,
+    ),
+    metadata: {
+      version: "post_run_operator_decision_v1",
+      review_decision: "accept",
+    },
+  });
+  await adapter.saveDecision({
+    project_id: project.id,
+    title: "Operator review: accept",
+    statement: "Decision: accept.",
+    source: `execution:${execution.id}`,
+  });
+
+  const pool = new Pool({
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    password: config.password,
+    ssl: false,
+  });
+  try {
+    const artifactResult = await pool.query(
+      `SELECT execution_id, artifact_type
+       FROM "${schema}"."execution_artifacts"
+       WHERE execution_id = $1
+         AND artifact_type = 'post_run_operator_decision'
+       LIMIT 1`,
+      [execution.id],
+    );
+    assert.equal(artifactResult.rows.length, 1);
+    assert.equal(String(artifactResult.rows[0].execution_id), execution.id);
+    assert.equal(String(artifactResult.rows[0].artifact_type), "post_run_operator_decision");
+
+    const decisionResult = await pool.query(
+      `SELECT project_id, source, title
+       FROM "${schema}"."decisions"
+       WHERE source = $1
+       LIMIT 1`,
+      [`execution:${execution.id}`],
+    );
+    assert.equal(decisionResult.rows.length, 1);
+    assert.equal(String(decisionResult.rows[0].project_id), project.id);
+    assert.equal(String(decisionResult.rows[0].title), "Operator review: accept");
+  } finally {
+    await pool.end();
+  }
+
+  await adapter.dispose();
+});

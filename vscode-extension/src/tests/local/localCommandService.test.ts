@@ -107,6 +107,8 @@ class FakePersistence implements PersistencePort {
 
   public savedEvents: SaveEventInput[] = [];
 
+  public savedDecisions: SaveDecisionInput[] = [];
+
   public readonly idempotencyStore = new Map<string, Record<string, unknown>>();
 
   public taskStates = new Map<string, string>();
@@ -241,6 +243,7 @@ class FakePersistence implements PersistencePort {
   }
 
   public async saveDecision(input: SaveDecisionInput): Promise<PersistedDecision> {
+    this.savedDecisions.push(input);
     return {
       id: "decision-1",
       project_id: input.project_id,
@@ -691,9 +694,11 @@ test("LocalCommandService en local_private prepara tarea y ejecuta Codex con per
   assert.equal(typeof executed.details?.result_artifact_id, "string");
   assert.equal(executed.details?.warnings_count, 0);
   assert.equal(executed.details?.classified_outcome, "applied_changes");
+  assert.equal(executed.details?.review_decision, "accept");
+  assert.equal(typeof executed.details?.next_action_plan, "string");
   assert.equal(executed.details?.changed_files_count, 1);
   assert.equal(executed.details?.reindex_status, "scoped:ok");
-  assert.equal(persistence.savedExecutionArtifacts.length, 10);
+  assert.equal(persistence.savedExecutionArtifacts.length, 11);
   assert.deepEqual(
     persistence.savedExecutionArtifacts.map((artifact) => artifact.artifact_type),
     [
@@ -707,9 +712,13 @@ test("LocalCommandService en local_private prepara tarea y ejecuta Codex con per
       "execution_outcome_classification",
       "post_run_reindex_summary",
       "post_run_review_payload",
+      "post_run_operator_decision",
     ],
   );
+  assert.equal(persistence.savedDecisions.length, 1);
+  assert.equal(persistence.savedDecisions[0]?.title, "Operator review: accept");
   assert.equal(persistence.savedEvents[0]?.severity, "info");
+  assert.equal(persistence.savedEvents[0]?.payload?.review_decision, "accept");
 });
 
 test("LocalCommandService pasa projectId al retriever y persiste retrieved_context", async () => {
