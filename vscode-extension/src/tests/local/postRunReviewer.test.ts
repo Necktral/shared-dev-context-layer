@@ -101,6 +101,34 @@ test("PostRunReviewer decide needs_manual_review cuando applied_changes tiene de
   assert.ok(reviewed.reason_codes.includes("deleted_files_present"));
 });
 
+test("PostRunReviewer escala a needs_manual_review cuando reindex no es ok", async () => {
+  const reviewer = new PostRunReviewer();
+  const input = baseInput();
+  input.reindex_result.ok = false;
+  input.reindex_result.status = "error";
+  input.reindex_result.error = "index error";
+  input.reindex_result.message = "error";
+  const reviewed = await reviewer.review(input);
+  assert.equal(reviewed.review_decision, "needs_manual_review");
+  assert.ok(reviewed.reason_codes.includes("reindex_not_ok"));
+  assert.ok(reviewed.reason_codes.includes("decision_escalated_reindex_risk"));
+  assert.ok(reviewed.review_risks.includes("Reindex post-run no exitoso."));
+});
+
+test("PostRunReviewer escala a needs_manual_review cuando reindex usa fallback_full", async () => {
+  const reviewer = new PostRunReviewer();
+  const input = baseInput();
+  input.reindex_result.mode = "fallback_full";
+  input.reindex_result.trigger_reason = "fallback";
+  const reviewed = await reviewer.review(input);
+  assert.equal(reviewed.review_decision, "needs_manual_review");
+  assert.ok(reviewed.reason_codes.includes("reindex_fallback_full"));
+  assert.ok(reviewed.reason_codes.includes("decision_escalated_reindex_risk"));
+  assert.ok(
+    reviewed.review_risks.includes("Reindex post-run ejecutado en modo fallback_full; validar cobertura del cambio."),
+  );
+});
+
 test("PostRunReviewer cubre matriz base de outcomes", async () => {
   const reviewer = new PostRunReviewer();
   const blocked = await reviewer.review({

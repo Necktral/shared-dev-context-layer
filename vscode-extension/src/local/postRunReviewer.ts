@@ -51,6 +51,8 @@ export class PostRunReviewer implements PostRunReviewerPort {
     const reasonCodes: string[] = [];
     const warningsCount = input.execution_result.warnings_count;
     const deletedFilesCount = input.workspace_diff.deleted_files.length;
+    const reindexFallbackFull = input.reindex_result.mode === "fallback_full";
+    const reindexNotOk = !input.reindex_result.ok;
 
     reasonCodes.push(`outcome:${input.classified_outcome}`);
 
@@ -87,11 +89,18 @@ export class PostRunReviewer implements PostRunReviewerPort {
         break;
     }
 
-    if (input.reindex_result.mode === "fallback_full") {
+    if (reindexFallbackFull) {
       reasonCodes.push("reindex_fallback_full");
     }
-    if (!input.reindex_result.ok) {
+    if (reindexNotOk) {
       reasonCodes.push("reindex_not_ok");
+    }
+    if (
+      (decision === "accept" || decision === "accept_with_warnings") &&
+      (reindexFallbackFull || reindexNotOk)
+    ) {
+      decision = "needs_manual_review";
+      reasonCodes.push("decision_escalated_reindex_risk");
     }
     if (warningsCount > 0 && !reasonCodes.includes("warnings_present")) {
       reasonCodes.push("warnings_present");
@@ -101,7 +110,8 @@ export class PostRunReviewer implements PostRunReviewerPort {
     const reviewRisks = normalizeUnique([
       ...input.review_payload.pending_risks,
       ...(deletedFilesCount > 0 ? ["Hay archivos borrados; validar impacto lateral."] : []),
-      ...(!input.reindex_result.ok ? ["Reindex post-run no exitoso."] : []),
+      ...(reindexFallbackFull ? ["Reindex post-run ejecutado en modo fallback_full; validar cobertura del cambio."] : []),
+      ...(reindexNotOk ? ["Reindex post-run no exitoso."] : []),
     ]);
 
     const reviewSummary = [

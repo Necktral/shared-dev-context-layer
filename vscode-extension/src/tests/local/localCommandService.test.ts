@@ -615,11 +615,17 @@ function buildReconciliationResult(execution: CodexExecutionResult): PostRunReco
   };
 }
 
-function createFakePostRunReconciler() {
+function createFakePostRunReconciler(
+  mutate?: (
+    reconciled: PostRunReconciliationResult,
+    execution: CodexExecutionResult,
+  ) => PostRunReconciliationResult,
+) {
   return {
     reconcile: async (request: PostRunReconcileRequest) => {
       const execution = await request.execute();
-      return buildReconciliationResult(execution);
+      const reconciled = buildReconciliationResult(execution);
+      return mutate ? mutate(reconciled, execution) : reconciled;
     },
   };
 }
@@ -719,6 +725,62 @@ test("LocalCommandService en local_private prepara tarea y ejecuta Codex con per
   assert.equal(persistence.savedDecisions[0]?.title, "Operator review: accept");
   assert.equal(persistence.savedEvents[0]?.severity, "info");
   assert.equal(persistence.savedEvents[0]?.payload?.review_decision, "accept");
+});
+
+test("LocalCommandService escala review cuando reindex termina degradado", async () => {
+  let profile: OperationProfile = "local_private";
+  const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
+  const persistence = new FakePersistence();
+
+  const service = new LocalCommandService({
+    inspector: { inspect: async () => environment() },
+    store,
+    indexer: new NoopIndexer(),
+    retriever: new NoopRetriever(),
+    taskBuilder: new NoopTaskBuilder(),
+    postRunReconciler: createFakePostRunReconciler((reconciled) => ({
+      ...reconciled,
+      reindex_result: {
+        ...reconciled.reindex_result,
+        mode: "fallback_full",
+        status: "error",
+        ok: false,
+        message: "fallback with error",
+        trigger_reason: "reindex_failed",
+        error: "reindex failed",
+      },
+      reindex_plan: {
+        ...reconciled.reindex_plan,
+        mode: "fallback_full",
+        status: "error",
+        trigger_reason: "reindex_failed",
+      },
+    })),
+    codexRunner: {
+      healthcheck: async () => okExecution("healthcheck"),
+      run: async () => okExecution("run"),
+    },
+    persistence,
+    getOperationProfile: () => profile,
+    getCodexCliCommand: () => "codex",
+  });
+
+  await service.localPrepareTask("Run con degradación de reindex");
+  const executed = await service.localRunCodex();
+
+  assert.equal(executed.status, "ok");
+  assert.equal(executed.details?.review_decision, "needs_manual_review");
+  assert.equal(typeof executed.details?.next_action_plan, "string");
+  assert.equal(executed.details?.next_review_hint, executed.details?.next_action_plan);
+  const reasonCodes = executed.details?.review_reason_codes;
+  assert.ok(Array.isArray(reasonCodes));
+  assert.ok((reasonCodes as string[]).includes("reindex_not_ok"));
+  assert.ok((reasonCodes as string[]).includes("reindex_fallback_full"));
+  assert.ok((reasonCodes as string[]).includes("decision_escalated_reindex_risk"));
+  assert.equal(persistence.savedEvents[0]?.payload?.review_decision, "needs_manual_review");
+  const eventReasonCodes = persistence.savedEvents[0]?.payload?.review_reason_codes;
+  assert.ok(Array.isArray(eventReasonCodes));
+  assert.ok((eventReasonCodes as string[]).includes("reindex_not_ok"));
 });
 
 test("LocalCommandService pasa projectId al retriever y persiste retrieved_context", async () => {
