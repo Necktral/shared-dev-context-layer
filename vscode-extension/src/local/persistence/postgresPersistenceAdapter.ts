@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { Pool } from "pg";
 import type { LocalDbConfig } from "../../config";
 import type {
+  AcquireProjectRunLockInput,
   ChunkRecord,
   CompleteIndexRunInput,
   CreateIndexRunInput,
@@ -21,9 +22,12 @@ import type {
   PersistenceHealthcheck,
   PersistencePort,
   PersistenceTransactionPort,
+  ReleaseProjectRunLockInput,
+  ResolveIdempotentResultInput,
   RetrievedIndexedChunk,
   RetrievedIndexedFileCandidate,
   SaveDecisionInput,
+  SaveIdempotentResultInput,
   SaveEventInput,
   SaveExecutionArtifactInput,
   SaveExecutionInput,
@@ -31,9 +35,11 @@ import type {
   SaveTaskInput,
   SearchFileChunksInput,
   SearchIndexedFilesInput,
+  TransitionTaskStateInput,
   UpdateIndexRunMetricsInput,
   UpsertIndexedFileInput,
 } from "../ports";
+import type { TaskLifecycleState } from "../types";
 
 export interface PostgresPersistenceAdapterOptions {
   config: LocalDbConfig;
@@ -644,23 +650,31 @@ export class PostgresPersistenceAdapter implements PersistencePort {
   public async saveTask(input: SaveTaskInput): Promise<PersistedTask> {
     await this.ensureMigrations();
     const table = this.table("tasks");
+    const lifecycleState: TaskLifecycleState = input.lifecycle_state ?? "draft";
     const payload = {
+      version: "task_spec_v2",
       objective: input.task.objective,
       context_summary: input.task.context_summary,
       candidate_files: input.task.candidate_files,
       constraints: input.task.constraints,
       acceptance_criteria: input.task.acceptance_criteria,
       execution_brief: input.task.execution_brief ?? null,
+      retrieval_context_ref: input.retrieval_context_ref ?? null,
+      lifecycle_state: lifecycleState,
+      idempotency_key: input.idempotency_key ?? null,
     };
 
     await this.query(
-      `INSERT INTO ${table} (id, project_id, objective, context_summary, status, payload_json, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)
+      `INSERT INTO ${table} (id, project_id, objective, context_summary, status, lifecycle_state, retrieval_context_ref, idempotency_key, payload_json, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11)
        ON CONFLICT (id)
        DO UPDATE SET
          objective = EXCLUDED.objective,
          context_summary = EXCLUDED.context_summary,
          status = EXCLUDED.status,
+         lifecycle_state = EXCLUDED.lifecycle_state,
+         retrieval_context_ref = EXCLUDED.retrieval_context_ref,
+         idempotency_key = EXCLUDED.idempotency_key,
          payload_json = EXCLUDED.payload_json,
          updated_at = EXCLUDED.updated_at`,
       [
@@ -669,6 +683,9 @@ export class PostgresPersistenceAdapter implements PersistencePort {
         input.task.objective,
         input.task.context_summary,
         input.status,
+        lifecycleState,
+        input.retrieval_context_ref ?? null,
+        input.idempotency_key ?? null,
         JSON.stringify(payload),
         input.task.created_at,
         nowIso(),
@@ -678,6 +695,7 @@ export class PostgresPersistenceAdapter implements PersistencePort {
     return {
       id: input.task.id,
       project_id: input.project_id,
+      state: lifecycleState,
     };
   }
 
@@ -758,6 +776,139 @@ export class PostgresPersistenceAdapter implements PersistencePort {
   public async saveEvent(input: SaveEventInput): Promise<PersistedEvent> {
     await this.ensureMigrations();
     return this.saveEventWithClient(this.pool, input);
+  }
+
+  public async getTaskLifecycleState(project_id: string, task_id: string): Promise<TaskLifecycleState | null> {
+    await this.ensureMigrations();
+    const table = this.table("tasks");
+    const result = await this.query(
+      `SELECT lifecycle_state
+       FROM ${table}
+       WHERE id = $1
+         AND project_id = $2
+       LIMIT 1`,
+      [task_id, project_id],
+    );
+    if (result.rows.length === 0) {
+      return null;
+    }
+    const lifecycleState = result.rows[0].lifecycle_state;
+    return typeof lifecycleState === "string" ? (lifecycleState as TaskLifecycleState) : null;
+  }
+
+  public async transitionTaskState(input: TransitionTaskStateInput): Promise<void> {
+    await this.ensureMigrations();
+    const taskTable = this.table("tasks");
+    const transitionTable = this.table("task_state_transitions");
+    const now = nowIso();
+    const updated = await this.query(
+      `UPDATE ${taskTable}
+       SET lifecycle_state = $3,
+           updated_at = $4
+       WHERE id = $1
+         AND project_id = $2
+         AND ($5::text IS NULL OR lifecycle_state = $5)
+       RETURNING lifecycle_state`,
+      [input.task_id, input.project_id, input.to_state, now, input.from_state],
+    );
+    if (updated.rows.length === 0) {
+      throw new Error(
+        `Transición inválida o task no encontrada: task_id=${input.task_id}, from=${input.from_state ?? "null"}, to=${input.to_state}`,
+      );
+    }
+
+    await this.query(
+      `INSERT INTO ${transitionTable} (id, task_id, project_id, from_state, to_state, reason, execution_id, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        randomUUID(),
+        input.task_id,
+        input.project_id,
+        input.from_state,
+        input.to_state,
+        input.reason,
+        input.execution_id ?? null,
+        now,
+      ],
+    );
+  }
+
+  public async acquireProjectRunLock(input: AcquireProjectRunLockInput): Promise<boolean> {
+    await this.ensureMigrations();
+    const table = this.table("project_run_locks");
+    const now = nowIso();
+    const result = await this.query(
+      `INSERT INTO ${table} (project_id, lock_id, owner, acquired_at, heartbeat_at, expires_at)
+       VALUES ($1,$2,$3,$4,$4,$4::timestamptz + make_interval(secs => $5::int))
+       ON CONFLICT (project_id)
+       DO UPDATE SET
+         lock_id = EXCLUDED.lock_id,
+         owner = EXCLUDED.owner,
+         acquired_at = EXCLUDED.acquired_at,
+         heartbeat_at = EXCLUDED.heartbeat_at,
+         expires_at = EXCLUDED.expires_at
+       WHERE ${table}.expires_at <= $4::timestamptz
+       RETURNING project_id`,
+      [input.project_id, input.lock_id, input.owner, now, input.ttl_seconds],
+    );
+    return result.rows.length > 0;
+  }
+
+  public async releaseProjectRunLock(input: ReleaseProjectRunLockInput): Promise<void> {
+    await this.ensureMigrations();
+    const table = this.table("project_run_locks");
+    await this.query(
+      `DELETE FROM ${table}
+       WHERE project_id = $1
+         AND lock_id = $2`,
+      [input.project_id, input.lock_id],
+    );
+  }
+
+  public async resolveIdempotentResult(input: ResolveIdempotentResultInput): Promise<Record<string, unknown> | null> {
+    await this.ensureMigrations();
+    const table = this.table("idempotency_records");
+    const result = await this.query(
+      `SELECT response_json
+       FROM ${table}
+       WHERE project_id = $1
+         AND command = $2
+         AND idempotency_key = $3
+       LIMIT 1`,
+      [input.project_id, input.command, input.idempotency_key],
+    );
+    if (result.rows.length === 0) {
+      return null;
+    }
+    const response = result.rows[0].response_json;
+    if (!response || typeof response !== "object") {
+      return null;
+    }
+    return response as Record<string, unknown>;
+  }
+
+  public async saveIdempotentResult(input: SaveIdempotentResultInput): Promise<void> {
+    await this.ensureMigrations();
+    const table = this.table("idempotency_records");
+    const now = nowIso();
+    await this.query(
+      `INSERT INTO ${table} (id, project_id, command, idempotency_key, status, response_json, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$7)
+       ON CONFLICT (project_id, command, idempotency_key)
+       DO UPDATE SET
+         status = EXCLUDED.status,
+         response_json = EXCLUDED.response_json,
+         updated_at = EXCLUDED.updated_at`,
+      [
+        randomUUID(),
+        input.project_id,
+        input.command,
+        input.idempotency_key,
+        input.status,
+        JSON.stringify(input.response_json),
+        now,
+      ],
+    );
   }
 
   public async runInTransaction<T>(operation: (tx: PersistenceTransactionPort) => Promise<T>): Promise<T> {
@@ -942,10 +1093,11 @@ export class PostgresPersistenceAdapter implements PersistencePort {
     const executionId = randomUUID();
     const table = this.table("executions");
     const status = input.result.cancelled ? "cancelled" : input.result.ok ? "ok" : "error";
+    const timeout = /\btime(?:d)?\s*out\b/i.test(input.result.error ?? "") || /\btimeout\b/i.test(input.result.error ?? "");
     await client.query(
       `INSERT INTO ${table}
-       (id, task_id, project_id, status, command, command_line, exit_code, duration_ms, stdout, stderr, error, started_at, finished_at, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+       (id, task_id, project_id, status, command, command_line, exit_code, duration_ms, stdout, stderr, error, warnings_count, timeout, idempotency_key, outcome_json, started_at, finished_at, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16,$17,$18)`,
       [
         executionId,
         input.task_id,
@@ -958,6 +1110,10 @@ export class PostgresPersistenceAdapter implements PersistencePort {
         input.result.stdout,
         input.result.stderr,
         input.result.error,
+        input.result.warnings_count,
+        timeout,
+        input.idempotency_key ?? null,
+        JSON.stringify(input.outcome_classification ?? {}),
         input.result.started_at,
         input.result.finished_at,
         nowIso(),
@@ -998,21 +1154,52 @@ export class PostgresPersistenceAdapter implements PersistencePort {
   }
 
   private async saveEventWithClient(client: QueryClient, input: SaveEventInput): Promise<PersistedEvent> {
+    if (input.idempotency_key && input.idempotency_key.trim().length > 0) {
+      const existing = await client.query(
+        `SELECT id
+         FROM ${this.table("events")}
+         WHERE project_id = $1
+           AND event_type = $2
+           AND idempotency_key = $3
+         LIMIT 1`,
+        [input.project_id, input.event_type, input.idempotency_key],
+      );
+      if (existing.rows.length > 0) {
+        return {
+          id: String(existing.rows[0].id),
+          project_id: input.project_id,
+        };
+      }
+    }
+
     const eventId = randomUUID();
     const table = this.table("events");
+    let seqNo: number | null = input.seq_no ?? null;
+    if (input.execution_id && seqNo === null) {
+      const result = await client.query(
+        `SELECT COALESCE(MAX(seq_no), 0) + 1 AS next_seq
+         FROM ${table}
+         WHERE execution_id = $1`,
+        [input.execution_id],
+      );
+      seqNo = Number(result.rows[0]?.next_seq ?? 1);
+    }
+
     await client.query(
       `INSERT INTO ${table}
-       (id, project_id, task_id, execution_id, event_type, severity, message, payload_json, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)`,
+       (id, project_id, task_id, execution_id, seq_no, event_type, severity, message, payload_json, idempotency_key, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11)`,
       [
         eventId,
         input.project_id,
         input.task_id,
         input.execution_id,
+        seqNo,
         input.event_type,
         input.severity,
         input.message,
         JSON.stringify(input.payload),
+        input.idempotency_key ?? null,
         nowIso(),
       ],
     );

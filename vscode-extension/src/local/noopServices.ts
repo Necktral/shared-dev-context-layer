@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  AcquireProjectRunLockInput,
   ChunkRecord,
   ContextRetrieverPort,
   CreateIndexRunInput,
@@ -20,6 +21,7 @@ import type {
   RetrievalRequest,
   RetrievedContext,
   SaveDecisionInput,
+  SaveIdempotentResultInput,
   SaveEventInput,
   SaveExecutionArtifactInput,
   SaveExecutionInput,
@@ -27,12 +29,16 @@ import type {
   SaveTaskInput,
   SearchFileChunksInput,
   SearchIndexedFilesInput,
+  ReleaseProjectRunLockInput,
+  ResolveIdempotentResultInput,
+  TransitionTaskStateInput,
   TaskBuilderPort,
   WorkspaceIndexerPort,
   CompleteIndexRunInput,
   RetrievedIndexedChunk,
   RetrievedIndexedFileCandidate,
   WorkspaceIndexRequest,
+  WorkspaceIndexByPathsRequest,
   WorkspaceIndexResult,
   UpsertIndexedFileInput,
   UpdateIndexRunMetricsInput,
@@ -65,6 +71,19 @@ export class NoopIndexer implements WorkspaceIndexerPort {
         skipped: 0,
         chunksWritten: 0,
         errors: 0,
+      },
+    };
+  }
+
+  public async runIndexByPaths(request: WorkspaceIndexByPathsRequest): Promise<WorkspaceIndexResult> {
+    const result = await this.runIndex(request);
+    return {
+      ...result,
+      message: "Indexación local por paths no implementada aún (Noop baseline).",
+      details: {
+        ...result.details,
+        mode: "scoped",
+        target_paths: request.paths,
       },
     };
   }
@@ -241,6 +260,7 @@ export class NoopPersistence implements PersistencePort {
     return {
       id: input.task.id,
       project_id: input.project_id,
+      state: input.lifecycle_state ?? "draft",
     };
   }
 
@@ -279,6 +299,30 @@ export class NoopPersistence implements PersistencePort {
       id: randomUUID(),
       project_id: input.project_id,
     };
+  }
+
+  public async getTaskLifecycleState(_project_id: string, _task_id: string) {
+    return null;
+  }
+
+  public async transitionTaskState(_input: TransitionTaskStateInput): Promise<void> {
+    // No-op by design.
+  }
+
+  public async acquireProjectRunLock(_input: AcquireProjectRunLockInput): Promise<boolean> {
+    return true;
+  }
+
+  public async releaseProjectRunLock(_input: ReleaseProjectRunLockInput): Promise<void> {
+    // No-op by design.
+  }
+
+  public async resolveIdempotentResult(_input: ResolveIdempotentResultInput): Promise<Record<string, unknown> | null> {
+    return null;
+  }
+
+  public async saveIdempotentResult(_input: SaveIdempotentResultInput): Promise<void> {
+    // No-op by design.
   }
 
   public async runInTransaction<T>(operation: (tx: PersistenceTransactionPort) => Promise<T>): Promise<T> {

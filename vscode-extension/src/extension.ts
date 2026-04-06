@@ -61,6 +61,8 @@ import type { LocalCommandResult } from "./local/types";
 import { IncrementalWorkspaceIndexer } from "./local/indexing/incrementalWorkspaceIndexer";
 import { HybridContextRetriever } from "./local/retrieval/hybridContextRetriever";
 import { ContextAwareTaskBuilder } from "./local/taskBuilder/contextAwareTaskBuilder";
+import { WorkspaceSnapshotter } from "./local/workspaceSnapshotter";
+import { PostRunReconciler } from "./local/postRunReconciler";
 
 let outputChannel: vscode.OutputChannel | undefined;
 
@@ -220,12 +222,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     persistence: localPersistence,
     getIndexConfig: getLocalIndexConfig,
   });
+  const postRunReconciler = new PostRunReconciler({
+    snapshotter: new WorkspaceSnapshotter({
+      getIndexConfig: getLocalIndexConfig,
+    }),
+    indexer: localIndexer,
+  });
   const localCommandService = new LocalCommandService({
     inspector: environmentInspector,
     store: localStore,
     indexer: localIndexer,
     retriever: new HybridContextRetriever({ persistence: localPersistence }),
     taskBuilder: new ContextAwareTaskBuilder(),
+    postRunReconciler,
     codexRunner: new CodexCliRunner(),
     persistence: localPersistence,
     getOperationProfile,
