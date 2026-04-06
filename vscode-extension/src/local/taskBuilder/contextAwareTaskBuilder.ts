@@ -18,6 +18,24 @@ function buildContextSummary(context: RetrievedContext): string {
   return lines.join("\n");
 }
 
+function buildExecutionBrief(context: RetrievedContext, draft: Omit<LocalTaskDraft, "execution_brief">): LocalTaskDraft["execution_brief"] {
+  const keyEvidence = context.selected_chunks.slice(0, 4).map((chunk) => (
+    `${chunk.file_path}#${chunk.chunk_index}: ${compactSnippet(chunk.content, 160)}`
+  ));
+  if (keyEvidence.length === 0) {
+    keyEvidence.push(compactSnippet(context.summary, 220));
+  }
+
+  return {
+    version: "v2",
+    objective_compact: draft.objective.trim(),
+    candidate_files: draft.candidate_files.slice(0, 8),
+    key_evidence: keyEvidence,
+    run_constraints: draft.constraints.slice(0, 8),
+    acceptance_checks: draft.acceptance_criteria.slice(0, 8),
+  };
+}
+
 export class ContextAwareTaskBuilder implements TaskBuilderPort {
   public async buildTask(intent: string, context: RetrievedContext, _snapshot: ProjectRuntimeSnapshot): Promise<LocalTaskDraft> {
     const acceptanceCriteria = [
@@ -29,7 +47,7 @@ export class ContextAwareTaskBuilder implements TaskBuilderPort {
       acceptanceCriteria.push("La tarea usa evidencia recuperada del índice local en PostgreSQL.");
     }
 
-    return {
+    const draftBase: Omit<LocalTaskDraft, "execution_brief"> = {
       id: randomUUID(),
       objective: intent,
       context_summary: buildContextSummary(context),
@@ -40,6 +58,11 @@ export class ContextAwareTaskBuilder implements TaskBuilderPort {
       ],
       acceptance_criteria: acceptanceCriteria,
       created_at: new Date().toISOString(),
+    };
+
+    return {
+      ...draftBase,
+      execution_brief: buildExecutionBrief(context, draftBase),
     };
   }
 }

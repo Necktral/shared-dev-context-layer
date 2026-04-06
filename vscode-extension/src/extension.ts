@@ -61,6 +61,8 @@ import type { LocalCommandResult } from "./local/types";
 import { IncrementalWorkspaceIndexer } from "./local/indexing/incrementalWorkspaceIndexer";
 import { HybridContextRetriever } from "./local/retrieval/hybridContextRetriever";
 import { ContextAwareTaskBuilder } from "./local/taskBuilder/contextAwareTaskBuilder";
+import { WorkspaceSnapshotter } from "./local/workspaceSnapshotter";
+import { PostRunReconciler } from "./local/postRunReconciler";
 
 let outputChannel: vscode.OutputChannel | undefined;
 
@@ -220,12 +222,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     persistence: localPersistence,
     getIndexConfig: getLocalIndexConfig,
   });
+  const postRunReconciler = new PostRunReconciler({
+    snapshotter: new WorkspaceSnapshotter({
+      getIndexConfig: getLocalIndexConfig,
+    }),
+    indexer: localIndexer,
+  });
   const localCommandService = new LocalCommandService({
     inspector: environmentInspector,
     store: localStore,
     indexer: localIndexer,
     retriever: new HybridContextRetriever({ persistence: localPersistence }),
     taskBuilder: new ContextAwareTaskBuilder(),
+    postRunReconciler,
     codexRunner: new CodexCliRunner(),
     persistence: localPersistence,
     getOperationProfile,
@@ -584,7 +593,38 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   const localRunCodexDisposable = vscode.commands.registerCommand(COMMAND_LOCAL_RUN_CODEX, async () => {
-    await executeLocalCommand("WIS: Local Run Codex", async () => localCommandService.localRunCodex());
+    let cancelled = false;
+    const result = await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: "WIS: Local Run Codex",
+        cancellable: true,
+      },
+      async (progress, token) => {
+        progress.report({ message: "Ejecutando Codex CLI..." });
+        const controller = new AbortController();
+        token.onCancellationRequested(() => {
+          cancelled = true;
+          controller.abort();
+        });
+        return localCommandService.localRunCodex({ abortSignal: controller.signal });
+      },
+    );
+    localOutputRenderer.render(result, localStore.getSnapshot());
+    outputChannel?.show(true);
+    if (!result.ok) {
+      if (cancelled || result.details?.cancelled === true) {
+        await vscode.window.showWarningMessage("WIS: Local Run Codex cancelado.");
+        return;
+      }
+      if (result.status === "blocked") {
+        await vscode.window.showWarningMessage(result.message);
+        return;
+      }
+      await vscode.window.showErrorMessage(`WIS: Local Run Codex falló: ${result.message}`);
+      return;
+    }
+    await vscode.window.showInformationMessage("WIS: Local Run Codex completado.");
   });
 
   const localRefreshDisposable = vscode.commands.registerCommand(COMMAND_LOCAL_REFRESH, async () => {

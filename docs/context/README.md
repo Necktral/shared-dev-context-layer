@@ -28,8 +28,12 @@
 - Evidencia Slice 3C (`all_published`): `phase3/evidence/slice-3c-all-published/README.md`
 - Evidencia Phase 4 (read/write + OAuth): `phase4/evidence/README.md`
 - Internal release pack: `phase3/release-internal/README.md`
+- Blueprint V2 reliability: `ARCHITECTURE_V2_RELIABILITY.md`
+- ADR state machine: `ADR-EXECUTION-STATE-MACHINE.md`
+- ADR idempotency/locking: `ADR-IDEMPOTENCY-AND-LOCKING.md`
+- Runbook recovery/replay: `RUNBOOK-RECOVERY-AND-REPLAY.md`
 
 ## Roadmap corto
 
 - Estado actual: Slice 3A + Slice 4 baseline + write plane v0.2.0 con comandos MCP read/write.
-- Siguiente foco: hardening de claims privados y refinamiento de presentación.
+- Siguiente foco: hardening reliability-first del run plane local (locking, idempotencia, reconciliación determinista).

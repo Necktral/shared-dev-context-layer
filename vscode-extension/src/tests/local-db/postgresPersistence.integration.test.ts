@@ -80,6 +80,14 @@ function makeTask(): LocalTaskDraft {
     candidate_files: ["/workspace/repo/src/index.ts"],
     constraints: ["none"],
     acceptance_criteria: ["saved"],
+    execution_brief: {
+      version: "v2",
+      objective_compact: "Persistir draft local",
+      candidate_files: ["src/index.ts"],
+      key_evidence: ["src/index.ts#0: export const value = 1;"],
+      run_constraints: ["none"],
+      acceptance_checks: ["saved"],
+    },
     created_at: new Date().toISOString(),
   };
 }
@@ -88,11 +96,21 @@ function makeExecution(): CodexExecutionResult {
   return {
     mode: "run",
     ok: true,
+    cancelled: false,
     command: "node",
     command_line: "node --version",
     exit_code: 0,
     stdout: "v20",
     stderr: "",
+    final_message: "ok",
+    thread_id: "thread-1",
+    events_count: 3,
+    warnings_count: 0,
+    usage_tokens: {
+      input_tokens: 10,
+      cached_input_tokens: 0,
+      output_tokens: 4,
+    },
     started_at: new Date().toISOString(),
     finished_at: new Date().toISOString(),
     duration_ms: 12,
@@ -221,6 +239,84 @@ async function readTaskContextPayload(
     const query = `SELECT payload_json FROM "${schema}"."task_context" LIMIT 1`;
     const result = await pool.query(query);
     return (result.rows[0]?.payload_json as Record<string, unknown> | undefined) ?? null;
+  } finally {
+    await pool.end();
+  }
+}
+
+async function readExecutionStatuses(config: LocalDbConfig, schema: string): Promise<string[]> {
+  const pool = new Pool({
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    password: config.password,
+    ssl: false,
+  });
+
+  try {
+    const query = `SELECT status FROM "${schema}"."executions" ORDER BY created_at ASC`;
+    const result = await pool.query(query);
+    return result.rows.map((row) => String(row.status));
+  } finally {
+    await pool.end();
+  }
+}
+
+async function readExecutionArtifactTypes(config: LocalDbConfig, schema: string): Promise<string[]> {
+  const pool = new Pool({
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    password: config.password,
+    ssl: false,
+  });
+
+  try {
+    const query = `SELECT artifact_type FROM "${schema}"."execution_artifacts" ORDER BY created_at ASC`;
+    const result = await pool.query(query);
+    return result.rows.map((row) => String(row.artifact_type));
+  } finally {
+    await pool.end();
+  }
+}
+
+async function readTaskLifecycleState(config: LocalDbConfig, schema: string, taskId: string): Promise<string | null> {
+  const pool = new Pool({
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    password: config.password,
+    ssl: false,
+  });
+
+  try {
+    const query = `SELECT lifecycle_state FROM "${schema}"."tasks" WHERE id = $1 LIMIT 1`;
+    const result = await pool.query(query, [taskId]);
+    if (result.rows.length === 0) {
+      return null;
+    }
+    return String(result.rows[0].lifecycle_state);
+  } finally {
+    await pool.end();
+  }
+}
+
+async function readEventSeq(config: LocalDbConfig, schema: string, executionId: string): Promise<number[]> {
+  const pool = new Pool({
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    password: config.password,
+    ssl: false,
+  });
+  try {
+    const query = `SELECT seq_no FROM "${schema}"."events" WHERE execution_id = $1 ORDER BY created_at ASC`;
+    const result = await pool.query(query, [executionId]);
+    return result.rows.map((row) => Number(row.seq_no));
   } finally {
     await pool.end();
   }
@@ -726,6 +822,275 @@ run("I-14 retrieval coarse ranking se mantiene determinista en corpus grande", a
   assert.equal(byIds.length, 120);
   assert.equal(byIds[0].chunk_index, 0);
   assert.equal(byIds[1].chunk_index, 1);
+
+  await adapter.dispose();
+});
+
+run("I-15 executions soporta estados ok/error/cancelled y artifacts tematicos", async () => {
+  const schema = makeSchemaName("local_private_it");
+  const config = baseConfig(schema);
+  const adapter = new PostgresPersistenceAdapter({ config, extensionPath: process.cwd() });
+  await adapter.healthcheck();
+
+  const project = await adapter.ensureProject({
+    operation_profile: "local_private",
+    workspace_root: "/workspace",
+    repo_root: "/workspace/repo",
+    branch: "main",
+  });
+  const task = makeTask();
+  await adapter.saveTask({ project_id: project.id, task, status: "draft" });
+
+  const okExecution = makeExecution();
+  const errorExecution: CodexExecutionResult = {
+    ...makeExecution(),
+    ok: false,
+    cancelled: false,
+    exit_code: 2,
+    error: "Command exited with code 2",
+  };
+  const cancelledExecution: CodexExecutionResult = {
+    ...makeExecution(),
+    ok: false,
+    cancelled: true,
+    exit_code: null,
+    error: "Execution cancelled by user.",
+  };
+
+  const runOk = await adapter.saveExecution({
+    project_id: project.id,
+    task_id: task.id,
+    result: okExecution,
+  });
+  await adapter.saveExecution({
+    project_id: project.id,
+    task_id: task.id,
+    result: errorExecution,
+  });
+  await adapter.saveExecution({
+    project_id: project.id,
+    task_id: task.id,
+    result: cancelledExecution,
+  });
+
+  await adapter.saveExecutionArtifact({
+    project_id: project.id,
+    execution_id: runOk.id,
+    artifact_type: "codex_exec_prompt",
+    content: "prompt",
+    metadata: { v: 1 },
+  });
+  await adapter.saveExecutionArtifact({
+    project_id: project.id,
+    execution_id: runOk.id,
+    artifact_type: "codex_exec_trace",
+    content: "trace",
+    metadata: { v: 1 },
+  });
+  await adapter.saveExecutionArtifact({
+    project_id: project.id,
+    execution_id: runOk.id,
+    artifact_type: "codex_exec_result",
+    content: "result",
+    metadata: { v: 1 },
+  });
+
+  const statuses = await readExecutionStatuses(config, schema);
+  assert.deepEqual(statuses, ["ok", "error", "cancelled"]);
+  const artifactTypes = await readExecutionArtifactTypes(config, schema);
+  assert.deepEqual(artifactTypes, ["codex_exec_prompt", "codex_exec_trace", "codex_exec_result"]);
+
+  await adapter.dispose();
+});
+
+run("I-16 task lifecycle state machine persiste transiciones", async () => {
+  const schema = makeSchemaName("local_private_it");
+  const config = baseConfig(schema);
+  const adapter = new PostgresPersistenceAdapter({ config, extensionPath: process.cwd() });
+  await adapter.healthcheck();
+
+  const project = await adapter.ensureProject({
+    operation_profile: "local_private",
+    workspace_root: "/workspace",
+    repo_root: "/workspace/repo",
+    branch: "main",
+  });
+  const task = makeTask();
+  await adapter.saveTask({
+    project_id: project.id,
+    task,
+    status: "draft",
+    lifecycle_state: "draft",
+    idempotency_key: "task-idem-1",
+  });
+
+  await adapter.transitionTaskState({
+    project_id: project.id,
+    task_id: task.id,
+    from_state: "draft",
+    to_state: "prepared",
+    reason: "test_prepare",
+  });
+  await adapter.transitionTaskState({
+    project_id: project.id,
+    task_id: task.id,
+    from_state: "prepared",
+    to_state: "running",
+    reason: "test_run",
+  });
+
+  assert.equal(await adapter.getTaskLifecycleState(project.id, task.id), "running");
+  assert.equal(await readTaskLifecycleState(config, schema, task.id), "running");
+  assert.equal(await countRows(config, schema, "task_state_transitions"), 2);
+
+  await adapter.dispose();
+});
+
+run("I-17 project run lock aplica single-writer por project_id", async () => {
+  const schema = makeSchemaName("local_private_it");
+  const config = baseConfig(schema);
+  const adapter = new PostgresPersistenceAdapter({ config, extensionPath: process.cwd() });
+  await adapter.healthcheck();
+
+  const project = await adapter.ensureProject({
+    operation_profile: "local_private",
+    workspace_root: "/workspace",
+    repo_root: "/workspace/repo",
+    branch: "main",
+  });
+
+  const first = await adapter.acquireProjectRunLock({
+    project_id: project.id,
+    owner: "runner-a",
+    lock_id: "lock-a",
+    ttl_seconds: 60,
+  });
+  const second = await adapter.acquireProjectRunLock({
+    project_id: project.id,
+    owner: "runner-b",
+    lock_id: "lock-b",
+    ttl_seconds: 60,
+  });
+  assert.equal(first, true);
+  assert.equal(second, false);
+
+  await adapter.releaseProjectRunLock({
+    project_id: project.id,
+    lock_id: "lock-a",
+  });
+
+  const third = await adapter.acquireProjectRunLock({
+    project_id: project.id,
+    owner: "runner-c",
+    lock_id: "lock-c",
+    ttl_seconds: 60,
+  });
+  assert.equal(third, true);
+
+  await adapter.dispose();
+});
+
+run("I-18 idempotency_records permite replay determinista", async () => {
+  const schema = makeSchemaName("local_private_it");
+  const config = baseConfig(schema);
+  const adapter = new PostgresPersistenceAdapter({ config, extensionPath: process.cwd() });
+  await adapter.healthcheck();
+
+  const project = await adapter.ensureProject({
+    operation_profile: "local_private",
+    workspace_root: "/workspace",
+    repo_root: "/workspace/repo",
+    branch: "main",
+  });
+
+  await adapter.saveIdempotentResult({
+    project_id: project.id,
+    command: "local_run_codex",
+    idempotency_key: "idem-1",
+    status: "ok",
+    response_json: {
+      status: "ok",
+      ok: true,
+      message: "cached",
+      details: { execution_id: "e-1" },
+    },
+  });
+
+  const replay = await adapter.resolveIdempotentResult({
+    project_id: project.id,
+    command: "local_run_codex",
+    idempotency_key: "idem-1",
+  });
+  assert.equal(replay?.status, "ok");
+  assert.equal(await countRows(config, schema, "idempotency_records"), 1);
+
+  await adapter.dispose();
+});
+
+run("I-19 events mantiene seq_no monotónico y dedupe por idempotency_key", async () => {
+  const schema = makeSchemaName("local_private_it");
+  const config = baseConfig(schema);
+  const adapter = new PostgresPersistenceAdapter({ config, extensionPath: process.cwd() });
+  await adapter.healthcheck();
+
+  const project = await adapter.ensureProject({
+    operation_profile: "local_private",
+    workspace_root: "/workspace",
+    repo_root: "/workspace/repo",
+    branch: "main",
+  });
+  const task = makeTask();
+  await adapter.saveTask({ project_id: project.id, task, status: "draft", lifecycle_state: "draft" });
+  const execution = await adapter.saveExecution({
+    project_id: project.id,
+    task_id: task.id,
+    result: makeExecution(),
+    idempotency_key: "execution-idem-1",
+  });
+
+  const first = await adapter.saveEvent({
+    project_id: project.id,
+    task_id: task.id,
+    execution_id: execution.id,
+    event_type: "local_run_codex",
+    severity: "info",
+    message: "first",
+    payload: { step: 1 },
+  });
+  const second = await adapter.saveEvent({
+    project_id: project.id,
+    task_id: task.id,
+    execution_id: execution.id,
+    event_type: "local_run_codex",
+    severity: "info",
+    message: "second",
+    payload: { step: 2 },
+  });
+  const duplicate = await adapter.saveEvent({
+    project_id: project.id,
+    task_id: task.id,
+    execution_id: execution.id,
+    event_type: "local_run_codex",
+    severity: "info",
+    message: "second-dup",
+    payload: { step: 2 },
+    idempotency_key: "evt-idem-2",
+  });
+  const duplicateAgain = await adapter.saveEvent({
+    project_id: project.id,
+    task_id: task.id,
+    execution_id: execution.id,
+    event_type: "local_run_codex",
+    severity: "info",
+    message: "second-dup-again",
+    payload: { step: 2 },
+    idempotency_key: "evt-idem-2",
+  });
+
+  assert.notEqual(first.id, second.id);
+  assert.equal(duplicate.id, duplicateAgain.id);
+  const seq = await readEventSeq(config, schema, execution.id);
+  assert.deepEqual(seq, [1, 2, 3]);
 
   await adapter.dispose();
 });

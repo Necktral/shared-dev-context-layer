@@ -1,4 +1,11 @@
-import type { CodexExecutionRequest, CodexExecutionResult, LocalTaskDraft, ProjectRuntimeSnapshot } from "./types";
+import type {
+  CodexExecutionRequest,
+  CodexExecutionResult,
+  LocalTaskDraft,
+  PostRunReconciliationResult,
+  ProjectRuntimeSnapshot,
+  TaskLifecycleState,
+} from "./types";
 
 export interface RetrievedChunk {
   file_path: string;
@@ -101,6 +108,10 @@ export interface WorkspaceIndexRequest {
   snapshot: ProjectRuntimeSnapshot;
 }
 
+export interface WorkspaceIndexByPathsRequest extends WorkspaceIndexRequest {
+  paths: string[];
+}
+
 export interface WorkspaceIndexResult {
   message: string;
   details: Record<string, unknown>;
@@ -109,6 +120,7 @@ export interface WorkspaceIndexResult {
 
 export interface WorkspaceIndexerPort {
   runIndex(request: WorkspaceIndexRequest): Promise<WorkspaceIndexResult>;
+  runIndexByPaths(request: WorkspaceIndexByPathsRequest): Promise<WorkspaceIndexResult>;
 }
 
 export interface ContextRetrieverPort {
@@ -119,9 +131,28 @@ export interface TaskBuilderPort {
   buildTask(intent: string, context: RetrievedContext, snapshot: ProjectRuntimeSnapshot): Promise<LocalTaskDraft>;
 }
 
+export interface CodexRunnerExecuteOptions {
+  abortSignal?: AbortSignal;
+}
+
 export interface CodexRunnerPort {
-  healthcheck(command: string): Promise<CodexExecutionResult>;
-  run(request: CodexExecutionRequest, command: string): Promise<CodexExecutionResult>;
+  healthcheck(command: string, options?: CodexRunnerExecuteOptions): Promise<CodexExecutionResult>;
+  run(
+    request: CodexExecutionRequest,
+    command: string,
+    options?: CodexRunnerExecuteOptions,
+  ): Promise<CodexExecutionResult>;
+}
+
+export interface PostRunReconcileRequest {
+  projectId: string;
+  snapshot: ProjectRuntimeSnapshot;
+  task: LocalTaskDraft;
+  execute: () => Promise<CodexExecutionResult>;
+}
+
+export interface PostRunReconcilerPort {
+  reconcile(request: PostRunReconcileRequest): Promise<PostRunReconciliationResult>;
 }
 
 export interface PersistenceHealthcheck {
@@ -145,6 +176,7 @@ export interface PersistedIndexRun {
 export interface PersistedTask {
   id: string;
   project_id: string;
+  state?: TaskLifecycleState;
 }
 
 export interface PersistedTaskContext {
@@ -246,6 +278,9 @@ export interface SaveTaskInput {
   project_id: string;
   task: LocalTaskDraft;
   status: string;
+  retrieval_context_ref?: string | null;
+  lifecycle_state?: TaskLifecycleState;
+  idempotency_key?: string | null;
 }
 
 export interface SaveTaskContextInput {
@@ -281,6 +316,8 @@ export interface SaveExecutionInput {
   project_id: string;
   task_id: string;
   result: CodexExecutionResult;
+  idempotency_key?: string | null;
+  outcome_classification?: Record<string, unknown> | null;
 }
 
 export interface SaveExecutionArtifactInput {
@@ -306,6 +343,40 @@ export interface SaveEventInput {
   severity: "info" | "warning" | "error";
   message: string;
   payload: Record<string, unknown>;
+  seq_no?: number | null;
+  idempotency_key?: string | null;
+}
+
+export interface AcquireProjectRunLockInput {
+  project_id: string;
+  owner: string;
+  lock_id: string;
+  ttl_seconds: number;
+}
+
+export interface ReleaseProjectRunLockInput {
+  project_id: string;
+  lock_id: string;
+}
+
+export interface ResolveIdempotentResultInput {
+  project_id: string;
+  command: string;
+  idempotency_key: string;
+}
+
+export interface SaveIdempotentResultInput extends ResolveIdempotentResultInput {
+  response_json: Record<string, unknown>;
+  status: "ok" | "error" | "blocked";
+}
+
+export interface TransitionTaskStateInput {
+  project_id: string;
+  task_id: string;
+  from_state: TaskLifecycleState | null;
+  to_state: TaskLifecycleState;
+  reason: string;
+  execution_id?: string | null;
 }
 
 export interface PersistenceTransactionPort {
@@ -330,6 +401,12 @@ export interface PersistencePort extends PersistenceTransactionPort {
   deleteChunksByFileIds(file_ids: string[]): Promise<number>;
   saveTask(input: SaveTaskInput): Promise<PersistedTask>;
   saveTaskContext(input: SaveTaskContextInput): Promise<PersistedTaskContext>;
+  getTaskLifecycleState(project_id: string, task_id: string): Promise<TaskLifecycleState | null>;
+  transitionTaskState(input: TransitionTaskStateInput): Promise<void>;
+  acquireProjectRunLock(input: AcquireProjectRunLockInput): Promise<boolean>;
+  releaseProjectRunLock(input: ReleaseProjectRunLockInput): Promise<void>;
+  resolveIdempotentResult(input: ResolveIdempotentResultInput): Promise<Record<string, unknown> | null>;
+  saveIdempotentResult(input: SaveIdempotentResultInput): Promise<void>;
   saveDecision(input: SaveDecisionInput): Promise<PersistedDecision>;
   runInTransaction<T>(operation: (tx: PersistenceTransactionPort) => Promise<T>): Promise<T>;
 }

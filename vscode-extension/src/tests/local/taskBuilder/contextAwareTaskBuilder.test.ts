@@ -79,4 +79,7 @@ test("ContextAwareTaskBuilder compone summary con evidencia de chunks", async ()
   assert.ok(draft.context_summary.includes("src/authService.ts#0"));
   assert.ok(draft.acceptance_criteria.includes("La tarea usa evidencia recuperada del índice local en PostgreSQL."));
   assert.deepEqual(draft.candidate_files, ["src/authService.ts"]);
+  assert.equal(draft.execution_brief?.version, "v2");
+  assert.equal(draft.execution_brief?.candidate_files[0], "src/authService.ts");
+  assert.ok((draft.execution_brief?.key_evidence[0] ?? "").includes("src/authService.ts#0"));
 });
