@@ -63,6 +63,7 @@ import { HybridContextRetriever } from "./local/retrieval/hybridContextRetriever
 import { ContextAwareTaskBuilder } from "./local/taskBuilder/contextAwareTaskBuilder";
 import { WorkspaceSnapshotter } from "./local/workspaceSnapshotter";
 import { PostRunReconciler } from "./local/postRunReconciler";
+import { PostRunReviewer } from "./local/postRunReviewer";
 
 let outputChannel: vscode.OutputChannel | undefined;
 
@@ -235,6 +236,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     retriever: new HybridContextRetriever({ persistence: localPersistence }),
     taskBuilder: new ContextAwareTaskBuilder(),
     postRunReconciler,
+    postRunReviewer: new PostRunReviewer(),
     codexRunner: new CodexCliRunner(),
     persistence: localPersistence,
     getOperationProfile,
@@ -622,6 +624,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         return;
       }
       await vscode.window.showErrorMessage(`WIS: Local Run Codex falló: ${result.message}`);
+      return;
+    }
+    const reviewDecision = typeof result.details?.review_decision === "string" ? result.details.review_decision : null;
+    const nextActionPlan = typeof result.details?.next_action_plan === "string" ? result.details.next_action_plan : null;
+    if (reviewDecision === "accept_with_warnings" || reviewDecision === "needs_manual_review") {
+      await vscode.window.showWarningMessage(
+        `WIS: Local Run Codex completado con revisión ${reviewDecision}. ${nextActionPlan ?? ""}`.trim(),
+      );
+      return;
+    }
+    if (reviewDecision === "retry_recommended" || reviewDecision === "blocked" || reviewDecision === "reject") {
+      await vscode.window.showWarningMessage(
+        `WIS: Local Run Codex requiere acción (${reviewDecision}). ${nextActionPlan ?? ""}`.trim(),
+      );
       return;
     }
     await vscode.window.showInformationMessage("WIS: Local Run Codex completado.");

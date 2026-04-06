@@ -21,6 +21,23 @@ export class LocalRuntimeOutputRenderer {
     if (result.details) {
       this.output.appendLine("details:");
       this.output.appendLine(JSON.stringify(result.details, null, 2));
+
+      const reviewDecision =
+        typeof result.details.review_decision === "string" ? result.details.review_decision : null;
+      if (reviewDecision) {
+        const reviewSummary =
+          typeof result.details.review_summary === "string" ? result.details.review_summary : "-";
+        const nextAction =
+          typeof result.details.next_action_plan === "string" ? result.details.next_action_plan : "-";
+        const risks = Array.isArray(result.details.review_risks)
+          ? result.details.review_risks.filter((entry): entry is string => typeof entry === "string").join(" | ")
+          : "-";
+        this.output.appendLine("operator_review:");
+        this.output.appendLine(`decision: ${reviewDecision}`);
+        this.output.appendLine(`summary: ${reviewSummary}`);
+        this.output.appendLine(`risks: ${risks || "-"}`);
+        this.output.appendLine(`next_action: ${nextAction}`);
+      }
     }
 
     if (snapshot.task_draft) {

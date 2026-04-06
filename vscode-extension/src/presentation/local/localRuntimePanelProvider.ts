@@ -56,6 +56,23 @@ export class LocalRuntimePanelProvider implements vscode.WebviewViewProvider {
       : "Sin resultados todavía.";
 
     const errors = this.snapshot.errors.length > 0 ? this.snapshot.errors.join("\n") : "Sin errores.";
+    const lastDetails = this.snapshot.last_result?.details;
+    const reviewDecision =
+      lastDetails && typeof lastDetails.review_decision === "string" ? lastDetails.review_decision : "Sin review";
+    const reviewSummary =
+      lastDetails && typeof lastDetails.review_summary === "string" ? lastDetails.review_summary : "Sin resumen.";
+    const nextAction =
+      lastDetails && typeof lastDetails.next_action_plan === "string"
+        ? lastDetails.next_action_plan
+        : "Sin acción sugerida.";
+    const reviewRisks =
+      lastDetails && Array.isArray(lastDetails.review_risks)
+        ? lastDetails.review_risks.filter((entry): entry is string => typeof entry === "string").join("\n")
+        : "Sin riesgos reportados.";
+    const changedFilesFocus =
+      lastDetails && Array.isArray(lastDetails.changed_files_focus)
+        ? lastDetails.changed_files_focus.filter((entry): entry is string => typeof entry === "string").join(", ")
+        : "Sin foco de archivos.";
 
     const html = `<!DOCTYPE html>
 <html lang="es">
@@ -118,6 +135,15 @@ export class LocalRuntimePanelProvider implements vscode.WebviewViewProvider {
     <section>
       <h2>Last Result</h2>
       <pre>${escapeHtml(lastResult)}</pre>
+    </section>
+
+    <section>
+      <h2>Post-Run Review</h2>
+      <div>Decision: <strong>${escapeHtml(reviewDecision)}</strong></div>
+      <div>Summary: ${escapeHtml(reviewSummary)}</div>
+      <div>Changed Focus: ${escapeHtml(changedFilesFocus)}</div>
+      <div>Next Action: ${escapeHtml(nextAction)}</div>
+      <pre>${escapeHtml(reviewRisks)}</pre>
     </section>
 
     <section>
