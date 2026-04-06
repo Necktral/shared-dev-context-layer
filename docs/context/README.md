@@ -25,6 +25,8 @@ El canon `local_private` vive en `docs/context/local_private/` y es complementar
 - Runbook MCP: `../mcp/README.md`
 - Contrato MCP runtime (read/write): `../mcp/vscode_read_model_contract.md`
 - Canon local_private (complementario): `local_private/README.md`
+- SSOT gobernanza de ramas y reconciliacion: `BRANCH-GOVERNANCE-AND-RECONCILIATION.md`
+- Veredicto tecnico de cierre de ramas: `BRANCH-CLOSURE-TECHNICAL-VERDICT.md`
 - Evidencia Slice 3A: `phase3/evidence/slice-3a/README.md`
 - Evidencia Slice 3B: `phase3/evidence/slice-3b/README.md`
 - Evidencia Slice 3C (`all_published`): `phase3/evidence/slice-3c-all-published/README.md`
@@ -39,3 +41,9 @@ El canon `local_private` vive en `docs/context/local_private/` y es complementar
 
 - Estado actual: Slice 3A + Slice 4 baseline + write plane v0.2.0 con comandos MCP read/write.
 - Siguiente foco: hardening reliability-first del run plane local (locking, idempotencia, reconciliación determinista).
+
+## Cierre por capas
+
+- Cierre documental: `BRANCH-GOVERNANCE-AND-RECONCILIATION.md`
+- Cierre tecnico: `BRANCH-CLOSURE-TECHNICAL-VERDICT.md`
+- Cierre remoto administrativo: estado final de ramas en `origin` trazado en PR de cierre
