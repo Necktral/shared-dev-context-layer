@@ -1,0 +1,53 @@
+{
+  "package": "package-8-hardening",
+  "executed_at": "2026-04-06",
+  "scope": "local_private integration + quality",
+  "status": "GO",
+  "checks": {
+    "governance": {
+      "main_vs_origin_main": {
+        "status": "pass",
+        "value": "0 0",
+        "command": "git rev-list --left-right --count main...origin/main"
+      },
+      "open_pr_stack": {
+        "status": "pass",
+        "value": "0",
+        "command": "gh pr list --state open --limit 20"
+      },
+      "merged_reference_prs": {
+        "status": "pass",
+        "pr_3": "MERGED c94979229d7c81132d85abd0af7eec194b05b825",
+        "pr_4": "MERGED 4c2c0ed4f36a2f7da2f0ea93f60acbb01263ee09"
+      }
+    },
+    "docs": {
+      "local_private_canon_present": "pass",
+      "docs_consistency_script": "pass",
+      "semantic_drift_guard": "pass"
+    },
+    "automated": {
+      "vscode_extension_npm_test": {
+        "status": "pass",
+        "pass": 97,
+        "skip": 17,
+        "fail": 0
+      },
+      "vscode_extension_test_local_db": {
+        "status": "pass",
+        "pass": 17,
+        "skip": 0,
+        "fail": 0
+      },
+      "backend_pytest": {
+        "status": "pass",
+        "pass": 9,
+        "fail": 0
+      }
+    },
+    "ci": {
+      "local_private_job_added": "pass"
+    }
+  },
+  "blockers": []
+}

@@ -1,6 +1,7 @@
 # WIS Canon (Single Source of Truth)
 
 `docs/context` es la fuente oficial para contratos, arquitectura y gates de Fase 3 + extensión v0.2.0 (write plane controlado).
+El canon `local_private` vive en `docs/context/local_private/` y es complementario para run-plane local.
 
 ## Regla de consistencia
 
@@ -23,6 +24,7 @@
 
 - Runbook MCP: `../mcp/README.md`
 - Contrato MCP runtime (read/write): `../mcp/vscode_read_model_contract.md`
+- Canon local_private (complementario): `local_private/README.md`
 - Evidencia Slice 3A: `phase3/evidence/slice-3a/README.md`
 - Evidencia Slice 3B: `phase3/evidence/slice-3b/README.md`
 - Evidencia Slice 3C (`all_published`): `phase3/evidence/slice-3c-all-published/README.md`

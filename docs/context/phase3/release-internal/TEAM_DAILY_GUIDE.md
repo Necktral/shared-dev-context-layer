@@ -47,9 +47,25 @@ No cambies de modo esperando fallback automatico.
 - mismatch docs/codigo: corregir docs canonicas en mismo delta
 - regresion read-only: bloquear merge hasta resolver
 
-## 6. Referencias operativas
+## 6. Disciplina de integracion (Package 8)
+
+Secuencia obligatoria para bloques nuevos en `local_private`:
+
+1. `git fetch origin`
+2. validar sincronizacion de base: `git rev-list --left-right --count main...origin/main` debe quedar `0 0`
+3. crear rama nueva desde `origin/main` (no desde ramas ya mergeadas)
+4. mantener `1 bloque = 1 rama objetivo + 1 PR`
+5. cerrar bloque solo con CI en verde + evidencia phase4 actualizada
+
+Regla anti-stack:
+
+- no encadenar ramas nuevas sobre ramas ya mergeadas.
+- si una PR base ya fue mergeada, restack inmediato sobre `origin/main`.
+
+## 7. Referencias operativas
 
 - Canon: `docs/context/`
+- Canon local_private: `docs/context/local_private/README.md`
 - Runbook MCP: `docs/mcp/README.md`
 - Gate GO/NO-GO: `docs/context/WIS_PHASE_3_ACCEPTANCE_GATE.md`
 - Checklist release: `docs/context/phase3/release-internal/GO_NO_GO_CHECKLIST.md`
