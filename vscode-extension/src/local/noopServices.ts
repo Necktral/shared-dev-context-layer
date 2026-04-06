@@ -1,9 +1,15 @@
 import { randomUUID } from "node:crypto";
 import type {
+  AcquireProjectRunLockInput,
   ChunkRecord,
+  ClaimIdempotencyInput,
+  ClaimIdempotencyResult,
+  CompleteIdempotencyClaimInput,
   ContextRetrieverPort,
   CreateIndexRunInput,
   EnsureProjectInput,
+  FailIdempotencyClaimInput,
+  GetFileChunksByFileIdsInput,
   PersistedDecision,
   PersistedEvent,
   PersistedExecution,
@@ -16,17 +22,29 @@ import type {
   PersistenceHealthcheck,
   PersistencePort,
   PersistenceTransactionPort,
+  RetrievalRequest,
   RetrievedContext,
   SaveDecisionInput,
+  SaveIdempotentResultInput,
   SaveEventInput,
   SaveExecutionArtifactInput,
   SaveExecutionInput,
   SaveTaskContextInput,
   SaveTaskInput,
+  SearchFileChunksInput,
+  SearchIndexedFilesInput,
+  ReleaseProjectRunLockInput,
+  RenewIdempotencyClaimInput,
+  RenewProjectRunLockInput,
+  ResolveIdempotentResultInput,
+  TransitionTaskStateInput,
   TaskBuilderPort,
   WorkspaceIndexerPort,
   CompleteIndexRunInput,
+  RetrievedIndexedChunk,
+  RetrievedIndexedFileCandidate,
   WorkspaceIndexRequest,
+  WorkspaceIndexByPathsRequest,
   WorkspaceIndexResult,
   UpsertIndexedFileInput,
   UpdateIndexRunMetricsInput,
@@ -62,34 +80,99 @@ export class NoopIndexer implements WorkspaceIndexerPort {
       },
     };
   }
+
+  public async runIndexByPaths(request: WorkspaceIndexByPathsRequest): Promise<WorkspaceIndexResult> {
+    const result = await this.runIndex(request);
+    return {
+      ...result,
+      message: "Indexación local por paths no implementada aún (Noop baseline).",
+      details: {
+        ...result.details,
+        mode: "scoped",
+        target_paths: request.paths,
+      },
+    };
+  }
 }
 
 export class NoopRetriever implements ContextRetrieverPort {
-  public async retrieve(intent: string, snapshot: ProjectRuntimeSnapshot): Promise<RetrievedContext> {
-    const candidates = snapshot.active_file ? [snapshot.active_file] : [];
+  public async retrieve(request: RetrievalRequest): Promise<RetrievedContext> {
+    const candidates = request.snapshot.active_file ? [request.snapshot.active_file] : [];
     return {
-      summary: `Contexto stub para: ${intent}`,
+      summary: `Contexto stub para: ${request.intent}`,
       candidate_files: candidates,
+      query_trace: {
+        raw_intent: request.intent,
+        normalized_intent: request.intent.trim().toLowerCase(),
+        tokens: [],
+        path_hints: [],
+        filename_hints: [],
+      },
+      coarse_trace: [],
+      selected_chunks: [],
+      ranking_evidence: candidates.length > 0
+        ? [
+            {
+              stage: "final",
+              file_path: candidates[0],
+              score: 1,
+              reasons: ["active_file_fallback"],
+            },
+          ]
+        : [],
+      budget_stats: {
+        max_files: 5,
+        max_chunks: 8,
+        max_chunks_per_file: 3,
+        max_total_chars: 6000,
+        selected_files: candidates.length,
+        selected_chunks: 0,
+        selected_chars: 0,
+        truncated: false,
+        truncation_reasons: [],
+      },
+      fallback_trace: candidates.length > 0
+        ? {
+            used: true,
+            reason: "active_file_fallback",
+            source_file: candidates[0],
+          }
+        : {
+            used: true,
+            reason: "no_index_hits",
+            source_file: null,
+          },
     };
   }
 }
 
 export class NoopTaskBuilder implements TaskBuilderPort {
-  public async buildTask(intent: string, context: RetrievedContext): Promise<LocalTaskDraft> {
+  public async buildTask(intent: string, context: RetrievedContext, _snapshot: ProjectRuntimeSnapshot): Promise<LocalTaskDraft> {
     const now = new Date().toISOString();
+    const candidateFiles = context.candidate_files.slice(0, 5);
+    const constraints = [
+      "Paquete 1 baseline: no ejecutar mutaciones automáticas de dominio.",
+      "Mantener ejecución supervisada por usuario.",
+    ];
+    const acceptanceCriteria = [
+      "Resultado estructurado generado por adapter Codex.",
+      "Registro de estado y salida disponible en panel/output.",
+    ];
     return {
       id: randomUUID(),
       objective: intent,
       context_summary: context.summary,
-      candidate_files: context.candidate_files.slice(0, 5),
-      constraints: [
-        "Paquete 1 baseline: no ejecutar mutaciones automáticas de dominio.",
-        "Mantener ejecución supervisada por usuario.",
-      ],
-      acceptance_criteria: [
-        "Resultado estructurado generado por adapter Codex.",
-        "Registro de estado y salida disponible en panel/output.",
-      ],
+      candidate_files: candidateFiles,
+      constraints,
+      acceptance_criteria: acceptanceCriteria,
+      execution_brief: {
+        version: "v2",
+        objective_compact: intent,
+        candidate_files: candidateFiles,
+        key_evidence: [context.summary],
+        run_constraints: constraints,
+        acceptance_checks: acceptanceCriteria,
+      },
       created_at: now,
     };
   }
@@ -146,6 +229,18 @@ export class NoopPersistence implements PersistencePort {
     return [];
   }
 
+  public async searchIndexedFiles(_input: SearchIndexedFilesInput): Promise<RetrievedIndexedFileCandidate[]> {
+    return [];
+  }
+
+  public async searchFileChunks(_input: SearchFileChunksInput): Promise<RetrievedIndexedChunk[]> {
+    return [];
+  }
+
+  public async getFileChunksByFileIds(_input: GetFileChunksByFileIdsInput): Promise<RetrievedIndexedChunk[]> {
+    return [];
+  }
+
   public async upsertIndexedFile(input: UpsertIndexedFileInput): Promise<PersistedIndexedFile> {
     return {
       id: randomUUID(),
@@ -171,10 +266,12 @@ export class NoopPersistence implements PersistencePort {
     return {
       id: input.task.id,
       project_id: input.project_id,
+      state: input.lifecycle_state ?? "draft",
     };
   }
 
   public async saveTaskContext(input: SaveTaskContextInput): Promise<PersistedTaskContext> {
+    void input.retrieved_context;
     return {
       id: randomUUID(),
       task_id: input.task.id,
@@ -208,6 +305,56 @@ export class NoopPersistence implements PersistencePort {
       id: randomUUID(),
       project_id: input.project_id,
     };
+  }
+
+  public async getTaskLifecycleState(_project_id: string, _task_id: string) {
+    return null;
+  }
+
+  public async transitionTaskState(_input: TransitionTaskStateInput): Promise<void> {
+    // No-op by design.
+  }
+
+  public async acquireProjectRunLock(_input: AcquireProjectRunLockInput): Promise<boolean> {
+    return true;
+  }
+
+  public async renewProjectRunLock(_input: RenewProjectRunLockInput): Promise<boolean> {
+    return true;
+  }
+
+  public async releaseProjectRunLock(_input: ReleaseProjectRunLockInput): Promise<void> {
+    // No-op by design.
+  }
+
+  public async claimIdempotency(_input: ClaimIdempotencyInput): Promise<ClaimIdempotencyResult> {
+    return {
+      status: "claimed",
+      claim_id: randomUUID(),
+      owner: "noop",
+      lease_expires_at: new Date(Date.now() + 60_000).toISOString(),
+      response_json: null,
+    };
+  }
+
+  public async renewIdempotencyClaim(_input: RenewIdempotencyClaimInput): Promise<boolean> {
+    return true;
+  }
+
+  public async completeIdempotencyClaim(_input: CompleteIdempotencyClaimInput): Promise<boolean> {
+    return true;
+  }
+
+  public async failIdempotencyClaim(_input: FailIdempotencyClaimInput): Promise<boolean> {
+    return true;
+  }
+
+  public async resolveIdempotentResult(_input: ResolveIdempotentResultInput): Promise<Record<string, unknown> | null> {
+    return null;
+  }
+
+  public async saveIdempotentResult(_input: SaveIdempotentResultInput): Promise<void> {
+    // No-op by design.
   }
 
   public async runInTransaction<T>(operation: (tx: PersistenceTransactionPort) => Promise<T>): Promise<T> {

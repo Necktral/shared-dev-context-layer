@@ -1,8 +1,73 @@
-import type { CodexExecutionRequest, CodexExecutionResult, LocalTaskDraft, ProjectRuntimeSnapshot } from "./types";
+import type {
+  CodexExecutionRequest,
+  CodexExecutionResult,
+  LocalTaskDraft,
+  PostRunReconciliationResult,
+  ProjectRuntimeSnapshot,
+  TaskLifecycleState,
+} from "./types";
+
+export interface RetrievedChunk {
+  file_path: string;
+  chunk_index: number;
+  content: string;
+  score: number;
+  coarse_score: number;
+  content_hash: string | null;
+  evidence: string[];
+}
+
+export type RetrievalEvidenceStage = "coarse" | "final";
+
+export interface RetrievalRankingEvidence {
+  stage: RetrievalEvidenceStage;
+  file_path: string;
+  chunk_index?: number;
+  score: number;
+  reasons: string[];
+}
+
+export interface RetrievalBudgetStats {
+  max_files: number;
+  max_chunks: number;
+  max_chunks_per_file: number;
+  max_total_chars: number;
+  selected_files: number;
+  selected_chunks: number;
+  selected_chars: number;
+  truncated: boolean;
+  truncation_reasons: string[];
+}
+
+export interface RetrievalQueryTrace {
+  raw_intent: string;
+  normalized_intent: string;
+  tokens: string[];
+  path_hints: string[];
+  filename_hints: string[];
+}
+
+export interface RetrievalFallbackTrace {
+  used: boolean;
+  reason: string;
+  source_file: string | null;
+}
 
 export interface RetrievedContext {
   summary: string;
   candidate_files: string[];
+  query_trace: RetrievalQueryTrace;
+  coarse_trace: RetrievalRankingEvidence[];
+  selected_chunks: RetrievedChunk[];
+  ranking_evidence: RetrievalRankingEvidence[];
+  budget_stats: RetrievalBudgetStats;
+  fallback_trace: RetrievalFallbackTrace | null;
+}
+
+export interface RetrievalRequest {
+  intent: string;
+  projectId: string;
+  snapshot: ProjectRuntimeSnapshot;
 }
 
 export interface IndexedFileCandidate {
@@ -43,6 +108,10 @@ export interface WorkspaceIndexRequest {
   snapshot: ProjectRuntimeSnapshot;
 }
 
+export interface WorkspaceIndexByPathsRequest extends WorkspaceIndexRequest {
+  paths: string[];
+}
+
 export interface WorkspaceIndexResult {
   message: string;
   details: Record<string, unknown>;
@@ -51,19 +120,39 @@ export interface WorkspaceIndexResult {
 
 export interface WorkspaceIndexerPort {
   runIndex(request: WorkspaceIndexRequest): Promise<WorkspaceIndexResult>;
+  runIndexByPaths(request: WorkspaceIndexByPathsRequest): Promise<WorkspaceIndexResult>;
 }
 
 export interface ContextRetrieverPort {
-  retrieve(intent: string, snapshot: ProjectRuntimeSnapshot): Promise<RetrievedContext>;
+  retrieve(request: RetrievalRequest): Promise<RetrievedContext>;
 }
 
 export interface TaskBuilderPort {
   buildTask(intent: string, context: RetrievedContext, snapshot: ProjectRuntimeSnapshot): Promise<LocalTaskDraft>;
 }
 
+export interface CodexRunnerExecuteOptions {
+  abortSignal?: AbortSignal;
+}
+
 export interface CodexRunnerPort {
-  healthcheck(command: string): Promise<CodexExecutionResult>;
-  run(request: CodexExecutionRequest, command: string): Promise<CodexExecutionResult>;
+  healthcheck(command: string, options?: CodexRunnerExecuteOptions): Promise<CodexExecutionResult>;
+  run(
+    request: CodexExecutionRequest,
+    command: string,
+    options?: CodexRunnerExecuteOptions,
+  ): Promise<CodexExecutionResult>;
+}
+
+export interface PostRunReconcileRequest {
+  projectId: string;
+  snapshot: ProjectRuntimeSnapshot;
+  task: LocalTaskDraft;
+  execute: () => Promise<CodexExecutionResult>;
+}
+
+export interface PostRunReconcilerPort {
+  reconcile(request: PostRunReconcileRequest): Promise<PostRunReconciliationResult>;
 }
 
 export interface PersistenceHealthcheck {
@@ -87,6 +176,7 @@ export interface PersistedIndexRun {
 export interface PersistedTask {
   id: string;
   project_id: string;
+  state?: TaskLifecycleState;
 }
 
 export interface PersistedTaskContext {
@@ -120,6 +210,29 @@ export interface PersistedIndexedFile {
   path: string;
   content_hash: string;
   is_deleted: boolean;
+}
+
+export interface RetrievedIndexedFileCandidate {
+  file_id: string;
+  path: string;
+  content_hash: string;
+  coarse_score: number;
+  coarse_reasons: string[];
+  path_token_hits: number;
+  filename_token_hits: number;
+}
+
+export interface RetrievedIndexedChunk {
+  file_id: string;
+  file_path: string;
+  chunk_index: number;
+  content: string;
+  content_hash: string;
+  coarse_score: number;
+  coarse_reasons: string[];
+  path_token_hits: number;
+  filename_token_hits: number;
+  content_token_hits: number;
 }
 
 export interface EnsureProjectInput {
@@ -165,17 +278,46 @@ export interface SaveTaskInput {
   project_id: string;
   task: LocalTaskDraft;
   status: string;
+  retrieval_context_ref?: string | null;
+  lifecycle_state?: TaskLifecycleState;
+  idempotency_key?: string | null;
 }
 
 export interface SaveTaskContextInput {
   project_id: string;
   task: LocalTaskDraft;
+  retrieved_context: RetrievedContext;
+}
+
+export interface SearchIndexedFilesInput {
+  projectId: string;
+  tokens: string[];
+  pathHints: string[];
+  filenameHints: string[];
+  limit: number;
+}
+
+export interface SearchFileChunksInput {
+  projectId: string;
+  tokens: string[];
+  pathHints: string[];
+  filenameHints: string[];
+  limit: number;
+  fileIds?: string[];
+}
+
+export interface GetFileChunksByFileIdsInput {
+  projectId: string;
+  fileIds: string[];
+  limitPerFile: number;
 }
 
 export interface SaveExecutionInput {
   project_id: string;
   task_id: string;
   result: CodexExecutionResult;
+  idempotency_key?: string | null;
+  outcome_classification?: Record<string, unknown> | null;
 }
 
 export interface SaveExecutionArtifactInput {
@@ -201,6 +343,78 @@ export interface SaveEventInput {
   severity: "info" | "warning" | "error";
   message: string;
   payload: Record<string, unknown>;
+  seq_no?: number | null;
+  idempotency_key?: string | null;
+}
+
+export interface AcquireProjectRunLockInput {
+  project_id: string;
+  owner: string;
+  lock_id: string;
+  ttl_seconds: number;
+}
+
+export interface ReleaseProjectRunLockInput {
+  project_id: string;
+  lock_id: string;
+}
+
+export interface RenewProjectRunLockInput {
+  project_id: string;
+  lock_id: string;
+  ttl_seconds: number;
+}
+
+export interface ResolveIdempotentResultInput {
+  project_id: string;
+  command: string;
+  idempotency_key: string;
+}
+
+export interface SaveIdempotentResultInput extends ResolveIdempotentResultInput {
+  response_json: Record<string, unknown>;
+  status: "ok" | "error" | "blocked";
+}
+
+export type IdempotencyClaimStatus = "claimed" | "reclaimed" | "in_progress" | "completed";
+
+export interface ClaimIdempotencyInput extends ResolveIdempotentResultInput {
+  claim_id: string;
+  owner: string;
+  ttl_seconds: number;
+}
+
+export interface ClaimIdempotencyResult {
+  status: IdempotencyClaimStatus;
+  claim_id: string | null;
+  owner: string | null;
+  lease_expires_at: string | null;
+  response_json: Record<string, unknown> | null;
+}
+
+export interface RenewIdempotencyClaimInput extends ResolveIdempotentResultInput {
+  claim_id: string;
+  ttl_seconds: number;
+}
+
+export interface CompleteIdempotencyClaimInput extends ResolveIdempotentResultInput {
+  claim_id: string;
+  response_json: Record<string, unknown>;
+}
+
+export interface FailIdempotencyClaimInput extends ResolveIdempotentResultInput {
+  claim_id: string;
+  error_message: string;
+  response_json: Record<string, unknown>;
+}
+
+export interface TransitionTaskStateInput {
+  project_id: string;
+  task_id: string;
+  from_state: TaskLifecycleState | null;
+  to_state: TaskLifecycleState;
+  reason: string;
+  execution_id?: string | null;
 }
 
 export interface PersistenceTransactionPort {
@@ -216,12 +430,26 @@ export interface PersistencePort extends PersistenceTransactionPort {
   completeIndexRun(input: CompleteIndexRunInput): Promise<void>;
   createOrUpdateIndexRunMetrics(input: UpdateIndexRunMetricsInput): Promise<void>;
   listProjectFiles(project_id: string, includeDeleted?: boolean): Promise<PersistedIndexedFile[]>;
+  searchIndexedFiles(input: SearchIndexedFilesInput): Promise<RetrievedIndexedFileCandidate[]>;
+  searchFileChunks(input: SearchFileChunksInput): Promise<RetrievedIndexedChunk[]>;
+  getFileChunksByFileIds(input: GetFileChunksByFileIdsInput): Promise<RetrievedIndexedChunk[]>;
   upsertIndexedFile(input: UpsertIndexedFileInput): Promise<PersistedIndexedFile>;
   markFilesDeleted(project_id: string, paths: string[]): Promise<string[]>;
   replaceFileChunks(file_id: string, project_id: string, chunks: ChunkRecord[]): Promise<number>;
   deleteChunksByFileIds(file_ids: string[]): Promise<number>;
   saveTask(input: SaveTaskInput): Promise<PersistedTask>;
   saveTaskContext(input: SaveTaskContextInput): Promise<PersistedTaskContext>;
+  getTaskLifecycleState(project_id: string, task_id: string): Promise<TaskLifecycleState | null>;
+  transitionTaskState(input: TransitionTaskStateInput): Promise<void>;
+  acquireProjectRunLock(input: AcquireProjectRunLockInput): Promise<boolean>;
+  renewProjectRunLock(input: RenewProjectRunLockInput): Promise<boolean>;
+  releaseProjectRunLock(input: ReleaseProjectRunLockInput): Promise<void>;
+  claimIdempotency(input: ClaimIdempotencyInput): Promise<ClaimIdempotencyResult>;
+  renewIdempotencyClaim(input: RenewIdempotencyClaimInput): Promise<boolean>;
+  completeIdempotencyClaim(input: CompleteIdempotencyClaimInput): Promise<boolean>;
+  failIdempotencyClaim(input: FailIdempotencyClaimInput): Promise<boolean>;
+  resolveIdempotentResult(input: ResolveIdempotentResultInput): Promise<Record<string, unknown> | null>;
+  saveIdempotentResult(input: SaveIdempotentResultInput): Promise<void>;
   saveDecision(input: SaveDecisionInput): Promise<PersistedDecision>;
   runInTransaction<T>(operation: (tx: PersistenceTransactionPort) => Promise<T>): Promise<T>;
 }

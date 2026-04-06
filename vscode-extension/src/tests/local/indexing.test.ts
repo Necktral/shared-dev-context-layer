@@ -11,10 +11,16 @@ import { BasicChunker } from "../../local/indexing/basicChunker";
 import { WorkspaceFileScanner } from "../../local/indexing/workspaceFileScanner";
 import { IncrementalWorkspaceIndexer } from "../../local/indexing/incrementalWorkspaceIndexer";
 import type {
+  AcquireProjectRunLockInput,
   ChunkRecord,
+  ClaimIdempotencyInput,
+  ClaimIdempotencyResult,
+  CompleteIdempotencyClaimInput,
   CompleteIndexRunInput,
   CreateIndexRunInput,
   EnsureProjectInput,
+  FailIdempotencyClaimInput,
+  GetFileChunksByFileIdsInput,
   PersistedDecision,
   PersistedEvent,
   PersistedExecution,
@@ -27,13 +33,23 @@ import type {
   PersistenceHealthcheck,
   PersistencePort,
   PersistenceTransactionPort,
+  ReleaseProjectRunLockInput,
+  RenewIdempotencyClaimInput,
+  RenewProjectRunLockInput,
+  ResolveIdempotentResultInput,
+  RetrievedIndexedChunk,
+  RetrievedIndexedFileCandidate,
   SaveDecisionInput,
+  SaveIdempotentResultInput,
   SaveEventInput,
   SaveExecutionArtifactInput,
   SaveExecutionInput,
   SaveTaskContextInput,
   SaveTaskInput,
+  SearchFileChunksInput,
+  SearchIndexedFilesInput,
   UpdateIndexRunMetricsInput,
+  TransitionTaskStateInput,
   UpsertIndexedFileInput,
 } from "../../local/ports";
 import type { LocalTaskDraft } from "../../local/types";
@@ -76,6 +92,18 @@ class InMemoryPersistence implements PersistencePort {
   public async listProjectFiles(_project_id: string, includeDeleted = false): Promise<PersistedIndexedFile[]> {
     const items = [...this.filesByPath.values()];
     return includeDeleted ? items : items.filter((item) => !item.is_deleted);
+  }
+
+  public async searchIndexedFiles(_input: SearchIndexedFilesInput): Promise<RetrievedIndexedFileCandidate[]> {
+    return [];
+  }
+
+  public async searchFileChunks(_input: SearchFileChunksInput): Promise<RetrievedIndexedChunk[]> {
+    return [];
+  }
+
+  public async getFileChunksByFileIds(_input: GetFileChunksByFileIdsInput): Promise<RetrievedIndexedChunk[]> {
+    return [];
   }
 
   public async upsertIndexedFile(input: UpsertIndexedFileInput): Promise<PersistedIndexedFile> {
@@ -122,10 +150,11 @@ class InMemoryPersistence implements PersistencePort {
   }
 
   public async saveTask(input: SaveTaskInput): Promise<PersistedTask> {
-    return { id: input.task.id, project_id: input.project_id };
+    return { id: input.task.id, project_id: input.project_id, state: input.lifecycle_state ?? "draft" };
   }
 
   public async saveTaskContext(input: SaveTaskContextInput): Promise<PersistedTaskContext> {
+    void input.retrieved_context;
     return { id: "task-context", task_id: input.task.id };
   }
 
@@ -144,6 +173,50 @@ class InMemoryPersistence implements PersistencePort {
   public async saveEvent(input: SaveEventInput): Promise<PersistedEvent> {
     return { id: "event", project_id: input.project_id };
   }
+
+  public async getTaskLifecycleState(_project_id: string, _task_id: string) {
+    return null;
+  }
+
+  public async transitionTaskState(_input: TransitionTaskStateInput): Promise<void> {}
+
+  public async acquireProjectRunLock(_input: AcquireProjectRunLockInput): Promise<boolean> {
+    return true;
+  }
+
+  public async renewProjectRunLock(_input: RenewProjectRunLockInput): Promise<boolean> {
+    return true;
+  }
+
+  public async releaseProjectRunLock(_input: ReleaseProjectRunLockInput): Promise<void> {}
+
+  public async claimIdempotency(_input: ClaimIdempotencyInput): Promise<ClaimIdempotencyResult> {
+    return {
+      status: "claimed",
+      claim_id: "claim-1",
+      owner: "indexing-test",
+      lease_expires_at: new Date(Date.now() + 60_000).toISOString(),
+      response_json: null,
+    };
+  }
+
+  public async renewIdempotencyClaim(_input: RenewIdempotencyClaimInput): Promise<boolean> {
+    return true;
+  }
+
+  public async completeIdempotencyClaim(_input: CompleteIdempotencyClaimInput): Promise<boolean> {
+    return true;
+  }
+
+  public async failIdempotencyClaim(_input: FailIdempotencyClaimInput): Promise<boolean> {
+    return true;
+  }
+
+  public async resolveIdempotentResult(_input: ResolveIdempotentResultInput): Promise<Record<string, unknown> | null> {
+    return null;
+  }
+
+  public async saveIdempotentResult(_input: SaveIdempotentResultInput): Promise<void> {}
 
   public async runInTransaction<T>(operation: (tx: PersistenceTransactionPort) => Promise<T>): Promise<T> {
     return operation(this);
@@ -314,6 +387,74 @@ test("IncrementalWorkspaceIndexer detecta new/modified/deleted y actualiza chunk
 
     assert.equal(third.metrics.deleted, 1);
     assert.equal(persistence.filesByPath.get("src/app.ts")?.is_deleted, true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("IncrementalWorkspaceIndexer runIndexByPaths reindexa scope afectado sin full scan", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "wis-indexer-scoped-"));
+  const persistence = new InMemoryPersistence();
+  const indexer = new IncrementalWorkspaceIndexer({
+    persistence,
+    getIndexConfig: () => defaultIndexConfig,
+  });
+
+  try {
+    await mkdir(path.join(root, "src"), { recursive: true });
+    const appFile = path.join(root, "src", "app.ts");
+    const legacyFile = path.join(root, "src", "legacy.ts");
+
+    await writeFile(appFile, "export const value = 1;\n", "utf8");
+    await writeFile(legacyFile, "export const legacy = true;\n", "utf8");
+
+    await indexer.runIndex({
+      projectId: "project-1",
+      snapshot: {
+        operation_profile: "local_private",
+        workspace_root: root,
+        repo_root: root,
+        branch: "main",
+        active_file: appFile,
+        db_status: "connected",
+        db_error: null,
+        runtime_state: "ready",
+        last_action: null,
+        task_draft: null,
+        last_result: null,
+        errors: [],
+        updated_at: new Date().toISOString(),
+      },
+    });
+
+    await writeFile(appFile, "export const value = 2;\n", "utf8");
+    await rm(legacyFile, { force: true });
+
+    const scoped = await indexer.runIndexByPaths({
+      projectId: "project-1",
+      snapshot: {
+        operation_profile: "local_private",
+        workspace_root: root,
+        repo_root: root,
+        branch: "main",
+        active_file: appFile,
+        db_status: "connected",
+        db_error: null,
+        runtime_state: "ready",
+        last_action: null,
+        task_draft: null,
+        last_result: null,
+        errors: [],
+        updated_at: new Date().toISOString(),
+      },
+      paths: ["src/app.ts", "src/legacy.ts"],
+    });
+
+    assert.equal(scoped.details.mode, "scoped");
+    assert.equal(scoped.metrics.scanned, 2);
+    assert.equal(scoped.metrics.modified, 1);
+    assert.equal(scoped.metrics.deleted, 1);
+    assert.equal(persistence.filesByPath.get("src/legacy.ts")?.is_deleted, true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
