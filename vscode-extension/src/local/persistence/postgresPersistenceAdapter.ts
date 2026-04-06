@@ -766,17 +766,7 @@ export class PostgresPersistenceAdapter implements PersistencePort {
 
   public async saveDecision(input: SaveDecisionInput): Promise<PersistedDecision> {
     await this.ensureMigrations();
-    const decisionId = randomUUID();
-    const table = this.table("decisions");
-    await this.query(
-      `INSERT INTO ${table} (id, project_id, title, statement, source, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [decisionId, input.project_id, input.title, input.statement, input.source, nowIso()],
-    );
-    return {
-      id: decisionId,
-      project_id: input.project_id,
-    };
+    return this.saveDecisionWithClient(this.pool, input);
   }
 
   public async saveEvent(input: SaveEventInput): Promise<PersistedEvent> {
@@ -1115,6 +1105,7 @@ export class PostgresPersistenceAdapter implements PersistencePort {
       const txPort: PersistenceTransactionPort = {
         saveExecution: (input) => this.saveExecutionWithClient(client, input),
         saveExecutionArtifact: (input) => this.saveExecutionArtifactWithClient(client, input),
+        saveDecision: (input) => this.saveDecisionWithClient(client, input),
         saveEvent: (input) => this.saveEventWithClient(client, input),
       };
       const result = await operation(txPort);
@@ -1346,6 +1337,20 @@ export class PostgresPersistenceAdapter implements PersistencePort {
     return {
       id: artifactId,
       execution_id: input.execution_id,
+    };
+  }
+
+  private async saveDecisionWithClient(client: QueryClient, input: SaveDecisionInput): Promise<PersistedDecision> {
+    const decisionId = randomUUID();
+    const table = this.table("decisions");
+    await client.query(
+      `INSERT INTO ${table} (id, project_id, title, statement, source, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [decisionId, input.project_id, input.title, input.statement, input.source, nowIso()],
+    );
+    return {
+      id: decisionId,
+      project_id: input.project_id,
     };
   }
 

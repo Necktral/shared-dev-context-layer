@@ -4,6 +4,7 @@ import type {
   ContextRetrieverPort,
   CodexRunnerPort,
   PostRunReconcilerPort,
+  PostRunReviewerPort,
   PersistedProject,
   PersistenceHealthcheck,
   PersistencePort,
@@ -13,6 +14,7 @@ import type {
 import { validateCodexExecutableCommand } from "./codexCommandValidation";
 import { capText, countLines, sha256Hex } from "./execution/codexExecutionUtils";
 import { InMemoryLocalRuntimeStore } from "./localRuntimeStore";
+import { PostRunReviewer } from "./postRunReviewer";
 import type {
   CodexExecutionResult,
   ExecutionOutcome,
@@ -34,6 +36,7 @@ export interface LocalCommandServiceDeps {
   retriever: ContextRetrieverPort;
   taskBuilder: TaskBuilderPort;
   postRunReconciler: PostRunReconcilerPort;
+  postRunReviewer?: PostRunReviewerPort;
   codexRunner: CodexRunnerPort;
   persistence: PersistencePort;
   getOperationProfile: () => OperationProfile;
@@ -52,6 +55,7 @@ const CHANGE_SUMMARY_ARTIFACT_MAX_CHARS = 8_000;
 const OUTCOME_ARTIFACT_MAX_CHARS = 4_000;
 const REINDEX_ARTIFACT_MAX_CHARS = 6_000;
 const REVIEW_ARTIFACT_MAX_CHARS = 8_000;
+const OPERATOR_REVIEW_ARTIFACT_MAX_CHARS = 8_000;
 const PROJECT_RUN_LOCK_TTL_SECONDS = 180;
 const PROJECT_RUN_LOCK_HEARTBEAT_INTERVAL_MS = 60_000;
 
@@ -76,7 +80,11 @@ function toErrorMessage(error: unknown): string {
 }
 
 export class LocalCommandService {
-  constructor(private readonly deps: LocalCommandServiceDeps) {}
+  private readonly postRunReviewer: PostRunReviewerPort;
+
+  constructor(private readonly deps: LocalCommandServiceDeps) {
+    this.postRunReviewer = deps.postRunReviewer ?? new PostRunReviewer();
+  }
 
   public async localRefresh(): Promise<LocalCommandResult> {
     const blocked = this.ensureLocalProfile("local_refresh");
@@ -683,7 +691,7 @@ export class LocalCommandService {
       const finalTaskState = this.finalTaskStateFromOutcome(effectiveOutcome);
       const nextReviewHint = lockLeaseLost
         ? "Lease perdido durante run/reconcile; verifica contención y reintenta."
-        : reconciled.review_payload.next_action;
+        : null;
       const prepareLatencyMs = Math.max(0, Date.now() - Date.parse(draft.created_at));
 
       const persisted = await this.deps.persistence.runInTransaction(async (tx) => {
@@ -928,6 +936,43 @@ export class LocalCommandService {
           },
         });
 
+        const operatorReview = await this.postRunReviewer.review({
+          source_execution_id: executionRecord.id,
+          source_task_id: draft.id,
+          execution_result: execution,
+          workspace_diff: reconciled.workspace_diff,
+          classified_outcome: effectiveOutcome,
+          outcome_classification: effectiveOutcomeClassification,
+          review_payload: reconciled.review_payload,
+          reindex_result: reconciled.reindex_result,
+        });
+        const operatorReviewContent = this.cappedJsonContent(
+          {
+            version: "post_run_operator_decision_v1",
+            ...operatorReview,
+          },
+          OPERATOR_REVIEW_ARTIFACT_MAX_CHARS,
+        );
+        const operatorReviewArtifact = await tx.saveExecutionArtifact({
+          project_id: project.id,
+          execution_id: executionRecord.id,
+          artifact_type: "post_run_operator_decision",
+          content: operatorReviewContent,
+          metadata: {
+            version: "post_run_operator_decision_v1",
+            content_hash: sha256Hex(operatorReviewContent),
+            chars: operatorReviewContent.length,
+            lines: countLines(operatorReviewContent),
+            review_decision: operatorReview.review_decision,
+          },
+        });
+        const decisionRecord = await tx.saveDecision({
+          project_id: project.id,
+          title: `Operator review: ${operatorReview.review_decision}`,
+          statement: operatorReview.review_summary,
+          source: `execution:${executionRecord.id}`,
+        });
+
         const eventRecord = await tx.saveEvent({
           project_id: project.id,
           task_id: draft.id,
@@ -955,6 +1000,9 @@ export class LocalCommandService {
             changed_files_preview: reconciled.workspace_diff.changed_files_preview,
             reindex_status: this.reindexStatusLabel(reconciled.reindex_result.mode, reconciled.reindex_result.status),
             reindex_ok: reconciled.reindex_result.ok,
+            review_decision: operatorReview.review_decision,
+            review_reason_codes: operatorReview.reason_codes,
+            review_next_action: operatorReview.next_action_plan,
             lock_lease_lost: lockLeaseLost,
             lease_lost_reason: leaseLostReason,
             closure_complete: true,
@@ -983,6 +1031,9 @@ export class LocalCommandService {
           outcomeArtifact,
           reindexArtifact,
           reviewPayloadArtifact,
+          operatorReviewArtifact,
+          decision: decisionRecord,
+          operatorReview,
           event: eventRecord,
         };
       });
@@ -1014,6 +1065,8 @@ export class LocalCommandService {
           outcome_artifact_id: persisted.outcomeArtifact.id,
           reindex_artifact_id: persisted.reindexArtifact.id,
           review_artifact_id: persisted.reviewPayloadArtifact.id,
+          operator_review_artifact_id: persisted.operatorReviewArtifact.id,
+          decision_id: persisted.decision.id,
           event_id: persisted.event.id,
           command: execution.command,
           command_line: execution.command_line,
@@ -1027,10 +1080,16 @@ export class LocalCommandService {
           usage_tokens: execution.usage_tokens,
           error: execution.error,
           classified_outcome: effectiveOutcome,
+          review_decision: persisted.operatorReview.review_decision,
+          review_summary: persisted.operatorReview.review_summary,
+          review_risks: persisted.operatorReview.review_risks,
+          changed_files_focus: persisted.operatorReview.changed_files_focus,
+          next_action_plan: persisted.operatorReview.next_action_plan,
+          review_reason_codes: persisted.operatorReview.reason_codes,
           changed_files_count: reconciled.workspace_diff.changed_files_count,
           changed_files_preview: reconciled.workspace_diff.changed_files_preview,
           reindex_status: this.reindexStatusLabel(reconciled.reindex_result.mode, reconciled.reindex_result.status),
-          next_review_hint: nextReviewHint,
+          next_review_hint: nextReviewHint ?? persisted.operatorReview.next_action_plan,
           classification_reasons: effectiveClassificationReasons,
           task_state: finalTaskState,
           idempotency_key: runIdempotencyKey,

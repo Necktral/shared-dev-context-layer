@@ -2,9 +2,14 @@ import type {
   CodexExecutionRequest,
   CodexExecutionResult,
   LocalTaskDraft,
+  OperatorReviewResult,
+  OutcomeClassificationV2,
   PostRunReconciliationResult,
+  PostRunReindexResult,
+  PostRunReviewPayload,
   ProjectRuntimeSnapshot,
   TaskLifecycleState,
+  WorkspaceDiffSummary,
 } from "./types";
 
 export interface RetrievedChunk {
@@ -153,6 +158,21 @@ export interface PostRunReconcileRequest {
 
 export interface PostRunReconcilerPort {
   reconcile(request: PostRunReconcileRequest): Promise<PostRunReconciliationResult>;
+}
+
+export interface PostRunReviewInput {
+  source_execution_id: string;
+  source_task_id: string;
+  execution_result: CodexExecutionResult;
+  workspace_diff: WorkspaceDiffSummary;
+  classified_outcome: OutcomeClassificationV2["classified_outcome"];
+  outcome_classification: OutcomeClassificationV2;
+  review_payload: PostRunReviewPayload;
+  reindex_result: PostRunReindexResult;
+}
+
+export interface PostRunReviewerPort {
+  review(input: PostRunReviewInput): Promise<OperatorReviewResult>;
 }
 
 export interface PersistenceHealthcheck {
@@ -420,6 +440,7 @@ export interface TransitionTaskStateInput {
 export interface PersistenceTransactionPort {
   saveExecution(input: SaveExecutionInput): Promise<PersistedExecution>;
   saveExecutionArtifact(input: SaveExecutionArtifactInput): Promise<PersistedExecutionArtifact>;
+  saveDecision(input: SaveDecisionInput): Promise<PersistedDecision>;
   saveEvent(input: SaveEventInput): Promise<PersistedEvent>;
 }
 

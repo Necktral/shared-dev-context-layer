@@ -193,6 +193,25 @@ export interface PostRunReviewPayload {
   next_action: string;
 }
 
+export type ReviewDecision =
+  | "accept"
+  | "accept_with_warnings"
+  | "needs_manual_review"
+  | "retry_recommended"
+  | "blocked"
+  | "reject";
+
+export interface OperatorReviewResult {
+  review_decision: ReviewDecision;
+  review_summary: string;
+  review_risks: string[];
+  changed_files_focus: string[];
+  next_action_plan: string;
+  source_execution_id: string;
+  source_task_id: string;
+  reason_codes: string[];
+}
+
 export interface PostRunTelemetry {
   prepare_latency_ms: number;
   run_latency_ms: number;
