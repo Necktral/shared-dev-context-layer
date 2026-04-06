@@ -359,6 +359,12 @@ export interface ReleaseProjectRunLockInput {
   lock_id: string;
 }
 
+export interface RenewProjectRunLockInput {
+  project_id: string;
+  lock_id: string;
+  ttl_seconds: number;
+}
+
 export interface ResolveIdempotentResultInput {
   project_id: string;
   command: string;
@@ -368,6 +374,38 @@ export interface ResolveIdempotentResultInput {
 export interface SaveIdempotentResultInput extends ResolveIdempotentResultInput {
   response_json: Record<string, unknown>;
   status: "ok" | "error" | "blocked";
+}
+
+export type IdempotencyClaimStatus = "claimed" | "reclaimed" | "in_progress" | "completed";
+
+export interface ClaimIdempotencyInput extends ResolveIdempotentResultInput {
+  claim_id: string;
+  owner: string;
+  ttl_seconds: number;
+}
+
+export interface ClaimIdempotencyResult {
+  status: IdempotencyClaimStatus;
+  claim_id: string | null;
+  owner: string | null;
+  lease_expires_at: string | null;
+  response_json: Record<string, unknown> | null;
+}
+
+export interface RenewIdempotencyClaimInput extends ResolveIdempotentResultInput {
+  claim_id: string;
+  ttl_seconds: number;
+}
+
+export interface CompleteIdempotencyClaimInput extends ResolveIdempotentResultInput {
+  claim_id: string;
+  response_json: Record<string, unknown>;
+}
+
+export interface FailIdempotencyClaimInput extends ResolveIdempotentResultInput {
+  claim_id: string;
+  error_message: string;
+  response_json: Record<string, unknown>;
 }
 
 export interface TransitionTaskStateInput {
@@ -404,7 +442,12 @@ export interface PersistencePort extends PersistenceTransactionPort {
   getTaskLifecycleState(project_id: string, task_id: string): Promise<TaskLifecycleState | null>;
   transitionTaskState(input: TransitionTaskStateInput): Promise<void>;
   acquireProjectRunLock(input: AcquireProjectRunLockInput): Promise<boolean>;
+  renewProjectRunLock(input: RenewProjectRunLockInput): Promise<boolean>;
   releaseProjectRunLock(input: ReleaseProjectRunLockInput): Promise<void>;
+  claimIdempotency(input: ClaimIdempotencyInput): Promise<ClaimIdempotencyResult>;
+  renewIdempotencyClaim(input: RenewIdempotencyClaimInput): Promise<boolean>;
+  completeIdempotencyClaim(input: CompleteIdempotencyClaimInput): Promise<boolean>;
+  failIdempotencyClaim(input: FailIdempotencyClaimInput): Promise<boolean>;
   resolveIdempotentResult(input: ResolveIdempotentResultInput): Promise<Record<string, unknown> | null>;
   saveIdempotentResult(input: SaveIdempotentResultInput): Promise<void>;
   saveDecision(input: SaveDecisionInput): Promise<PersistedDecision>;

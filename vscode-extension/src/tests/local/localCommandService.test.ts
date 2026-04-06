@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { LocalCommandService } from "../../local/localCommandService";
 import { InMemoryLocalRuntimeStore } from "../../local/localRuntimeStore";
 import {
@@ -13,8 +14,12 @@ import { NoopIndexer, NoopRetriever, NoopTaskBuilder } from "../../local/noopSer
 import type {
   AcquireProjectRunLockInput,
   ChunkRecord,
+  ClaimIdempotencyInput,
+  ClaimIdempotencyResult,
+  CompleteIdempotencyClaimInput,
   CreateIndexRunInput,
   EnsureProjectInput,
+  FailIdempotencyClaimInput,
   GetFileChunksByFileIdsInput,
   PersistedDecision,
   PersistedEvent,
@@ -38,6 +43,8 @@ import type {
   SaveTaskContextInput,
   SaveTaskInput,
   ReleaseProjectRunLockInput,
+  RenewIdempotencyClaimInput,
+  RenewProjectRunLockInput,
   ResolveIdempotentResultInput,
   SearchFileChunksInput,
   SearchIndexedFilesInput,
@@ -104,7 +111,24 @@ class FakePersistence implements PersistencePort {
 
   public taskStates = new Map<string, string>();
 
-  public activeProjectLock: { project_id: string; lock_id: string } | null = null;
+  public taskTransitions: TransitionTaskStateInput[] = [];
+
+  public activeProjectLock: { project_id: string; lock_id: string; expires_at: number } | null = null;
+
+  public failLockRenewal = false;
+
+  public failClaimRenewal = false;
+
+  private readonly idempotencyClaims = new Map<
+    string,
+    {
+      status: "in_progress" | "completed" | "failed";
+      claim_id: string | null;
+      owner: string | null;
+      lease_expires_at: number | null;
+      response_json: Record<string, unknown> | null;
+    }
+  >();
 
   public async healthcheck() {
     if (this.failHealth) {
@@ -241,16 +265,40 @@ class FakePersistence implements PersistencePort {
       throw new Error(`invalid state transition: expected ${input.from_state} but got ${current}`);
     }
     this.taskStates.set(input.task_id, input.to_state);
+    this.taskTransitions.push({ ...input });
   }
 
   public async acquireProjectRunLock(input: AcquireProjectRunLockInput): Promise<boolean> {
-    if (this.activeProjectLock && this.activeProjectLock.project_id === input.project_id) {
+    const now = Date.now();
+    if (
+      this.activeProjectLock &&
+      this.activeProjectLock.project_id === input.project_id &&
+      this.activeProjectLock.expires_at > now
+    ) {
       return false;
     }
     this.activeProjectLock = {
       project_id: input.project_id,
       lock_id: input.lock_id,
+      expires_at: now + input.ttl_seconds * 1000,
     };
+    return true;
+  }
+
+  public async renewProjectRunLock(input: RenewProjectRunLockInput): Promise<boolean> {
+    if (this.failLockRenewal) {
+      return false;
+    }
+    const now = Date.now();
+    if (
+      !this.activeProjectLock ||
+      this.activeProjectLock.project_id !== input.project_id ||
+      this.activeProjectLock.lock_id !== input.lock_id ||
+      this.activeProjectLock.expires_at <= now
+    ) {
+      return false;
+    }
+    this.activeProjectLock.expires_at = now + input.ttl_seconds * 1000;
     return true;
   }
 
@@ -262,6 +310,101 @@ class FakePersistence implements PersistencePort {
     ) {
       this.activeProjectLock = null;
     }
+  }
+
+  public async claimIdempotency(input: ClaimIdempotencyInput): Promise<ClaimIdempotencyResult> {
+    const key = `${input.project_id}:${input.command}:${input.idempotency_key}`;
+    const now = Date.now();
+    const existing = this.idempotencyClaims.get(key);
+    if (!existing) {
+      this.idempotencyClaims.set(key, {
+        status: "in_progress",
+        claim_id: input.claim_id,
+        owner: input.owner,
+        lease_expires_at: now + input.ttl_seconds * 1000,
+        response_json: null,
+      });
+      return {
+        status: "claimed",
+        claim_id: input.claim_id,
+        owner: input.owner,
+        lease_expires_at: new Date(now + input.ttl_seconds * 1000).toISOString(),
+        response_json: null,
+      };
+    }
+    if (existing.status === "completed" || existing.status === "failed") {
+      return {
+        status: "completed",
+        claim_id: existing.claim_id,
+        owner: existing.owner,
+        lease_expires_at: existing.lease_expires_at ? new Date(existing.lease_expires_at).toISOString() : null,
+        response_json: existing.response_json,
+      };
+    }
+    if ((existing.lease_expires_at ?? 0) <= now) {
+      existing.status = "in_progress";
+      existing.claim_id = input.claim_id;
+      existing.owner = input.owner;
+      existing.lease_expires_at = now + input.ttl_seconds * 1000;
+      existing.response_json = null;
+      return {
+        status: "reclaimed",
+        claim_id: input.claim_id,
+        owner: input.owner,
+        lease_expires_at: new Date(existing.lease_expires_at).toISOString(),
+        response_json: null,
+      };
+    }
+    return {
+      status: "in_progress",
+      claim_id: existing.claim_id,
+      owner: existing.owner,
+      lease_expires_at: existing.lease_expires_at ? new Date(existing.lease_expires_at).toISOString() : null,
+      response_json: null,
+    };
+  }
+
+  public async renewIdempotencyClaim(input: RenewIdempotencyClaimInput): Promise<boolean> {
+    if (this.failClaimRenewal) {
+      return false;
+    }
+    const key = `${input.project_id}:${input.command}:${input.idempotency_key}`;
+    const existing = this.idempotencyClaims.get(key);
+    const now = Date.now();
+    if (!existing || existing.status !== "in_progress" || existing.claim_id !== input.claim_id) {
+      return false;
+    }
+    if ((existing.lease_expires_at ?? 0) <= now) {
+      return false;
+    }
+    existing.lease_expires_at = now + input.ttl_seconds * 1000;
+    return true;
+  }
+
+  public async completeIdempotencyClaim(input: CompleteIdempotencyClaimInput): Promise<boolean> {
+    const key = `${input.project_id}:${input.command}:${input.idempotency_key}`;
+    const existing = this.idempotencyClaims.get(key);
+    if (!existing || existing.status !== "in_progress" || existing.claim_id !== input.claim_id) {
+      return false;
+    }
+    existing.status = "completed";
+    existing.lease_expires_at = null;
+    existing.response_json = input.response_json;
+    this.idempotencyStore.set(key, input.response_json);
+    return true;
+  }
+
+  public async failIdempotencyClaim(input: FailIdempotencyClaimInput): Promise<boolean> {
+    const key = `${input.project_id}:${input.command}:${input.idempotency_key}`;
+    const existing = this.idempotencyClaims.get(key);
+    if (!existing || existing.status !== "in_progress" || existing.claim_id !== input.claim_id) {
+      return false;
+    }
+    existing.status = "failed";
+    existing.lease_expires_at = null;
+    existing.response_json = input.response_json;
+    this.idempotencyStore.set(key, input.response_json);
+    return true;
   }
 
   public async resolveIdempotentResult(input: ResolveIdempotentResultInput): Promise<Record<string, unknown> | null> {
@@ -780,6 +923,7 @@ test("LocalCommandService bloquea localRunCodex cuando el proyecto ya tiene lock
   persistence.activeProjectLock = {
     project_id: "project-1",
     lock_id: "external-lock",
+    expires_at: Date.now() + 60_000,
   };
 
   const service = new LocalCommandService({
@@ -838,6 +982,131 @@ test("LocalCommandService replay idempotente en localRunCodex evita nueva ejecuc
   assert.equal(second.status, "ok");
   assert.equal(runInvocations, 1);
   assert.equal(second.details?.idempotency_key, first.details?.idempotency_key);
+});
+
+test("LocalCommandService bloquea localRunCodex cuando claim de idempotencia ya está in_progress", async () => {
+  let profile: OperationProfile = "local_private";
+  const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
+  const persistence = new FakePersistence();
+  let runInvocations = 0;
+  const fixedDraft: LocalTaskDraft = {
+    id: "task-claim-progress",
+    objective: "Claim in progress",
+    context_summary: "ctx",
+    candidate_files: ["/workspace/repo/src/index.ts"],
+    constraints: [],
+    acceptance_criteria: [],
+    created_at: "2026-04-06T02:30:00.000Z",
+  };
+  store.update((current) => ({ ...current, task_draft: fixedDraft }));
+
+  const runIdempotencyKey = createHash("sha256")
+    .update(["local_run_codex", "project-1", fixedDraft.id, fixedDraft.created_at, "/workspace/repo", "main"].join("|"))
+    .digest("hex");
+
+  await persistence.claimIdempotency({
+    project_id: "project-1",
+    command: "local_run_codex",
+    idempotency_key: runIdempotencyKey,
+    claim_id: "active-claim",
+    owner: "other-runner",
+    ttl_seconds: 180,
+  });
+
+  const service = new LocalCommandService({
+    inspector: { inspect: async () => environment() },
+    store,
+    indexer: new NoopIndexer(),
+    retriever: new NoopRetriever(),
+    taskBuilder: new NoopTaskBuilder(),
+    postRunReconciler: createFakePostRunReconciler(),
+    codexRunner: {
+      healthcheck: async () => okExecution("healthcheck"),
+      run: async () => {
+        runInvocations += 1;
+        return okExecution("run");
+      },
+    },
+    persistence,
+    getOperationProfile: () => profile,
+    getCodexCliCommand: () => "codex",
+  });
+
+  const result = await service.localRunCodex();
+  assert.equal(result.status, "error");
+  assert.equal(result.details?.blocked_reason, "idempotency_in_progress");
+  assert.equal(result.details?.idempotency_claim_status, "in_progress");
+  assert.equal(runInvocations, 0);
+});
+
+test("LocalCommandService marca blocked cuando pierde lease durante run/reconcile", async () => {
+  let profile: OperationProfile = "local_private";
+  const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
+  const persistence = new FakePersistence();
+  persistence.failLockRenewal = true;
+  let runInvocations = 0;
+
+  const service = new LocalCommandService({
+    inspector: { inspect: async () => environment() },
+    store,
+    indexer: new NoopIndexer(),
+    retriever: new NoopRetriever(),
+    taskBuilder: new NoopTaskBuilder(),
+    postRunReconciler: createFakePostRunReconciler(),
+    codexRunner: {
+      healthcheck: async () => okExecution("healthcheck"),
+      run: async () => {
+        runInvocations += 1;
+        return okExecution("run");
+      },
+    },
+    persistence,
+    getOperationProfile: () => profile,
+    getCodexCliCommand: () => "codex",
+  });
+
+  await service.localPrepareTask("Lease renewal failure");
+  const result = await service.localRunCodex();
+  assert.equal(result.status, "error");
+  assert.equal(result.details?.classified_outcome, "blocked");
+  assert.equal(result.details?.lock_lease_lost, true);
+  assert.equal(result.details?.blocked_reason, "lock_lease_lost");
+  assert.equal(result.details?.idempotency_claim_status, "claimed");
+  assert.equal(runInvocations, 0);
+});
+
+test("LocalCommandService mueve running->reconciling antes del cierre final", async () => {
+  let profile: OperationProfile = "local_private";
+  const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
+  const persistence = new FakePersistence();
+
+  const service = new LocalCommandService({
+    inspector: { inspect: async () => environment() },
+    store,
+    indexer: new NoopIndexer(),
+    retriever: new NoopRetriever(),
+    taskBuilder: new NoopTaskBuilder(),
+    postRunReconciler: createFakePostRunReconciler(),
+    codexRunner: {
+      healthcheck: async () => okExecution("healthcheck"),
+      run: async () => okExecution("run"),
+    },
+    persistence,
+    getOperationProfile: () => profile,
+    getCodexCliCommand: () => "codex",
+  });
+
+  await service.localPrepareTask("Boundary reconciling");
+  const result = await service.localRunCodex();
+  assert.equal(result.status, "ok");
+  const runToReconcilingIndex = persistence.taskTransitions.findIndex(
+    (entry) => entry.from_state === "running" && entry.to_state === "reconciling",
+  );
+  const reconcilingToFinalIndex = persistence.taskTransitions.findIndex(
+    (entry) => entry.from_state === "reconciling" && entry.to_state === "completed",
+  );
+  assert.ok(runToReconcilingIndex >= 0);
+  assert.ok(reconcilingToFinalIndex > runToReconcilingIndex);
 });
 
 test("LocalCommandService rechaza codexCliCommand compuesto con error trazable", async () => {

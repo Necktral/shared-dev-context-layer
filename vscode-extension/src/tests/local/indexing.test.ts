@@ -13,9 +13,13 @@ import { IncrementalWorkspaceIndexer } from "../../local/indexing/incrementalWor
 import type {
   AcquireProjectRunLockInput,
   ChunkRecord,
+  ClaimIdempotencyInput,
+  ClaimIdempotencyResult,
+  CompleteIdempotencyClaimInput,
   CompleteIndexRunInput,
   CreateIndexRunInput,
   EnsureProjectInput,
+  FailIdempotencyClaimInput,
   GetFileChunksByFileIdsInput,
   PersistedDecision,
   PersistedEvent,
@@ -30,6 +34,8 @@ import type {
   PersistencePort,
   PersistenceTransactionPort,
   ReleaseProjectRunLockInput,
+  RenewIdempotencyClaimInput,
+  RenewProjectRunLockInput,
   ResolveIdempotentResultInput,
   RetrievedIndexedChunk,
   RetrievedIndexedFileCandidate,
@@ -178,7 +184,33 @@ class InMemoryPersistence implements PersistencePort {
     return true;
   }
 
+  public async renewProjectRunLock(_input: RenewProjectRunLockInput): Promise<boolean> {
+    return true;
+  }
+
   public async releaseProjectRunLock(_input: ReleaseProjectRunLockInput): Promise<void> {}
+
+  public async claimIdempotency(_input: ClaimIdempotencyInput): Promise<ClaimIdempotencyResult> {
+    return {
+      status: "claimed",
+      claim_id: "claim-1",
+      owner: "indexing-test",
+      lease_expires_at: new Date(Date.now() + 60_000).toISOString(),
+      response_json: null,
+    };
+  }
+
+  public async renewIdempotencyClaim(_input: RenewIdempotencyClaimInput): Promise<boolean> {
+    return true;
+  }
+
+  public async completeIdempotencyClaim(_input: CompleteIdempotencyClaimInput): Promise<boolean> {
+    return true;
+  }
+
+  public async failIdempotencyClaim(_input: FailIdempotencyClaimInput): Promise<boolean> {
+    return true;
+  }
 
   public async resolveIdempotentResult(_input: ResolveIdempotentResultInput): Promise<Record<string, unknown> | null> {
     return null;

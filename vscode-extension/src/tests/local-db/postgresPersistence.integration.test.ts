@@ -974,6 +974,39 @@ run("I-17 project run lock aplica single-writer por project_id", async () => {
   assert.equal(first, true);
   assert.equal(second, false);
 
+  const renewed = await adapter.renewProjectRunLock({
+    project_id: project.id,
+    lock_id: "lock-a",
+    ttl_seconds: 60,
+  });
+  assert.equal(renewed, true);
+
+  const pool = new Pool({
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    password: config.password,
+    ssl: false,
+  });
+  try {
+    await pool.query(
+      `UPDATE "${schema}"."project_run_locks"
+       SET expires_at = NOW() - INTERVAL '1 second'
+       WHERE project_id = $1`,
+      [project.id],
+    );
+  } finally {
+    await pool.end();
+  }
+
+  const renewExpired = await adapter.renewProjectRunLock({
+    project_id: project.id,
+    lock_id: "lock-a",
+    ttl_seconds: 60,
+  });
+  assert.equal(renewExpired, false);
+
   await adapter.releaseProjectRunLock({
     project_id: project.id,
     lock_id: "lock-a",
@@ -1091,6 +1124,118 @@ run("I-19 events mantiene seq_no monotónico y dedupe por idempotency_key", asyn
   assert.equal(duplicate.id, duplicateAgain.id);
   const seq = await readEventSeq(config, schema, execution.id);
   assert.deepEqual(seq, [1, 2, 3]);
+
+  await adapter.dispose();
+});
+
+run("I-20 idempotency claim-at-start soporta claimed/in_progress/completed/reclaimed", async () => {
+  const schema = makeSchemaName("local_private_it");
+  const config = baseConfig(schema);
+  const adapter = new PostgresPersistenceAdapter({ config, extensionPath: process.cwd() });
+  await adapter.healthcheck();
+
+  const project = await adapter.ensureProject({
+    operation_profile: "local_private",
+    workspace_root: "/workspace",
+    repo_root: "/workspace/repo",
+    branch: "main",
+  });
+
+  const claimed = await adapter.claimIdempotency({
+    project_id: project.id,
+    command: "local_run_codex",
+    idempotency_key: "idem-claim-1",
+    claim_id: "claim-a",
+    owner: "runner-a",
+    ttl_seconds: 60,
+  });
+  assert.equal(claimed.status, "claimed");
+
+  const inProgress = await adapter.claimIdempotency({
+    project_id: project.id,
+    command: "local_run_codex",
+    idempotency_key: "idem-claim-1",
+    claim_id: "claim-b",
+    owner: "runner-b",
+    ttl_seconds: 60,
+  });
+  assert.equal(inProgress.status, "in_progress");
+
+  const renewClaim = await adapter.renewIdempotencyClaim({
+    project_id: project.id,
+    command: "local_run_codex",
+    idempotency_key: "idem-claim-1",
+    claim_id: "claim-a",
+    ttl_seconds: 60,
+  });
+  assert.equal(renewClaim, true);
+
+  const completed = await adapter.completeIdempotencyClaim({
+    project_id: project.id,
+    command: "local_run_codex",
+    idempotency_key: "idem-claim-1",
+    claim_id: "claim-a",
+    response_json: {
+      status: "ok",
+      ok: true,
+      message: "cached",
+      details: { execution_id: "e-claim-1" },
+    },
+  });
+  assert.equal(completed, true);
+
+  const replayed = await adapter.claimIdempotency({
+    project_id: project.id,
+    command: "local_run_codex",
+    idempotency_key: "idem-claim-1",
+    claim_id: "claim-c",
+    owner: "runner-c",
+    ttl_seconds: 60,
+  });
+  assert.equal(replayed.status, "completed");
+  assert.equal(replayed.response_json?.status, "ok");
+
+  const claimedStale = await adapter.claimIdempotency({
+    project_id: project.id,
+    command: "local_run_codex",
+    idempotency_key: "idem-claim-stale",
+    claim_id: "claim-stale-a",
+    owner: "runner-a",
+    ttl_seconds: 60,
+  });
+  assert.equal(claimedStale.status, "claimed");
+
+  const pool = new Pool({
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    password: config.password,
+    ssl: false,
+  });
+  try {
+    await pool.query(
+      `UPDATE "${schema}"."idempotency_records"
+       SET lease_expires_at = NOW() - INTERVAL '1 second'
+       WHERE project_id = $1
+         AND command = 'local_run_codex'
+         AND idempotency_key = 'idem-claim-stale'`,
+      [project.id],
+    );
+  } finally {
+    await pool.end();
+  }
+
+  const reclaimed = await adapter.claimIdempotency({
+    project_id: project.id,
+    command: "local_run_codex",
+    idempotency_key: "idem-claim-stale",
+    claim_id: "claim-stale-b",
+    owner: "runner-b",
+    ttl_seconds: 60,
+  });
+  assert.equal(reclaimed.status, "reclaimed");
+  assert.equal(reclaimed.claim_id, "claim-stale-b");
 
   await adapter.dispose();
 });

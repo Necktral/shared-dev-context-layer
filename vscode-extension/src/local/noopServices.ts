@@ -2,9 +2,13 @@ import { randomUUID } from "node:crypto";
 import type {
   AcquireProjectRunLockInput,
   ChunkRecord,
+  ClaimIdempotencyInput,
+  ClaimIdempotencyResult,
+  CompleteIdempotencyClaimInput,
   ContextRetrieverPort,
   CreateIndexRunInput,
   EnsureProjectInput,
+  FailIdempotencyClaimInput,
   GetFileChunksByFileIdsInput,
   PersistedDecision,
   PersistedEvent,
@@ -30,6 +34,8 @@ import type {
   SearchFileChunksInput,
   SearchIndexedFilesInput,
   ReleaseProjectRunLockInput,
+  RenewIdempotencyClaimInput,
+  RenewProjectRunLockInput,
   ResolveIdempotentResultInput,
   TransitionTaskStateInput,
   TaskBuilderPort,
@@ -313,8 +319,34 @@ export class NoopPersistence implements PersistencePort {
     return true;
   }
 
+  public async renewProjectRunLock(_input: RenewProjectRunLockInput): Promise<boolean> {
+    return true;
+  }
+
   public async releaseProjectRunLock(_input: ReleaseProjectRunLockInput): Promise<void> {
     // No-op by design.
+  }
+
+  public async claimIdempotency(_input: ClaimIdempotencyInput): Promise<ClaimIdempotencyResult> {
+    return {
+      status: "claimed",
+      claim_id: randomUUID(),
+      owner: "noop",
+      lease_expires_at: new Date(Date.now() + 60_000).toISOString(),
+      response_json: null,
+    };
+  }
+
+  public async renewIdempotencyClaim(_input: RenewIdempotencyClaimInput): Promise<boolean> {
+    return true;
+  }
+
+  public async completeIdempotencyClaim(_input: CompleteIdempotencyClaimInput): Promise<boolean> {
+    return true;
+  }
+
+  public async failIdempotencyClaim(_input: FailIdempotencyClaimInput): Promise<boolean> {
+    return true;
   }
 
   public async resolveIdempotentResult(_input: ResolveIdempotentResultInput): Promise<Record<string, unknown> | null> {

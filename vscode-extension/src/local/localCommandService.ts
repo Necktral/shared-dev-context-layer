@@ -53,6 +53,23 @@ const OUTCOME_ARTIFACT_MAX_CHARS = 4_000;
 const REINDEX_ARTIFACT_MAX_CHARS = 6_000;
 const REVIEW_ARTIFACT_MAX_CHARS = 8_000;
 const PROJECT_RUN_LOCK_TTL_SECONDS = 180;
+const PROJECT_RUN_LOCK_HEARTBEAT_INTERVAL_MS = 60_000;
+
+interface ActiveIdempotencyClaim {
+  project_id: string;
+  command: string;
+  idempotency_key: string;
+  claim_id: string;
+}
+
+interface LeaseHeartbeatHandle {
+  state: {
+    lockLeaseLost: boolean;
+    claimLeaseLost: boolean;
+    leaseLostReason: string | null;
+  };
+  stop: () => Promise<void>;
+}
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -339,6 +356,27 @@ export class LocalCommandService {
     let projectIdForLock: string | null = null;
     let draftIdForState: string | null = null;
     let stateTransitionStarted = false;
+    let transitionedToReconciling = false;
+    let activeClaim: ActiveIdempotencyClaim | null = null;
+    let claimCompleted = false;
+    let claimStatus: "claimed" | "reclaimed" | "completed" | "in_progress" | null = null;
+    let heartbeatHandle: LeaseHeartbeatHandle | null = null;
+    const internalAbortController = new AbortController();
+    const detachAbortListeners: Array<() => void> = [];
+    const userAbortSignal = options?.abortSignal;
+    if (userAbortSignal) {
+      if (userAbortSignal.aborted) {
+        internalAbortController.abort();
+      } else {
+        const forwardAbort = () => {
+          if (!internalAbortController.signal.aborted) {
+            internalAbortController.abort();
+          }
+        };
+        userAbortSignal.addEventListener("abort", forwardAbort, { once: true });
+        detachAbortListeners.push(() => userAbortSignal.removeEventListener("abort", forwardAbort));
+      }
+    }
 
     try {
       const environment = await this.deps.inspector.inspect();
@@ -398,16 +436,6 @@ export class LocalCommandService {
         snapshot.repo_root ?? "",
         snapshot.branch ?? "",
       ]);
-      const idempotentRun = await this.deps.persistence.resolveIdempotentResult({
-        project_id: project.id,
-        command: "local_run_codex",
-        idempotency_key: runIdempotencyKey,
-      });
-      if (idempotentRun) {
-        const replayed = this.resultFromIdempotent("local_run_codex", idempotentRun);
-        this.pushResult(replayed, replayed.status !== "ok");
-        return replayed;
-      }
 
       lockId = randomUUID();
       const lockAcquired = await this.deps.persistence.acquireProjectRunLock({
@@ -432,6 +460,77 @@ export class LocalCommandService {
         return lockedResult;
       }
 
+      const claimId = randomUUID();
+      const idempotencyClaim = await this.deps.persistence.claimIdempotency({
+        project_id: project.id,
+        command: "local_run_codex",
+        idempotency_key: runIdempotencyKey,
+        claim_id: claimId,
+        owner: "local_run_codex",
+        ttl_seconds: PROJECT_RUN_LOCK_TTL_SECONDS,
+      });
+      claimStatus = idempotencyClaim.status;
+      if (idempotencyClaim.status === "completed") {
+        if (!idempotencyClaim.response_json) {
+          const invalidReplay = this.makeResult(
+            "local_run_codex",
+            "error",
+            "Claim de idempotencia completado sin payload de replay.",
+            {
+              classified_outcome: "blocked",
+              blocked_reason: "invalid_idempotency_replay",
+              project_id: project.id,
+              task_id: draft.id,
+              idempotency_key: runIdempotencyKey,
+              idempotency_claim_status: idempotencyClaim.status,
+              idempotency_claim_id: idempotencyClaim.claim_id,
+            },
+          );
+          this.pushResult(invalidReplay, true);
+          return invalidReplay;
+        }
+        const replayed = this.resultFromIdempotent("local_run_codex", idempotencyClaim.response_json);
+        const replayDetails = replayed.details ? { ...replayed.details } : {};
+        replayDetails.idempotency_claim_status = idempotencyClaim.status;
+        replayDetails.idempotency_claim_id = idempotencyClaim.claim_id;
+        const replayedResult: LocalCommandResult = {
+          ...replayed,
+          details: replayDetails,
+        };
+        this.pushResult(replayedResult, replayedResult.status !== "ok");
+        return replayedResult;
+      }
+      if (idempotencyClaim.status === "in_progress") {
+        const inProgress = this.makeResult(
+          "local_run_codex",
+          "error",
+          "Comando duplicado en progreso para este task. Espera cierre del claim activo.",
+          {
+            classified_outcome: "blocked",
+            blocked_reason: "idempotency_in_progress",
+            project_id: project.id,
+            task_id: draft.id,
+            idempotency_key: runIdempotencyKey,
+            idempotency_claim_status: idempotencyClaim.status,
+            idempotency_claim_id: idempotencyClaim.claim_id,
+          },
+        );
+        this.pushResult(inProgress, true);
+        return inProgress;
+      }
+      activeClaim = {
+        project_id: project.id,
+        command: "local_run_codex",
+        idempotency_key: runIdempotencyKey,
+        claim_id: idempotencyClaim.claim_id ?? claimId,
+      };
+      heartbeatHandle = await this.startLeaseHeartbeat({
+        projectId: project.id,
+        lockId,
+        claim: activeClaim,
+        abortController: internalAbortController,
+      });
+
       const commandValidation = validateCodexExecutableCommand(this.deps.getCodexCliCommand());
       if (!commandValidation.ok) {
         const eventId = await this.recordInvalidCommandConfigurationEvent(project.id, draft.id, commandValidation);
@@ -447,8 +546,21 @@ export class LocalCommandService {
             error_code: commandValidation.error_code,
             configured_command: commandValidation.configured_command,
             error: commandValidation.reason,
+            idempotency_claim_status: claimStatus,
+            idempotency_claim_id: activeClaim?.claim_id ?? null,
           },
         );
+        if (activeClaim && !claimCompleted) {
+          await this.deps.persistence.failIdempotencyClaim({
+            project_id: activeClaim.project_id,
+            command: activeClaim.command,
+            idempotency_key: activeClaim.idempotency_key,
+            claim_id: activeClaim.claim_id,
+            error_message: commandValidation.reason,
+            response_json: invalidConfig as unknown as Record<string, unknown>,
+          });
+          claimCompleted = true;
+        }
         this.pushResult(invalidConfig, true);
         return invalidConfig;
       }
@@ -501,31 +613,77 @@ export class LocalCommandService {
         task: draft,
         execute: async () => {
           const healthResult = await this.deps.codexRunner.healthcheck(command, {
-            abortSignal: options?.abortSignal,
+            abortSignal: internalAbortController.signal,
           });
           if (!healthResult.ok) {
-            return this.failedRunFromHealthcheck(healthResult, draft.id, draft.objective);
+            const failed = this.failedRunFromHealthcheck(healthResult, draft.id, draft.objective);
+            if (!transitionedToReconciling) {
+              await this.deps.persistence.transitionTaskState({
+                project_id: project.id,
+                task_id: draft.id,
+                from_state: "running",
+                to_state: "reconciling",
+                reason: "local_run_codex_reconciling",
+              });
+              transitionedToReconciling = true;
+            }
+            return failed;
           }
-          if (options?.abortSignal?.aborted) {
-            return this.cancelledExecution(command, draft.id, draft.objective, "Cancelled before run started.");
+          if (internalAbortController.signal.aborted) {
+            const cancelled = this.cancelledExecution(command, draft.id, draft.objective, "Cancelled before run started.");
+            if (!transitionedToReconciling) {
+              await this.deps.persistence.transitionTaskState({
+                project_id: project.id,
+                task_id: draft.id,
+                from_state: "running",
+                to_state: "reconciling",
+                reason: "local_run_codex_reconciling",
+              });
+              transitionedToReconciling = true;
+            }
+            return cancelled;
           }
-          return this.deps.codexRunner.run(executionRequest, command, {
-            abortSignal: options?.abortSignal,
+          const executionResult = await this.deps.codexRunner.run(executionRequest, command, {
+            abortSignal: internalAbortController.signal,
           });
+          if (!transitionedToReconciling) {
+            await this.deps.persistence.transitionTaskState({
+              project_id: project.id,
+              task_id: draft.id,
+              from_state: "running",
+              to_state: "reconciling",
+              reason: "local_run_codex_reconciling",
+            });
+            transitionedToReconciling = true;
+          }
+          return executionResult;
         },
-      });
-      await this.deps.persistence.transitionTaskState({
-        project_id: project.id,
-        task_id: draft.id,
-        from_state: "running",
-        to_state: "reconciling",
-        reason: "local_run_codex_reconciling",
       });
 
       const execution = reconciled.execution_result;
-      const executionMessage = this.executionMessage(execution, reconciled.classified_outcome);
-      const executionSeverity = reconciled.outcome_classification.severity;
-      const finalTaskState = this.finalTaskStateFromOutcome(reconciled.classified_outcome);
+      const lockLeaseLost = Boolean(heartbeatHandle?.state.lockLeaseLost || heartbeatHandle?.state.claimLeaseLost);
+      const leaseLostReason = heartbeatHandle?.state.leaseLostReason;
+      const effectiveOutcome: ExecutionOutcome = lockLeaseLost ? "blocked" : reconciled.classified_outcome;
+      const effectiveClassificationReasons = lockLeaseLost
+        ? [...reconciled.classification_reasons, `lease_lost:${leaseLostReason ?? "unknown"}`]
+        : reconciled.classification_reasons;
+      const effectiveOutcomeClassification = lockLeaseLost
+        ? {
+            ...reconciled.outcome_classification,
+            classified_outcome: "blocked" as ExecutionOutcome,
+            reasons: [...reconciled.outcome_classification.reasons, `lease_lost:${leaseLostReason ?? "unknown"}`],
+            anomaly_flags: [...reconciled.outcome_classification.anomaly_flags, "lock_lease_lost"],
+            severity: "error" as const,
+          }
+        : reconciled.outcome_classification;
+      const executionMessage = lockLeaseLost
+        ? "Ejecucion abortada por perdida de lease de concurrencia."
+        : this.executionMessage(execution, effectiveOutcome);
+      const executionSeverity = effectiveOutcomeClassification.severity;
+      const finalTaskState = this.finalTaskStateFromOutcome(effectiveOutcome);
+      const nextReviewHint = lockLeaseLost
+        ? "Lease perdido durante run/reconcile; verifica contención y reintenta."
+        : reconciled.review_payload.next_action;
       const prepareLatencyMs = Math.max(0, Date.now() - Date.parse(draft.created_at));
 
       const persisted = await this.deps.persistence.runInTransaction(async (tx) => {
@@ -534,7 +692,7 @@ export class LocalCommandService {
           task_id: draft.id,
           result: execution,
           idempotency_key: runIdempotencyKey,
-          outcome_classification: reconciled.outcome_classification as unknown as Record<string, unknown>,
+          outcome_classification: effectiveOutcomeClassification as unknown as Record<string, unknown>,
         });
 
         const prompt = this.extractPromptFromPreview(execution.request_preview);
@@ -706,9 +864,11 @@ export class LocalCommandService {
         const outcomeContent = this.cappedJsonContent(
           {
             version: "execution_outcome_classification_v1",
-            ...reconciled.outcome_classification,
+            ...effectiveOutcomeClassification,
             warnings_count: execution.warnings_count,
             telemetry: reconciled.telemetry,
+            lock_lease_lost: lockLeaseLost,
+            lease_lost_reason: leaseLostReason,
           },
           OUTCOME_ARTIFACT_MAX_CHARS,
         );
@@ -788,13 +948,15 @@ export class LocalCommandService {
             cancelled: execution.cancelled,
             warnings_count: execution.warnings_count,
             error: execution.error,
-            classified_outcome: reconciled.classified_outcome,
-            classification_reasons: reconciled.classification_reasons,
-            anomaly_flags: reconciled.outcome_classification.anomaly_flags,
+            classified_outcome: effectiveOutcome,
+            classification_reasons: effectiveClassificationReasons,
+            anomaly_flags: effectiveOutcomeClassification.anomaly_flags,
             changed_files_count: reconciled.workspace_diff.changed_files_count,
             changed_files_preview: reconciled.workspace_diff.changed_files_preview,
             reindex_status: this.reindexStatusLabel(reconciled.reindex_result.mode, reconciled.reindex_result.status),
             reindex_ok: reconciled.reindex_result.ok,
+            lock_lease_lost: lockLeaseLost,
+            lease_lost_reason: leaseLostReason,
             closure_complete: true,
             telemetry: {
               prepare_latency_ms: prepareLatencyMs,
@@ -835,7 +997,7 @@ export class LocalCommandService {
 
       const result = this.makeResult(
         "local_run_codex",
-        execution.ok ? "ok" : "error",
+        lockLeaseLost ? "error" : execution.ok ? "ok" : "error",
         executionMessage,
         {
           project_id: project.id,
@@ -864,14 +1026,18 @@ export class LocalCommandService {
           warnings_count: execution.warnings_count,
           usage_tokens: execution.usage_tokens,
           error: execution.error,
-          classified_outcome: reconciled.classified_outcome,
+          classified_outcome: effectiveOutcome,
           changed_files_count: reconciled.workspace_diff.changed_files_count,
           changed_files_preview: reconciled.workspace_diff.changed_files_preview,
           reindex_status: this.reindexStatusLabel(reconciled.reindex_result.mode, reconciled.reindex_result.status),
-          next_review_hint: reconciled.review_payload.next_action,
-          classification_reasons: reconciled.classification_reasons,
+          next_review_hint: nextReviewHint,
+          classification_reasons: effectiveClassificationReasons,
           task_state: finalTaskState,
           idempotency_key: runIdempotencyKey,
+          idempotency_claim_status: claimStatus,
+          idempotency_claim_id: activeClaim?.claim_id ?? null,
+          lock_lease_lost: lockLeaseLost,
+          blocked_reason: lockLeaseLost ? "lock_lease_lost" : null,
           telemetry: {
             prepare_latency_ms: prepareLatencyMs,
             run_latency_ms: execution.duration_ms,
@@ -884,23 +1050,50 @@ export class LocalCommandService {
           },
         },
       );
-      await this.deps.persistence.saveIdempotentResult({
-        project_id: project.id,
-        command: "local_run_codex",
-        idempotency_key: runIdempotencyKey,
-        status: result.status,
-        response_json: result as unknown as Record<string, unknown>,
-      });
-      this.pushResult(result, !execution.ok);
+      if (activeClaim && !claimCompleted) {
+        if (result.status === "ok" && !lockLeaseLost) {
+          const completed = await this.deps.persistence.completeIdempotencyClaim({
+            project_id: activeClaim.project_id,
+            command: activeClaim.command,
+            idempotency_key: activeClaim.idempotency_key,
+            claim_id: activeClaim.claim_id,
+            response_json: result as unknown as Record<string, unknown>,
+          });
+          if (!completed) {
+            throw new Error("No se pudo completar claim de idempotencia.");
+          }
+        } else {
+          await this.deps.persistence.failIdempotencyClaim({
+            project_id: activeClaim.project_id,
+            command: activeClaim.command,
+            idempotency_key: activeClaim.idempotency_key,
+            claim_id: activeClaim.claim_id,
+            error_message: executionMessage,
+            response_json: result as unknown as Record<string, unknown>,
+          });
+        }
+        claimCompleted = true;
+      }
+      this.pushResult(result, result.status !== "ok");
       return result;
     } catch (error) {
       const result = this.makeResult("local_run_codex", "error", toErrorMessage(error), null);
+      if (activeClaim && !claimCompleted) {
+        await this.safeFailIdempotencyClaim(activeClaim, toErrorMessage(error), result);
+        claimCompleted = true;
+      }
       if (projectIdForLock && draftIdForState && stateTransitionStarted) {
         await this.tryTransitionTaskToFailure(projectIdForLock, draftIdForState, toErrorMessage(error));
       }
       this.pushResult(result, true);
       return result;
     } finally {
+      if (heartbeatHandle) {
+        await heartbeatHandle.stop();
+      }
+      for (const detach of detachAbortListeners) {
+        detach();
+      }
       if (projectIdForLock && lockId) {
         try {
           await this.deps.persistence.releaseProjectRunLock({
@@ -1186,6 +1379,107 @@ export class LocalCommandService {
       }
     } catch {
       // best-effort state cleanup
+    }
+  }
+
+  private async startLeaseHeartbeat(input: {
+    projectId: string;
+    lockId: string;
+    claim: ActiveIdempotencyClaim;
+    abortController: AbortController;
+  }): Promise<LeaseHeartbeatHandle> {
+    const state = {
+      lockLeaseLost: false,
+      claimLeaseLost: false,
+      leaseLostReason: null as string | null,
+    };
+    let stopped = false;
+    let timer: NodeJS.Timeout | null = null;
+    let inFlight: Promise<void> | null = null;
+
+    const renewTick = async (): Promise<void> => {
+      if (stopped || inFlight) {
+        return;
+      }
+      inFlight = (async () => {
+        try {
+          const [lockOk, claimOk] = await Promise.all([
+            this.deps.persistence.renewProjectRunLock({
+              project_id: input.projectId,
+              lock_id: input.lockId,
+              ttl_seconds: PROJECT_RUN_LOCK_TTL_SECONDS,
+            }),
+            this.deps.persistence.renewIdempotencyClaim({
+              project_id: input.claim.project_id,
+              command: input.claim.command,
+              idempotency_key: input.claim.idempotency_key,
+              claim_id: input.claim.claim_id,
+              ttl_seconds: PROJECT_RUN_LOCK_TTL_SECONDS,
+            }),
+          ]);
+          if (!lockOk) {
+            state.lockLeaseLost = true;
+            state.leaseLostReason = "lock_lease_lost";
+          }
+          if (!claimOk) {
+            state.claimLeaseLost = true;
+            state.leaseLostReason = state.leaseLostReason ?? "idempotency_claim_lost";
+          }
+          if ((state.lockLeaseLost || state.claimLeaseLost) && !input.abortController.signal.aborted) {
+            input.abortController.abort();
+          }
+        } catch (error) {
+          state.lockLeaseLost = true;
+          state.claimLeaseLost = true;
+          state.leaseLostReason = `heartbeat_error:${toErrorMessage(error)}`;
+          if (!input.abortController.signal.aborted) {
+            input.abortController.abort();
+          }
+        }
+      })().finally(() => {
+        inFlight = null;
+      });
+      await inFlight;
+    };
+
+    await renewTick();
+    if (!state.lockLeaseLost && !state.claimLeaseLost) {
+      timer = setInterval(() => {
+        void renewTick();
+      }, PROJECT_RUN_LOCK_HEARTBEAT_INTERVAL_MS);
+    }
+
+    return {
+      state,
+      stop: async () => {
+        stopped = true;
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+        if (inFlight) {
+          await inFlight;
+        }
+      },
+    };
+  }
+
+  private async safeFailIdempotencyClaim(
+    claim: ActiveIdempotencyClaim,
+    errorMessage: string,
+    result: LocalCommandResult,
+  ): Promise<void> {
+    try {
+      await this.deps.persistence.failIdempotencyClaim({
+        project_id: claim.project_id,
+        command: claim.command,
+        idempotency_key: claim.idempotency_key,
+        claim_id: claim.claim_id,
+        error_message: errorMessage,
+        response_json: result as unknown as Record<string, unknown>,
+      });
+    } catch {
+      // best-effort to avoid masking principal failure
     }
   }
 

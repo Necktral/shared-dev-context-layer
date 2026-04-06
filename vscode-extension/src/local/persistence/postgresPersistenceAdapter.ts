@@ -6,9 +6,13 @@ import type { LocalDbConfig } from "../../config";
 import type {
   AcquireProjectRunLockInput,
   ChunkRecord,
+  ClaimIdempotencyInput,
+  ClaimIdempotencyResult,
+  CompleteIdempotencyClaimInput,
   CompleteIndexRunInput,
   CreateIndexRunInput,
   EnsureProjectInput,
+  FailIdempotencyClaimInput,
   GetFileChunksByFileIdsInput,
   PersistedDecision,
   PersistedEvent,
@@ -23,6 +27,8 @@ import type {
   PersistencePort,
   PersistenceTransactionPort,
   ReleaseProjectRunLockInput,
+  RenewIdempotencyClaimInput,
+  RenewProjectRunLockInput,
   ResolveIdempotentResultInput,
   RetrievedIndexedChunk,
   RetrievedIndexedFileCandidate,
@@ -854,6 +860,23 @@ export class PostgresPersistenceAdapter implements PersistencePort {
     return result.rows.length > 0;
   }
 
+  public async renewProjectRunLock(input: RenewProjectRunLockInput): Promise<boolean> {
+    await this.ensureMigrations();
+    const table = this.table("project_run_locks");
+    const now = nowIso();
+    const result = await this.query(
+      `UPDATE ${table}
+       SET heartbeat_at = $3,
+           expires_at = $3::timestamptz + make_interval(secs => $4::int)
+       WHERE project_id = $1
+         AND lock_id = $2
+         AND expires_at > $3::timestamptz
+       RETURNING project_id`,
+      [input.project_id, input.lock_id, now, input.ttl_seconds],
+    );
+    return result.rows.length > 0;
+  }
+
   public async releaseProjectRunLock(input: ReleaseProjectRunLockInput): Promise<void> {
     await this.ensureMigrations();
     const table = this.table("project_run_locks");
@@ -863,6 +886,179 @@ export class PostgresPersistenceAdapter implements PersistencePort {
          AND lock_id = $2`,
       [input.project_id, input.lock_id],
     );
+  }
+
+  public async claimIdempotency(input: ClaimIdempotencyInput): Promise<ClaimIdempotencyResult> {
+    await this.ensureMigrations();
+    const table = this.table("idempotency_records");
+    const now = nowIso();
+    const inserted = await this.query(
+      `INSERT INTO ${table}
+       (id, project_id, command, idempotency_key, status, response_json, claim_id, owner, lease_expires_at, started_at, finished_at, last_error, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,'in_progress','{}'::jsonb,$5,$6,$7::timestamptz + make_interval(secs => $8::int),$7,NULL,NULL,$7,$7)
+       ON CONFLICT (project_id, command, idempotency_key)
+       DO NOTHING
+       RETURNING claim_id, owner, lease_expires_at`,
+      [randomUUID(), input.project_id, input.command, input.idempotency_key, input.claim_id, input.owner, now, input.ttl_seconds],
+    );
+    if (inserted.rows.length > 0) {
+      return {
+        status: "claimed",
+        claim_id: String(inserted.rows[0].claim_id),
+        owner: String(inserted.rows[0].owner),
+        lease_expires_at: String(inserted.rows[0].lease_expires_at),
+        response_json: null,
+      };
+    }
+
+    const existing = await this.query(
+      `SELECT status, response_json, claim_id, owner, lease_expires_at
+       FROM ${table}
+       WHERE project_id = $1
+         AND command = $2
+         AND idempotency_key = $3
+       LIMIT 1`,
+      [input.project_id, input.command, input.idempotency_key],
+    );
+    if (existing.rows.length === 0) {
+      throw new Error("No se pudo resolver claim de idempotencia.");
+    }
+    const row = existing.rows[0];
+    const existingStatus = String(row.status ?? "");
+    const existingResponse =
+      row.response_json && typeof row.response_json === "object" ? (row.response_json as Record<string, unknown>) : null;
+    const existingClaimId = typeof row.claim_id === "string" ? row.claim_id : null;
+    const existingOwner = typeof row.owner === "string" ? row.owner : null;
+    const existingLease = row.lease_expires_at ? String(row.lease_expires_at) : null;
+
+    if (existingStatus === "completed" || existingStatus === "failed" || existingStatus === "ok" || existingStatus === "error" || existingStatus === "blocked") {
+      return {
+        status: "completed",
+        claim_id: existingClaimId,
+        owner: existingOwner,
+        lease_expires_at: existingLease,
+        response_json: existingResponse,
+      };
+    }
+
+    if (existingStatus === "in_progress") {
+      const reclaimed = await this.query(
+        `UPDATE ${table}
+         SET claim_id = $4,
+             owner = $5,
+             lease_expires_at = $6::timestamptz + make_interval(secs => $7::int),
+             started_at = $6,
+             finished_at = NULL,
+             last_error = NULL,
+             updated_at = $6
+         WHERE project_id = $1
+           AND command = $2
+           AND idempotency_key = $3
+           AND status = 'in_progress'
+           AND lease_expires_at <= $6::timestamptz
+         RETURNING claim_id, owner, lease_expires_at`,
+        [input.project_id, input.command, input.idempotency_key, input.claim_id, input.owner, now, input.ttl_seconds],
+      );
+      if (reclaimed.rows.length > 0) {
+        return {
+          status: "reclaimed",
+          claim_id: String(reclaimed.rows[0].claim_id),
+          owner: String(reclaimed.rows[0].owner),
+          lease_expires_at: String(reclaimed.rows[0].lease_expires_at),
+          response_json: null,
+        };
+      }
+      return {
+        status: "in_progress",
+        claim_id: existingClaimId,
+        owner: existingOwner,
+        lease_expires_at: existingLease,
+        response_json: null,
+      };
+    }
+
+    // Legacy fallback: treat unknown statuses as completed replay when possible.
+    return {
+      status: "completed",
+      claim_id: existingClaimId,
+      owner: existingOwner,
+      lease_expires_at: existingLease,
+      response_json: existingResponse,
+    };
+  }
+
+  public async renewIdempotencyClaim(input: RenewIdempotencyClaimInput): Promise<boolean> {
+    await this.ensureMigrations();
+    const table = this.table("idempotency_records");
+    const now = nowIso();
+    const result = await this.query(
+      `UPDATE ${table}
+       SET lease_expires_at = $5::timestamptz + make_interval(secs => $6::int),
+           updated_at = $5
+       WHERE project_id = $1
+         AND command = $2
+         AND idempotency_key = $3
+         AND claim_id = $4
+         AND status = 'in_progress'
+         AND lease_expires_at > $5::timestamptz
+       RETURNING id`,
+      [input.project_id, input.command, input.idempotency_key, input.claim_id, now, input.ttl_seconds],
+    );
+    return result.rows.length > 0;
+  }
+
+  public async completeIdempotencyClaim(input: CompleteIdempotencyClaimInput): Promise<boolean> {
+    await this.ensureMigrations();
+    const table = this.table("idempotency_records");
+    const now = nowIso();
+    const result = await this.query(
+      `UPDATE ${table}
+       SET status = 'completed',
+           response_json = $6::jsonb,
+           lease_expires_at = NULL,
+           finished_at = $5,
+           last_error = NULL,
+           updated_at = $5
+       WHERE project_id = $1
+         AND command = $2
+         AND idempotency_key = $3
+         AND claim_id = $4
+         AND status = 'in_progress'
+       RETURNING id`,
+      [input.project_id, input.command, input.idempotency_key, input.claim_id, now, JSON.stringify(input.response_json)],
+    );
+    return result.rows.length > 0;
+  }
+
+  public async failIdempotencyClaim(input: FailIdempotencyClaimInput): Promise<boolean> {
+    await this.ensureMigrations();
+    const table = this.table("idempotency_records");
+    const now = nowIso();
+    const result = await this.query(
+      `UPDATE ${table}
+       SET status = 'failed',
+           response_json = $7::jsonb,
+           lease_expires_at = NULL,
+           finished_at = $5,
+           last_error = $6,
+           updated_at = $5
+       WHERE project_id = $1
+         AND command = $2
+         AND idempotency_key = $3
+         AND claim_id = $4
+         AND status = 'in_progress'
+       RETURNING id`,
+      [
+        input.project_id,
+        input.command,
+        input.idempotency_key,
+        input.claim_id,
+        now,
+        input.error_message,
+        JSON.stringify(input.response_json),
+      ],
+    );
+    return result.rows.length > 0;
   }
 
   public async resolveIdempotentResult(input: ResolveIdempotentResultInput): Promise<Record<string, unknown> | null> {
