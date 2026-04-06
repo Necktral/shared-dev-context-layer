@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 TARGETS=(README.md docs vscode-extension/README.md)
+LOCAL_PRIVATE_CANON="docs/context/local_private/README.md"
+SEMANTIC_APPROVAL_FILE="docs/context/local_private/SEMANTIC_FRAMEWORK_APPROVAL.md"
 
 echo "[docs-check] Verificando comandos legacy prohibidos..."
 if rg -n "WIS: Refresh Context|WIS: Show Scope Details" "${TARGETS[@]}"; then
@@ -36,6 +38,33 @@ for cmd in \
   fi
   if ! rg -q "$cmd" vscode-extension/package.json; then
     echo "ERROR: comando '$cmd' no aparece en package.json." >&2
+    exit 1
+  fi
+done
+
+echo "[docs-check] Verificando canon local_private..."
+if [[ ! -f "$LOCAL_PRIVATE_CANON" ]]; then
+  echo "ERROR: falta canon local_private en $LOCAL_PRIVATE_CANON." >&2
+  exit 1
+fi
+if ! rg -q 'complementario' "$LOCAL_PRIVATE_CANON"; then
+  echo "ERROR: canon local_private debe declarar su caracter complementario." >&2
+  exit 1
+fi
+
+echo "[docs-check] Verificando comandos WIS: Local * en docs y package..."
+for cmd in \
+  "WIS: Local Index" \
+  "WIS: Local Prepare Task" \
+  "WIS: Local Run Codex" \
+  "WIS: Local Refresh" \
+  "WIS: Local Configure DB Password"; do
+  if ! rg -q "$cmd" "$LOCAL_PRIVATE_CANON" vscode-extension/README.md; then
+    echo "ERROR: comando local '$cmd' no esta documentado en canon/README de extension." >&2
+    exit 1
+  fi
+  if ! rg -q "$cmd" vscode-extension/package.json; then
+    echo "ERROR: comando local '$cmd' no aparece en package.json." >&2
     exit 1
   fi
 done
@@ -107,5 +136,35 @@ for doc in "${CANON_DOCS[@]}"; do
     exit 1
   fi
 done
+
+echo "[docs-check] Verificando drift de frameworks semanticos en manifests..."
+MANIFESTS=(
+  "vscode-extension/package.json"
+  "backend/requirements.txt"
+)
+SEMANTIC_DRIFT_MATCHES="$(rg -n -i 'langchain|semantic-kernel|semantic_kernel' "${MANIFESTS[@]}" || true)"
+if [[ -n "$SEMANTIC_DRIFT_MATCHES" ]]; then
+  if [[ ! -f "$SEMANTIC_APPROVAL_FILE" ]]; then
+    echo "ERROR: se detecto drift semantico sin archivo de aprobacion: $SEMANTIC_APPROVAL_FILE" >&2
+    echo "$SEMANTIC_DRIFT_MATCHES" >&2
+    exit 1
+  fi
+
+  if ! rg -q '^APPROVED_SEMANTIC_FRAMEWORKS:$' "$SEMANTIC_APPROVAL_FILE"; then
+    echo "ERROR: archivo de aprobacion semantica invalido; falta encabezado APPROVED_SEMANTIC_FRAMEWORKS:." >&2
+    exit 1
+  fi
+
+  if rg -q -i 'langchain' <<< "$SEMANTIC_DRIFT_MATCHES" && ! rg -q '^- langchain$' "$SEMANTIC_APPROVAL_FILE"; then
+    echo "ERROR: langchain detectado en manifests sin aprobacion explicita." >&2
+    echo "$SEMANTIC_DRIFT_MATCHES" >&2
+    exit 1
+  fi
+  if rg -q -i 'semantic-kernel|semantic_kernel' <<< "$SEMANTIC_DRIFT_MATCHES" && ! rg -q '^- semantic-kernel$' "$SEMANTIC_APPROVAL_FILE"; then
+    echo "ERROR: semantic-kernel detectado en manifests sin aprobacion explicita." >&2
+    echo "$SEMANTIC_DRIFT_MATCHES" >&2
+    exit 1
+  fi
+fi
 
 echo "[docs-check] OK"

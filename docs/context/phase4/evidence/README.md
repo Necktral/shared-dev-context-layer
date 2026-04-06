@@ -5,6 +5,8 @@ Esta matriz consolida evidencia de cierre para read/write MCP con OAuth Auth0 y 
 Evidencia local Package 2 (`local_private` + PostgreSQL): `package-2-smoke.md`.
 Evidencia local Package 3 (indexador incremental): `package-3-smoke.md`.
 Resultado ejecutado de smoke Package 3: `package-3-smoke-result.json`.
+Checklist de hardening Package 8: `package-8-hardening.md`.
+Resultado ejecutado Package 8: `package-8-hardening-result.json`.
 
 ## 1. Conectividad y endpoint canónico
 

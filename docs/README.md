@@ -5,6 +5,7 @@ Este directorio concentra la fuente de verdad documental para el control plane (
 ## Mapa principal
 
 - Canon Fase 3: `docs/context/`
+- Canon local_private (complementario): `docs/context/local_private/`
 - Operacion MCP (runbook): `docs/mcp/`
 - Contrato VS Code <-> MCP runtime: `docs/mcp/vscode_read_model_contract.md`
 - OAuth Auth0 para ChatGPT Connector: `docs/mcp/oauth_auth0_chatgpt_connector.md`
