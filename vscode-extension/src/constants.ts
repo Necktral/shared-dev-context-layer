@@ -84,6 +84,7 @@ export const COMMAND_LOCAL_INDEX = "wisContextSync.localIndex";
 export const COMMAND_LOCAL_PREPARE_TASK = "wisContextSync.localPrepareTask";
 export const COMMAND_LOCAL_RUN_CODEX = "wisContextSync.localRunCodex";
 export const COMMAND_LOCAL_REFRESH = "wisContextSync.localRefresh";
+export const COMMAND_LOCAL_DOCTOR = "wisContextSync.localDoctor";
 export const COMMAND_LOCAL_CONFIGURE_DB_PASSWORD = "wisContextSync.localConfigureDbPassword";
 
 export const LOCAL_RUNTIME_VIEW_ID = "wisContextSync.localRuntimePanel";

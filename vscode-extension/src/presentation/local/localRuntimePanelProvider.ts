@@ -129,6 +129,7 @@ export class LocalRuntimePanelProvider implements vscode.WebviewViewProvider {
       <div>WIS: Local Prepare Task</div>
       <div>WIS: Local Run Codex</div>
       <div>WIS: Local Refresh</div>
+      <div>WIS: Local Doctor</div>
       <div>WIS: Local Configure DB Password</div>
     </section>
 

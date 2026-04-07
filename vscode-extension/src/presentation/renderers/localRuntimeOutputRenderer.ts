@@ -38,6 +38,23 @@ export class LocalRuntimeOutputRenderer {
         this.output.appendLine(`risks: ${risks || "-"}`);
         this.output.appendLine(`next_action: ${nextAction}`);
       }
+
+      const operatorPlaybooks = Array.isArray(result.details.operator_playbooks)
+        ? result.details.operator_playbooks
+            .filter((entry): entry is Record<string, unknown> => typeof entry === "object" && entry !== null)
+            .map((entry) => {
+              const id = typeof entry.id === "string" ? entry.id : "unknown";
+              const title = typeof entry.title === "string" ? entry.title : "-";
+              const tier = typeof entry.source_tier === "string" ? entry.source_tier : "-";
+              return `${id} (${tier}) -> ${title}`;
+            })
+        : [];
+      if (operatorPlaybooks.length > 0) {
+        this.output.appendLine("operator_playbooks:");
+        for (const line of operatorPlaybooks) {
+          this.output.appendLine(`- ${line}`);
+        }
+      }
     }
 
     if (snapshot.task_draft) {

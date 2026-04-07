@@ -26,6 +26,7 @@ test("package.json incluye comandos/settings de local_private sin remover comand
     "wisContextSync.localPrepareTask",
     "wisContextSync.localRunCodex",
     "wisContextSync.localRefresh",
+    "wisContextSync.localDoctor",
     "wisContextSync.localConfigureDbPassword",
   ];
 

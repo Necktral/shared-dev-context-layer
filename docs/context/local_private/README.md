@@ -37,11 +37,18 @@ Comandos de perfil local:
 - `WIS: Local Prepare Task`
 - `WIS: Local Run Codex`
 - `WIS: Local Refresh`
+- `WIS: Local Doctor`
 - `WIS: Local Configure DB Password`
 
 Setting de habilitacion:
 
 - `wisContextSync.operationProfile = local_private`
+
+Playbooks operativos (tiers):
+
+- `system`: `${extensionPath}/playbooks`
+- `workspace`: `${workspaceRoot}/.wis/playbooks`
+- `project`: `${repoRoot}/.wis/playbooks`
 
 ## Gobernanza de integracion (Package 8)
 

@@ -27,6 +27,7 @@ Control plane autenticado para consumo y mutación controlada de contexto operat
 - `WIS: Local Prepare Task`
 - `WIS: Local Run Codex`
 - `WIS: Local Refresh`
+- `WIS: Local Doctor`
 - `WIS: Local Configure DB Password`
 
 ## Runtime modes
@@ -42,6 +43,16 @@ No existe fallback automatico entre modos.
 - `local_private`: habilita el baseline local para index/task/codex supervisado.
 
 Los comandos `WIS: Local *` requieren `wisContextSync.operationProfile=local_private`.
+
+## Playbooks operativos (local_private)
+
+El runtime local puede resolver playbooks por tiers para acciones operativas:
+
+- `system`: `${extensionPath}/playbooks`
+- `workspace`: `${workspaceRoot}/.wis/playbooks`
+- `project`: `${repoRoot}/.wis/playbooks`
+
+Los playbooks resueltos para post-review se exponen de forma aditiva en `result.details.operator_playbooks`.
 
 ## Settings
 
