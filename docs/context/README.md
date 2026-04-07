@@ -49,6 +49,7 @@ El canon `local_private` vive en `docs/context/local_private/` y es complementar
 
 - `REPOSITORY-OPERATIONAL-HARDENING.md`
 - `CONTRACT-GOVERNANCE.md`
+- `CONTRACT-INVENTORY.md`
 - `LOCAL_PRIVATE-EVOLUTION-POLICY.md`
 - `PR-AND-BRANCH-CHECKLIST.md`
 
