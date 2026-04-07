@@ -79,7 +79,10 @@ test("ContextPresenter renderiza secciones obligatorias en output channel", () =
   assert.ok(lines.some((line) => line.includes("== Approved Decisions ==")));
   assert.ok(lines.some((line) => line.includes("== Recent Errors ==")));
   assert.ok(lines.some((line) => line.includes("== Load State ==")));
+  assert.ok(lines.some((line) => line.includes("== Diagnostics ==")));
   assert.ok(lines.some((line) => line.includes("== Issues ==")));
   assert.ok(lines.some((line) => line.includes("transport_status: transport_error")));
   assert.ok(lines.some((line) => line.includes("load_state: degraded")));
+  assert.ok(lines.some((line) => line.includes("issue_count: 1")));
+  assert.ok(lines.some((line) => line.includes("issue_origin_summary: local:0, transport:1, protocol:0, domain:0, presentation:0")));
 });

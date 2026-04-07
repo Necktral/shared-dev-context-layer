@@ -15,6 +15,7 @@ Fecha: 2026-04-06
 - [ ] Clasificación contractual declarada (`internal_only`/`persisted_contract`/`integration_contract`/`ui_facing_contract`) si aplica.
 - [ ] Semáforo `local_private` (`green`/`yellow`/`red`) declarado si aplica.
 - [ ] Cuerpo de PR incluye campos machine-readable: `contract_class:`, `local_private_level:`.
+- [ ] `local_private` y `contractual` se evalúan por separado (doc-only `local_private` puede usar `contract_class: n/a`).
 - [ ] ADR/migración declarados cuando corresponda por política.
 - [ ] Canon/política actualizados si cambió comportamiento o reglas.
 - [ ] Si hay impacto contractual, `CONTRACT-INVENTORY.md` actualizado en el mismo PR.

@@ -10,9 +10,11 @@ Este index ordena las referencias mas utiles para ejecutar y cerrar trabajo sin 
    Decision arquitectonica vigente.
 3. `../WIS_PHASE_3_ACCEPTANCE_GATE.md`  
    Criterio binario de cierre.
-4. `../WIS_PHASE_3_IMPLEMENTATION_PLAN.md`  
+4. `../WIS_PHASE_1_LOCAL_FIRST_ACCEPTANCE_GATE.md`  
+   Criterio binario de cierre local-first (GO local separado).
+5. `../WIS_PHASE_3_IMPLEMENTATION_PLAN.md`  
    Secuencia de slices y validaciones.
-5. `../WIS_VSCODE_CONTROL_PLANE_CONTRACT.md` + `../WIS_VSCODE_EXTENSION_ARCHITECTURE.md` + `../WIS_PHASE_3_SPEC.md`  
+6. `../WIS_VSCODE_CONTROL_PLANE_CONTRACT.md` + `../WIS_VSCODE_EXTENSION_ARCHITECTURE.md` + `../WIS_PHASE_3_SPEC.md`  
    Limites, diseno y requerimientos.
 
 ## Regla de lectura recomendada

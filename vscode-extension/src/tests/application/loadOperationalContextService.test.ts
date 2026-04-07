@@ -69,3 +69,64 @@ test("LoadOperationalContextService ejecuta pipeline completo y presenta envelop
   assert.ok(diagnosticsEvents.includes("envelope_reported"));
   assert.equal(contextStore.getLast()?.meta.session_key, envelope.meta.session_key);
 });
+
+test("LoadOperationalContextService respeta runtimeMode mcp sin fallback automático", async () => {
+  const observedRuntimeModes: string[] = [];
+
+  const service = new LoadOperationalContextService({
+    sessionManager: {
+      consumer: "vscode_extension",
+      async getOrCreateSession() {
+        return {
+          sessionKey: "session-mcp-strict",
+          sessionCreatedAt: "2026-04-07T12:00:00.000Z",
+          sessionState: "reused",
+        };
+      },
+    },
+    environmentInspector: {
+      async inspect() {
+        return {
+          workspace_root: "/workspace",
+          repo_root: "/workspace/repo",
+          branch: "main",
+          active_file: "/workspace/repo/src/index.ts",
+          timestamp: "2026-04-07T12:00:00.000Z",
+          inspector_status: "ok",
+          inspector_error: null,
+        };
+      },
+    },
+    diagnostics: {
+      reportLoadEvent() {
+        return undefined;
+      },
+      reportOperationalEnvelope() {
+        return undefined;
+      },
+    },
+    presenter: {
+      present() {
+        return undefined;
+      },
+    },
+    getConfig: () => ({
+      endpoint: "http://localhost:8002/mcp",
+      runtimeMode: "mcp",
+      timeoutMs: 5000,
+      fixtureScenario: "success_full",
+      diagnosticMode: true,
+    }),
+    createGateway: (config) => {
+      observedRuntimeModes.push(config.runtimeMode);
+      return new FixtureWISGateway("transport_error");
+    },
+  });
+
+  const envelope = await service.load();
+
+  assert.deepEqual(observedRuntimeModes, ["mcp"]);
+  assert.equal(envelope.meta.runtime_mode, "mcp");
+  assert.equal(envelope.transport_diagnostics.runtime_mode, "mcp");
+  assert.notEqual(envelope.meta.runtime_mode, "offline_fixture");
+});

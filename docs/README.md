@@ -14,6 +14,8 @@ Este directorio concentra la fuente de verdad documental para el control plane (
 
 - Active canon:
   - `docs/context/README.md`
+  - `docs/context/WIS_PHASE_1_LOCAL_FIRST_ACCEPTANCE_GATE.md`
+  - `docs/context/WIS_PHASE_3_ACCEPTANCE_GATE.md`
   - `docs/context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
   - `docs/context/WIS_VSCODE_EXTENSION_ARCHITECTURE.md`
   - `docs/context/local_private/README.md`
@@ -56,7 +58,9 @@ No hay fallback silencioso entre modos.
 
 - Slice 3A closure: `docs/context/phase3/evidence/slice-3a/README.md`
 - Slice 3B hardening: `docs/context/phase3/evidence/slice-3b/README.md`
+- Fase 1 GO local separado: `docs/context/phase4/evidence/phase1-local-first-matrix.md`
 - Phase 4 read/write + OAuth: `docs/context/phase4/evidence/README.md`
+- Backlog Fase 2 remoto/global: `docs/context/phase4/evidence/phase2-remote-backlog.md`
 - Internal release: `docs/context/phase3/release-internal/README.md`
 
 ## Governance

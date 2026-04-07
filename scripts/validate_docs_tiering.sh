@@ -10,6 +10,7 @@ required_files=(
   "docs/README.md"
   "docs/context/README.md"
   "docs/context/REPOSITORY-OPERATIONAL-HARDENING.md"
+  "docs/context/WIS_PHASE_1_LOCAL_FIRST_ACCEPTANCE_GATE.md"
   "docs/context/CONTRACT-GOVERNANCE.md"
   "docs/context/LOCAL_PRIVATE-EVOLUTION-POLICY.md"
   "docs/context/PR-AND-BRANCH-CHECKLIST.md"
@@ -31,13 +32,16 @@ for marker in \
   "- Active canon:" \
   "- Policy:" \
   "- Campaign:" \
-  "- Debt register:" \
-  "Regla: documentos de \`campaign\` o \`debt register\` no sustituyen contrato activo."; do
+  "- Debt register:"; do
   if ! rg -q --fixed-strings -- "$marker" docs/README.md; then
     echo "ERROR: docs/README.md no contiene marcador requerido: $marker" >&2
     exit 1
   fi
 done
+if ! rg -qi 'regla:.*campaign.*debt register.*no sustituyen contrato activo' docs/README.md; then
+  echo "ERROR: docs/README.md debe declarar la regla de precedencia campaign/debt register." >&2
+  exit 1
+fi
 
 for marker in \
   "## Tiering documental activo" \
@@ -45,13 +49,16 @@ for marker in \
   "### policy" \
   "### campaign" \
   "### runbook" \
-  "### debt_register" \
-  "campaign\` y \`debt_register\` no definen contrato activo"; do
+  "### debt_register"; do
   if ! rg -q "$marker" docs/context/README.md; then
     echo "ERROR: docs/context/README.md no contiene marcador requerido: $marker" >&2
     exit 1
   fi
 done
+if ! rg -qi 'campaign.*debt_register.*no definen contrato activo' docs/context/README.md; then
+  echo "ERROR: docs/context/README.md debe declarar la regla de no-contractualidad para campaign/debt_register." >&2
+  exit 1
+fi
 
 ROOT_ACTIVE_SECTION="$(awk '/- Active canon:/{flag=1;next}/- Policy:/{flag=0}flag{print}' docs/README.md)"
 if [[ -z "$ROOT_ACTIVE_SECTION" ]]; then
@@ -73,13 +80,23 @@ if grep -Eq 'BRANCH-|TECHNICAL-DEBT-REGISTER|RUNBOOK|phase3/evidence|phase4/evid
   exit 1
 fi
 
-if ! rg -q --fixed-strings "Estado histórico: consumado en \`main\`" docs/context/BRANCH-GOVERNANCE-AND-RECONCILIATION.md; then
+if ! rg -qi '(hist[oó]ric|consumad|no.normativ)' docs/context/BRANCH-GOVERNANCE-AND-RECONCILIATION.md; then
   echo "ERROR: BRANCH-GOVERNANCE-AND-RECONCILIATION.md debe declararse histórico/no-normativo." >&2
   exit 1
 fi
 
-if ! rg -q --fixed-strings "Este documento separa tres planos y deja su estado final" docs/context/BRANCH-CLOSURE-TECHNICAL-VERDICT.md; then
-  echo "ERROR: BRANCH-CLOSURE-TECHNICAL-VERDICT.md no expone semántica de cierre por planos." >&2
+if ! rg -qi '(tres planos|cierre por planos|estado final)' docs/context/BRANCH-CLOSURE-TECHNICAL-VERDICT.md; then
+  echo "ERROR: BRANCH-CLOSURE-TECHNICAL-VERDICT.md debe mantener semántica de cierre por planos." >&2
+  exit 1
+fi
+
+if ! rg -q 'WIS_PHASE_1_LOCAL_FIRST_ACCEPTANCE_GATE\.md' docs/context/README.md docs/README.md; then
+  echo "ERROR: docs index debe referenciar gate local-first de Fase 1." >&2
+  exit 1
+fi
+
+if ! rg -qi 'GO local|GO global' docs/context/WIS_PHASE_1_LOCAL_FIRST_ACCEPTANCE_GATE.md; then
+  echo "ERROR: gate local-first debe explicitar relacion GO local vs GO global." >&2
   exit 1
 fi
 

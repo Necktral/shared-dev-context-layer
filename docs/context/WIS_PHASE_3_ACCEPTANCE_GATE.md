@@ -6,6 +6,12 @@ _Scope: VS Code control plane + write plane controlado_
 
 Definir criterios binarios para cerrar Fase 3 + v0.2.0 sin drift de contrato, con soporte dual de runtime y write plane controlado.
 
+## 1.1 Relacion con Fase 1 local-first
+
+- Este documento define el **GO global de fase**.
+- El **GO local separado** se define en `WIS_PHASE_1_LOCAL_FIRST_ACCEPTANCE_GATE.md`.
+- GO local no reemplaza este gate global.
+
 ## 2. Gate principles
 
 Fase 3 solo es **GO** si el sistema es:

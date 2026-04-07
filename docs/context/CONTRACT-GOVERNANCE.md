@@ -61,6 +61,12 @@ El PR **MUST** declarar:
 - referencia ADR/migración si aplica.
 - actualización de `CONTRACT-INVENTORY.md` (owner/tests/compatibilidad del contrato afectado).
 
+Nota operativa de enforcement:
+
+- impacto `local_private` no implica automáticamente impacto contractual.
+- cambios doc-only en `docs/context/local_private/` pueden usar `contract_class: n/a` si no alteran contrato observable.
+- `CONTRACT-INVENTORY.md` es obligatorio cuando hay impacto contractual real o declaración contractual explícita (`contract_class != n/a`).
+
 ## 5) Superficies críticas bajo protección reforzada
 
 Se consideran de control reforzado:

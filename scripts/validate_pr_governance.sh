@@ -60,7 +60,18 @@ if ! git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null; then
   exit 1
 fi
 
-mapfile -t CHANGED_FILES < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | sed '/^$/d')
+MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA" || true)"
+if [[ -z "$MERGE_BASE" ]]; then
+  echo "ERROR: no se pudo resolver merge-base entre base/head (${BASE_SHA}..${HEAD_SHA})." >&2
+  echo "Asegure historia completa (fetch-depth: 0) y SHAs validos del evento PR." >&2
+  exit 1
+fi
+if ! git cat-file -e "${MERGE_BASE}^{commit}" 2>/dev/null; then
+  echo "ERROR: merge-base no disponible localmente (${MERGE_BASE}); use checkout con fetch-depth: 0." >&2
+  exit 1
+fi
+
+mapfile -t CHANGED_FILES < <(git diff --name-only "${MERGE_BASE}...${HEAD_SHA}" | sed '/^$/d')
 
 extract_field() {
   local wanted="${1,,}"
@@ -128,10 +139,17 @@ CONTRACT_IMPACT=false
 if changed_has_regex '^vscode-extension/src/local/types\.ts$' || \
    changed_has_regex '^vscode-extension/src/local/ports\.ts$' || \
    changed_has_regex '^vscode-extension/src/local/localCommandService\.ts$' || \
-   changed_has_regex '^vscode-extension/src/presentation/' || \
+   changed_has_regex '^vscode-extension/src/local/postRunReviewer\.ts$' || \
+   changed_has_regex '^vscode-extension/src/local/persistence/postgresPersistenceAdapter\.ts$' || \
+   changed_has_regex '^vscode-extension/src/presentation/renderers/localRuntimeOutputRenderer\.ts$' || \
+   changed_has_regex '^vscode-extension/src/presentation/local/localRuntimePanelProvider\.ts$' || \
+   changed_has_regex '^vscode-extension/src/platform/doctor/localDoctorService\.ts$' || \
    changed_has_regex '^vscode-extension/migrations/local_private/' || \
-   changed_has_regex '^docs/context/local_private/' || \
    changed_has_regex '^docs/context/CONTRACT-GOVERNANCE\.md$'; then
+  CONTRACT_IMPACT=true
+fi
+
+if [[ "$CONTRACT_CLASS" != "n/a" ]]; then
   CONTRACT_IMPACT=true
 fi
 

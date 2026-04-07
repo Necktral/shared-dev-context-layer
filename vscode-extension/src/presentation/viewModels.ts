@@ -41,6 +41,30 @@ function summarizeTool(result: ToolResult | null): string {
   return result.kind;
 }
 
+const ISSUE_KIND_ORDER = ["local", "transport", "protocol", "domain", "presentation"] as const;
+
+function summarizeIssueOrigins(envelope: OperationalContextEnvelope): string {
+  if (envelope.issues.length === 0) {
+    return "none";
+  }
+
+  const counters: Record<string, number> = {
+    local: 0,
+    transport: 0,
+    protocol: 0,
+    domain: 0,
+    presentation: 0,
+  };
+
+  for (const issue of envelope.issues) {
+    counters[issue.kind] = (counters[issue.kind] ?? 0) + 1;
+  }
+
+  return ISSUE_KIND_ORDER
+    .map((kind) => `${kind}:${counters[kind] ?? 0}`)
+    .join(", ");
+}
+
 export class ViewModelMapper {
   public map(envelope: OperationalContextEnvelope): OperationalContextViewModel {
     return {
@@ -112,6 +136,16 @@ export class ViewModelMapper {
           entries: [
             { label: "transport_status", value: envelope.meta.transport_status },
             { label: "load_state", value: envelope.meta.load_state },
+          ],
+        },
+        {
+          title: "Diagnostics",
+          entries: [
+            { label: "runtime_mode", value: envelope.meta.runtime_mode },
+            { label: "transport_status", value: envelope.meta.transport_status },
+            { label: "load_state", value: envelope.meta.load_state },
+            { label: "issue_count", value: String(envelope.issues.length) },
+            { label: "issue_origin_summary", value: summarizeIssueOrigins(envelope) },
           ],
         },
         {

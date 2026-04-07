@@ -2,11 +2,17 @@
 
 Esta matriz consolida evidencia de cierre para read/write MCP con OAuth Auth0 y política `all_published`.
 
+Nota de alcance:
+- esta matriz corresponde al **GO global** (remoto/Auth0/endpoint estable).
+- el **GO local separado de Fase 1** vive en `phase1-local-first-matrix.md`.
+
 Evidencia local Package 2 (`local_private` + PostgreSQL): `package-2-smoke.md`.
 Evidencia local Package 3 (indexador incremental): `package-3-smoke.md`.
 Resultado ejecutado de smoke Package 3: `package-3-smoke-result.json`.
 Checklist de hardening Package 8: `package-8-hardening.md`.
 Resultado ejecutado Package 8: `package-8-hardening-result.json`.
+Backlog Fase 2 remoto/global: `phase2-remote-backlog.md`.
+Script de cierre local-first reproducible: `../../../../scripts/run_phase1_local_closure.sh`.
 
 ## 1. Conectividad y endpoint canónico
 

@@ -43,6 +43,13 @@ total: null
 transport_status: transport_error
 load_state: degraded
 
+== Diagnostics ==
+runtime_mode: offline_fixture
+transport_status: transport_error
+load_state: degraded
+issue_count: 1
+issue_origin_summary: local:0, transport:1, protocol:0, domain:0, presentation:0
+
 == Issues ==
 issue_1: error/transport get_active_task: Timeout MCP
 

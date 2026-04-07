@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 TARGETS=(README.md docs vscode-extension/README.md)
 LOCAL_PRIVATE_CANON="docs/context/local_private/README.md"
 SEMANTIC_APPROVAL_FILE="docs/context/local_private/SEMANTIC_FRAMEWORK_APPROVAL.md"
+PHASE1_LOCAL_GATE="docs/context/WIS_PHASE_1_LOCAL_FIRST_ACCEPTANCE_GATE.md"
 
 echo "[docs-check] Verificando comandos legacy prohibidos..."
 if rg -n "WIS: Refresh Context|WIS: Show Scope Details" "${TARGETS[@]}"; then
@@ -49,6 +50,20 @@ if [[ ! -f "$LOCAL_PRIVATE_CANON" ]]; then
 fi
 if ! rg -q 'complementario' "$LOCAL_PRIVATE_CANON"; then
   echo "ERROR: canon local_private debe declarar su caracter complementario." >&2
+  exit 1
+fi
+
+echo "[docs-check] Verificando gate local-first separado..."
+if [[ ! -f "$PHASE1_LOCAL_GATE" ]]; then
+  echo "ERROR: falta gate local-first en $PHASE1_LOCAL_GATE." >&2
+  exit 1
+fi
+if ! rg -qi 'GO local|GO global' "$PHASE1_LOCAL_GATE"; then
+  echo "ERROR: gate local-first debe separar GO local y GO global." >&2
+  exit 1
+fi
+if ! rg -q 'WIS_PHASE_1_LOCAL_FIRST_ACCEPTANCE_GATE.md' docs/context/README.md docs/README.md; then
+  echo "ERROR: indices docs deben referenciar gate local-first." >&2
   exit 1
 fi
 

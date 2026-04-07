@@ -9,6 +9,7 @@ Estado: activo (normativo operativo)
 - Este inventario complementa `CONTRACT-GOVERNANCE.md`.
 - Todo PR con impacto contractual **MUST** actualizar este archivo.
 - Cada contrato inventariado **MUST** declarar owner lógico, tests de cobertura y nivel de compatibilidad.
+- Los anclajes críticos del gate (`scripts/validate_pr_governance.sh`) **MUST** mantenerse sincronizados con este inventario.
 
 ## Inventario vigente
 
