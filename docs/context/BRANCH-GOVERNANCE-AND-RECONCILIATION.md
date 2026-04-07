@@ -4,6 +4,7 @@ Fecha de campaña: 2026-04-06
 Rama de campaña: `chore/branch-governance-reconciliation`  
 Base canónica: `origin/main` (`4a983bf`)  
 Alcance: `main`, `feat/package4-hybrid-retrieval-basic`, `feat/package5-supervised-codex-exec`, `feat/package7a-review-decision-core`, `feat/package7b-review-operator-ux`
+Estado histórico: consumado en `main`; cierre remoto final trazado en `BRANCH-CLOSURE-TECHNICAL-VERDICT.md`.
 
 Este documento define la decisión oficial de reconciliación de ramas para cerrar deuda histórica sin reintroducir regresiones.
 
@@ -42,14 +43,14 @@ Durante esta campaña queda prohibido reintroducir versiones previas de:
 
 Si un check falla por entorno local, el resultado debe quedar registrado en el PR con causa y estado reproducible.
 
-## Ramas a cerrar después de merge a `main`
+## Ramas cerradas después de merge a `main`
 
 1. `feat/package4-hybrid-retrieval-basic`
 2. `feat/package5-supervised-codex-exec`
 3. `feat/package7a-review-decision-core`
 4. `feat/package7b-review-operator-ux`
 
-Nota: este documento no autoriza borrado remoto durante la campaña; solo establece el cierre operativo post-merge.
+Nota: este documento registra la decisión de campaña; la evidencia de consumación y cierre remoto vive en `BRANCH-CLOSURE-TECHNICAL-VERDICT.md`.
 
 ## Política futura de gobernanza de ramas
 
@@ -65,4 +66,3 @@ Nota: este documento no autoriza borrado remoto durante la campaña; solo establ
 - Qué se integró: gobernanza de ramas + matriz de reconciliación + evidencia documental.
 - Qué se descartó: integración de código legacy en ramas supersedidas.
 - Qué se cierra post-merge: listado explícito de ramas remotas y racional.
-

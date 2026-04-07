@@ -6,11 +6,29 @@ Este directorio concentra la fuente de verdad documental para el control plane (
 
 - Canon Fase 3: `docs/context/`
 - Canon local_private (complementario): `docs/context/local_private/`
-- SSOT reconciliacion de ramas: `docs/context/BRANCH-GOVERNANCE-AND-RECONCILIATION.md`
-- Veredicto tecnico de cierre: `docs/context/BRANCH-CLOSURE-TECHNICAL-VERDICT.md`
 - Operacion MCP (runbook): `docs/mcp/`
 - Contrato VS Code <-> MCP runtime: `docs/mcp/vscode_read_model_contract.md`
 - OAuth Auth0 para ChatGPT Connector: `docs/mcp/oauth_auth0_chatgpt_connector.md`
+
+## Tiering documental
+
+- Active canon:
+  - `docs/context/README.md`
+  - `docs/context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
+  - `docs/context/WIS_VSCODE_EXTENSION_ARCHITECTURE.md`
+  - `docs/context/local_private/README.md`
+- Policy:
+  - `docs/context/REPOSITORY-OPERATIONAL-HARDENING.md`
+  - `docs/context/CONTRACT-GOVERNANCE.md`
+  - `docs/context/LOCAL_PRIVATE-EVOLUTION-POLICY.md`
+  - `docs/context/PR-AND-BRANCH-CHECKLIST.md`
+- Campaign:
+  - `docs/context/BRANCH-GOVERNANCE-AND-RECONCILIATION.md`
+  - `docs/context/BRANCH-CLOSURE-TECHNICAL-VERDICT.md`
+- Debt register:
+  - `docs/context/TECHNICAL-DEBT-REGISTER.md`
+
+Regla: documentos de `campaign` o `debt register` no sustituyen contrato activo.
 
 ## Runtime posture (dual mode)
 
@@ -24,12 +42,13 @@ No hay fallback silencioso entre modos.
 ## Orden recomendado de lectura
 
 1. `docs/context/README.md`
-2. `docs/context/BRANCH-GOVERNANCE-AND-RECONCILIATION.md`
-3. `docs/context/BRANCH-CLOSURE-TECHNICAL-VERDICT.md`
-4. `docs/context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
-5. `docs/context/WIS_VSCODE_EXTENSION_ARCHITECTURE.md`
-6. `docs/context/WIS_PHASE_3_ACCEPTANCE_GATE.md`
-7. `docs/mcp/README.md`
+2. `docs/context/REPOSITORY-OPERATIONAL-HARDENING.md`
+3. `docs/context/CONTRACT-GOVERNANCE.md`
+4. `docs/context/LOCAL_PRIVATE-EVOLUTION-POLICY.md`
+5. `docs/context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
+6. `docs/context/WIS_VSCODE_EXTENSION_ARCHITECTURE.md`
+7. `docs/context/BRANCH-CLOSURE-TECHNICAL-VERDICT.md`
+8. `docs/mcp/README.md`
 
 ## Evidencia clave
 
@@ -42,4 +61,5 @@ No hay fallback silencioso entre modos.
 
 - Evitar duplicados fuera de `docs/context` para definiciones canonicas de Fase 3.
 - Si hay conflicto documental, corregir en un delta unico y versionado.
-- El cierre de ramas solo se considera consumado cuando converge: canon + veredicto tecnico + estado remoto.
+- El cierre de ramas se considera consumado cuando converge: canon + veredicto tecnico + estado remoto.
+- Toda evolucion de `local_private` y contratos debe seguir politicas activas antes de merge.
