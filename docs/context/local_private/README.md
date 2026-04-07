@@ -61,6 +61,7 @@ Playbooks operativos (tiers):
 
 Gates minimos de Package 8:
 
+- `./scripts/run_contract_closure.sh all` (target unificado)
 - `./scripts/validate_docs_consistency.sh`
 - `npm test` (vscode-extension)
 - `npm run test:local-db` (vscode-extension, PostgreSQL)

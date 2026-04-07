@@ -168,4 +168,7 @@ if [[ -n "$SEMANTIC_DRIFT_MATCHES" ]]; then
   fi
 fi
 
+echo "[docs-check] Verificando tiering documental..."
+./scripts/validate_docs_tiering.sh
+
 echo "[docs-check] OK"

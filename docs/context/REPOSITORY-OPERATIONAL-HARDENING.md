@@ -48,6 +48,7 @@ Reglas rectoras:
 - Contratos **MUST** clasificarse como `internal_only`, `persisted_contract`, `integration_contract` o `ui_facing_contract`.
 - Superficies `persisted_contract` y `ui_facing_contract` operan en modo `additive_only` por defecto.
 - Cambios no aditivos **MUST** seguir flujo formal: ADR + migración/compatibilidad + evidencia de pruebas.
+- PRs con impacto contractual **MUST** actualizar `CONTRACT-INVENTORY.md`.
 
 ## 5) Tiering documental
 
@@ -88,5 +89,5 @@ Reglas:
 
 ## 8) Estado de enforcement en esta fase
 
-- Enforcement actual: normativo + checklist + evidencia en PR.
-- Gate automático CI adicional: pendiente (registrado en `TECHNICAL-DEBT-REGISTER.md`).
+- Enforcement actual: normativo + checklist + evidencia en PR + gate automático CI.
+- Gates activos: `validate_pr_governance.sh`, `validate_docs_tiering.sh`, `run_contract_closure.sh`.

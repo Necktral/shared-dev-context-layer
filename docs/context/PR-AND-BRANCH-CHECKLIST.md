@@ -14,8 +14,10 @@ Fecha: 2026-04-06
 
 - [ ] Clasificación contractual declarada (`internal_only`/`persisted_contract`/`integration_contract`/`ui_facing_contract`) si aplica.
 - [ ] Semáforo `local_private` (`green`/`yellow`/`red`) declarado si aplica.
+- [ ] Cuerpo de PR incluye campos machine-readable: `contract_class:`, `local_private_level:`.
 - [ ] ADR/migración declarados cuando corresponda por política.
 - [ ] Canon/política actualizados si cambió comportamiento o reglas.
+- [ ] Si hay impacto contractual, `CONTRACT-INVENTORY.md` actualizado en el mismo PR.
 
 ## 3) Pruebas mínimas
 
@@ -30,6 +32,7 @@ Fecha: 2026-04-06
 - [ ] No hay cambio runtime fuera del alcance aprobado.
 - [ ] Se adjunta evidencia de pruebas y riesgos residuales.
 - [ ] Si toca `extension.ts`, se reporta `wc -l` y `composition_impact`.
+- [ ] Si `extension.ts >= 760` y fue tocado, `decomposition_required` declarado (`in_pr` o `followup_pr:#...`).
 
 ## 5) Criterio de cierre remoto
 

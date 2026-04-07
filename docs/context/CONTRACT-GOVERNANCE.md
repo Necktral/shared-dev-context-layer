@@ -59,6 +59,7 @@ El PR **MUST** declarar:
 - pruebas ejecutadas y resultado,
 - archivos de contrato/persistencia/renderer afectados,
 - referencia ADR/migración si aplica.
+- actualización de `CONTRACT-INVENTORY.md` (owner/tests/compatibilidad del contrato afectado).
 
 ## 5) Superficies críticas bajo protección reforzada
 

@@ -20,6 +20,7 @@ Este directorio concentra la fuente de verdad documental para el control plane (
 - Policy:
   - `docs/context/REPOSITORY-OPERATIONAL-HARDENING.md`
   - `docs/context/CONTRACT-GOVERNANCE.md`
+  - `docs/context/CONTRACT-INVENTORY.md`
   - `docs/context/LOCAL_PRIVATE-EVOLUTION-POLICY.md`
   - `docs/context/PR-AND-BRANCH-CHECKLIST.md`
 - Campaign:
@@ -44,11 +45,12 @@ No hay fallback silencioso entre modos.
 1. `docs/context/README.md`
 2. `docs/context/REPOSITORY-OPERATIONAL-HARDENING.md`
 3. `docs/context/CONTRACT-GOVERNANCE.md`
-4. `docs/context/LOCAL_PRIVATE-EVOLUTION-POLICY.md`
-5. `docs/context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
-6. `docs/context/WIS_VSCODE_EXTENSION_ARCHITECTURE.md`
-7. `docs/context/BRANCH-CLOSURE-TECHNICAL-VERDICT.md`
-8. `docs/mcp/README.md`
+4. `docs/context/CONTRACT-INVENTORY.md`
+5. `docs/context/LOCAL_PRIVATE-EVOLUTION-POLICY.md`
+6. `docs/context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
+7. `docs/context/WIS_VSCODE_EXTENSION_ARCHITECTURE.md`
+8. `docs/context/BRANCH-CLOSURE-TECHNICAL-VERDICT.md`
+9. `docs/mcp/README.md`
 
 ## Evidencia clave
 
