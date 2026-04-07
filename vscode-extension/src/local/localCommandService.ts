@@ -15,11 +15,15 @@ import { validateCodexExecutableCommand } from "./codexCommandValidation";
 import { capText, countLines, sha256Hex } from "./execution/codexExecutionUtils";
 import { InMemoryLocalRuntimeStore } from "./localRuntimeStore";
 import { PostRunReviewer } from "./postRunReviewer";
+import type { ParsedPlaybook } from "../platform/playbooks/playbookFrontmatter";
+import { WorkspaceBoundaryError, WorkspaceBoundaryGuard } from "../platform/security/workspaceBoundaryGuard";
+import { PlaybookRegistry } from "../platform/playbooks/playbookRegistry";
 import type {
   CodexExecutionResult,
   ExecutionOutcome,
   LocalCommandName,
   LocalCommandResult,
+  LocalTaskDraft,
   OperationProfile,
   ProjectRuntimeSnapshot,
   TaskLifecycleState,
@@ -41,6 +45,8 @@ export interface LocalCommandServiceDeps {
   persistence: PersistencePort;
   getOperationProfile: () => OperationProfile;
   getCodexCliCommand: () => string;
+  boundaryGuard?: WorkspaceBoundaryGuard;
+  playbookRegistry?: PlaybookRegistry;
 }
 
 export interface LocalRunCodexOptions {
@@ -138,6 +144,11 @@ export class LocalCommandService {
     try {
       const environment = await this.deps.inspector.inspect();
       this.applyEnvironment(environment, "local_index", "running");
+      const boundaryBlocked = this.enforceWorkspaceBoundary("local_index", environment);
+      if (boundaryBlocked) {
+        this.pushResult(boundaryBlocked, true);
+        return boundaryBlocked;
+      }
 
       const health = await this.refreshPersistenceStatus();
       if (!health.ok) {
@@ -249,6 +260,11 @@ export class LocalCommandService {
     try {
       const environment = await this.deps.inspector.inspect();
       this.applyEnvironment(environment, "local_prepare_task", "running");
+      const boundaryBlocked = this.enforceWorkspaceBoundary("local_prepare_task", environment);
+      if (boundaryBlocked) {
+        this.pushResult(boundaryBlocked, true);
+        return boundaryBlocked;
+      }
 
       const health = await this.refreshPersistenceStatus();
       if (!health.ok) {
@@ -290,7 +306,10 @@ export class LocalCommandService {
         projectId: project.id,
         snapshot,
       });
-      const draft = await this.deps.taskBuilder.buildTask(cleanIntent, context, snapshot);
+      const draft = this.withSanitizedDraftCandidateFiles(
+        await this.deps.taskBuilder.buildTask(cleanIntent, context, snapshot),
+        environment,
+      );
 
       const savedTask = await this.deps.persistence.saveTask({
         project_id: project.id,
@@ -389,6 +408,11 @@ export class LocalCommandService {
     try {
       const environment = await this.deps.inspector.inspect();
       this.applyEnvironment(environment, "local_run_codex", "running");
+      const boundaryBlocked = this.enforceWorkspaceBoundary("local_run_codex", environment);
+      if (boundaryBlocked) {
+        this.pushResult(boundaryBlocked, true);
+        return boundaryBlocked;
+      }
 
       const health = await this.refreshPersistenceStatus();
       if (!health.ok) {
@@ -407,7 +431,9 @@ export class LocalCommandService {
       }
 
       const snapshot = this.deps.store.getSnapshot();
-      const draft = snapshot.task_draft;
+      const draft = snapshot.task_draft
+        ? this.withSanitizedDraftCandidateFiles(snapshot.task_draft, environment)
+        : null;
       if (!draft) {
         const missingTask = this.makeResult(
           "local_run_codex",
@@ -1037,6 +1063,9 @@ export class LocalCommandService {
           event: eventRecord,
         };
       });
+      const operatorPlaybooks = this.toOperatorPlaybookSummaries(
+        this.deps.playbookRegistry?.resolveForAction("post_review") ?? [],
+      );
       await this.deps.persistence.transitionTaskState({
         project_id: project.id,
         task_id: draft.id,
@@ -1107,6 +1136,7 @@ export class LocalCommandService {
             warnings_count: reconciled.telemetry.warnings_count,
             anomaly_count: reconciled.telemetry.anomaly_count,
           },
+          ...(operatorPlaybooks.length > 0 ? { operator_playbooks: operatorPlaybooks } : {}),
         },
       );
       if (activeClaim && !claimCompleted) {
@@ -1231,6 +1261,80 @@ export class LocalCommandService {
       runtime_state: nextState,
       last_action: action,
       updated_at: new Date().toISOString(),
+    }));
+  }
+
+  private enforceWorkspaceBoundary(
+    command: LocalCommandName,
+    environment: EnvironmentSnapshot,
+  ): LocalCommandResult | null {
+    if (!this.deps.boundaryGuard) {
+      return null;
+    }
+
+    try {
+      this.deps.boundaryGuard.assertSnapshot({
+        workspaceRoot: environment.workspace_root,
+        repoRoot: environment.repo_root,
+        activeFile: environment.active_file,
+      });
+      return null;
+    } catch (error) {
+      const boundaryDetails: Record<string, unknown> =
+        error instanceof WorkspaceBoundaryError && error.details ? error.details : {};
+      return this.makeResult(
+        command,
+        "blocked",
+        "Boundary de workspace/repo inválido para ejecutar comando local.",
+        {
+          blocked_reason: "workspace_boundary_violation",
+          boundary_error: error instanceof Error ? error.message : "unknown_boundary_error",
+          ...boundaryDetails,
+        },
+      );
+    }
+  }
+
+  private withSanitizedDraftCandidateFiles(
+    draft: LocalTaskDraft,
+    environment: EnvironmentSnapshot,
+  ) {
+    if (!this.deps.boundaryGuard) {
+      return draft;
+    }
+    const rootPath = environment.repo_root ?? environment.workspace_root;
+    if (!rootPath) {
+      return {
+        ...draft,
+        candidate_files: [],
+        execution_brief: draft.execution_brief
+          ? {
+              ...draft.execution_brief,
+              candidate_files: [],
+            }
+          : undefined,
+      };
+    }
+
+    const sanitized = this.deps.boundaryGuard.safeCandidateFiles(draft.candidate_files, rootPath);
+    return {
+      ...draft,
+      candidate_files: sanitized,
+      execution_brief: draft.execution_brief
+        ? {
+            ...draft.execution_brief,
+            candidate_files: sanitized.slice(0, 8),
+          }
+        : undefined,
+    };
+  }
+
+  private toOperatorPlaybookSummaries(playbooks: ParsedPlaybook[]): Array<Record<string, unknown>> {
+    return playbooks.map((doc) => ({
+      id: doc.frontmatter.id,
+      title: doc.frontmatter.title,
+      kind: doc.frontmatter.kind,
+      source_tier: doc.sourceTier,
     }));
   }
 

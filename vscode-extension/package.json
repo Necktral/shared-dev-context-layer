@@ -29,6 +29,7 @@
     "onCommand:wisContextSync.localPrepareTask",
     "onCommand:wisContextSync.localRunCodex",
     "onCommand:wisContextSync.localRefresh",
+    "onCommand:wisContextSync.localDoctor",
     "onCommand:wisContextSync.localConfigureDbPassword"
   ],
   "contributes": {
@@ -104,6 +105,10 @@
       {
         "command": "wisContextSync.localRefresh",
         "title": "WIS: Local Refresh"
+      },
+      {
+        "command": "wisContextSync.localDoctor",
+        "title": "WIS: Local Doctor"
       },
       {
         "command": "wisContextSync.localConfigureDbPassword",

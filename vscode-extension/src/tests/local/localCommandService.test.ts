@@ -6,10 +6,12 @@ import { InMemoryLocalRuntimeStore } from "../../local/localRuntimeStore";
 import {
   createInitialProjectRuntimeSnapshot,
   type CodexExecutionResult,
-  type PostRunReconciliationResult,
   type LocalTaskDraft,
+  type PostRunReconciliationResult,
   type OperationProfile,
 } from "../../local/types";
+import type { ParsedPlaybook } from "../../platform/playbooks/playbookFrontmatter";
+import { WorkspaceBoundaryError, WorkspaceBoundaryGuard } from "../../platform/security/workspaceBoundaryGuard";
 import { NoopIndexer, NoopRetriever, NoopTaskBuilder } from "../../local/noopServices";
 import type {
   AcquireProjectRunLockInput,
@@ -655,6 +657,38 @@ test("LocalCommandService bloquea comandos locales cuando profile no es local_pr
   assert.equal(store.getSnapshot().last_result?.status, "blocked");
 });
 
+test("LocalCommandService bloquea local_prepare_task por violación de workspace boundary", async () => {
+  let profile: OperationProfile = "local_private";
+  const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
+  const persistence = new FakePersistence();
+  const boundaryGuard = new WorkspaceBoundaryGuard();
+  boundaryGuard.assertSnapshot = () => {
+    throw new WorkspaceBoundaryError("snapshot invalid", { reason: "test_boundary" });
+  };
+
+  const service = new LocalCommandService({
+    inspector: { inspect: async () => environment() },
+    store,
+    indexer: new NoopIndexer(),
+    retriever: new NoopRetriever(),
+    taskBuilder: new NoopTaskBuilder(),
+    postRunReconciler: createFakePostRunReconciler(),
+    codexRunner: {
+      healthcheck: async () => okExecution("healthcheck"),
+      run: async () => okExecution("run"),
+    },
+    persistence,
+    getOperationProfile: () => profile,
+    getCodexCliCommand: () => "codex",
+    boundaryGuard,
+  });
+
+  const result = await service.localPrepareTask("Intento bloqueado por boundary");
+  assert.equal(result.status, "blocked");
+  assert.equal(result.details?.blocked_reason, "workspace_boundary_violation");
+  assert.equal(result.details?.reason, "test_boundary");
+});
+
 test("LocalCommandService en local_private prepara tarea y ejecuta Codex con persistencia", async () => {
   let profile: OperationProfile = "local_private";
   const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
@@ -725,6 +759,55 @@ test("LocalCommandService en local_private prepara tarea y ejecuta Codex con per
   assert.equal(persistence.savedDecisions[0]?.title, "Operator review: accept");
   assert.equal(persistence.savedEvents[0]?.severity, "info");
   assert.equal(persistence.savedEvents[0]?.payload?.review_decision, "accept");
+});
+
+test("LocalCommandService agrega operator_playbooks de forma aditiva en local_run_codex", async () => {
+  let profile: OperationProfile = "local_private";
+  const store = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(profile));
+  const persistence = new FakePersistence();
+  const playbooks: ParsedPlaybook[] = [
+    {
+      frontmatter: {
+        id: "pb-post-review-validate",
+        title: "Validar diff y riesgos",
+        kind: "validation",
+        priority: 10,
+        applies_to: ["post_review"],
+        tags: [],
+      },
+      body: "Validar salida.",
+      sourcePath: "/workspace/.wis/playbooks/pb-post-review-validate.md",
+      sourceTier: "workspace",
+    },
+  ];
+
+  const service = new LocalCommandService({
+    inspector: { inspect: async () => environment() },
+    store,
+    indexer: new NoopIndexer(),
+    retriever: new NoopRetriever(),
+    taskBuilder: new NoopTaskBuilder(),
+    postRunReconciler: createFakePostRunReconciler(),
+    codexRunner: {
+      healthcheck: async () => okExecution("healthcheck"),
+      run: async () => okExecution("run"),
+    },
+    persistence,
+    getOperationProfile: () => profile,
+    getCodexCliCommand: () => "codex",
+    playbookRegistry: {
+      resolveForAction: () => playbooks,
+    } as unknown as any,
+  });
+
+  await service.localPrepareTask("Run con playbooks");
+  const executed = await service.localRunCodex();
+  assert.equal(executed.status, "ok");
+  assert.ok(Array.isArray(executed.details?.operator_playbooks));
+  const operatorPlaybooks = executed.details?.operator_playbooks as Array<Record<string, unknown>>;
+  assert.equal(operatorPlaybooks.length, 1);
+  assert.equal(operatorPlaybooks[0]?.id, "pb-post-review-validate");
+  assert.equal(operatorPlaybooks[0]?.source_tier, "workspace");
 });
 
 test("LocalCommandService escala review cuando reindex termina degradado", async () => {

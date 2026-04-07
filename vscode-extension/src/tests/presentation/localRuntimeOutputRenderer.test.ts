@@ -70,3 +70,30 @@ test("LocalRuntimeOutputRenderer no imprime operator_review cuando falta review_
 
   assert.equal(output.lines.some((line) => line === "operator_review:"), false);
 });
+
+test("LocalRuntimeOutputRenderer imprime operator_playbooks cuando están disponibles", () => {
+  const output = new FakeOutputChannel();
+  const renderer = new LocalRuntimeOutputRenderer(output as never);
+  const snapshot = {
+    ...createInitialProjectRuntimeSnapshot("local_private"),
+    operation_profile: "local_private" as const,
+    workspace_root: "/workspace",
+    repo_root: "/workspace/repo",
+    runtime_state: "ready" as const,
+    db_status: "connected" as const,
+    updated_at: "2026-04-06T04:12:00.000Z",
+  };
+  const result = makeResult({
+    review_decision: "accept",
+    operator_playbooks: [
+      { id: "pb-1", title: "Validar diff", source_tier: "project", kind: "validation" },
+      { id: "pb-2", title: "Recuperar lock", source_tier: "system", kind: "recovery" },
+    ],
+  });
+
+  renderer.render(result, snapshot);
+
+  assert.ok(output.lines.some((line) => line === "operator_playbooks:"));
+  assert.ok(output.lines.some((line) => line === "- pb-1 (project) -> Validar diff"));
+  assert.ok(output.lines.some((line) => line === "- pb-2 (system) -> Recuperar lock"));
+});

@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as path from "node:path";
 import {
   getCodexCliCommand,
   getFixtureScenario,
@@ -17,6 +18,7 @@ import {
   COMMAND_CLEAR_AUTH,
   COMMAND_CONFIGURE_AUTH,
   COMMAND_LOCAL_CONFIGURE_DB_PASSWORD,
+  COMMAND_LOCAL_DOCTOR,
   COMMAND_LOCAL_INDEX,
   COMMAND_LOCAL_PREPARE_TASK,
   COMMAND_LOCAL_REFRESH,
@@ -46,6 +48,7 @@ import { HandoffBuilder } from "./application/handoffBuilder";
 import { InMemoryHandoffArtifactStore } from "./application/handoffArtifactStore";
 import { HandoffOutputChannelRenderer } from "./presentation/renderers/handoffOutputChannelRenderer";
 import { AuthManager } from "./auth/authManager";
+import { RuntimeAuthPolicy } from "./auth/runtimeAuthPolicy";
 import { ContextCommandService, type ContextCommandExecutionInput } from "./application/contextCommandService";
 import { ContextCommandOutputRenderer } from "./presentation/renderers/contextCommandOutputRenderer";
 import { InMemoryLocalRuntimeStore } from "./local/localRuntimeStore";
@@ -64,6 +67,9 @@ import { ContextAwareTaskBuilder } from "./local/taskBuilder/contextAwareTaskBui
 import { WorkspaceSnapshotter } from "./local/workspaceSnapshotter";
 import { PostRunReconciler } from "./local/postRunReconciler";
 import { PostRunReviewer } from "./local/postRunReviewer";
+import { WorkspaceBoundaryGuard } from "./platform/security/workspaceBoundaryGuard";
+import { PlaybookRegistry } from "./platform/playbooks/playbookRegistry";
+import { LocalDoctorService } from "./platform/doctor/localDoctorService";
 
 let outputChannel: vscode.OutputChannel | undefined;
 
@@ -177,6 +183,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const contextStore = new InMemoryOperationalContextStore();
   const handoffArtifactStore = new InMemoryHandoffArtifactStore();
   const authManager = new AuthManager(context);
+  const authPolicy = new RuntimeAuthPolicy();
+  const boundaryGuard = new WorkspaceBoundaryGuard();
 
   const endpoint = getMcpEndpoint();
   const activeSession = await sessionManager.getOrCreateSession();
@@ -215,6 +223,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   const contextCommandService = new ContextCommandService();
   const contextCommandRenderer = new ContextCommandOutputRenderer(outputChannel);
+  const playbookRegistry = new PlaybookRegistry({
+    systemRoot: path.join(context.extensionPath, "playbooks"),
+    workspaceRoot: activationEnvironment.workspace_root
+      ? path.join(activationEnvironment.workspace_root, ".wis", "playbooks")
+      : null,
+    projectRoot: activationEnvironment.repo_root
+      ? path.join(activationEnvironment.repo_root, ".wis", "playbooks")
+      : null,
+  });
   const localStore = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(getOperationProfile()));
   const localPanelProvider = new LocalRuntimePanelProvider(localStore.getSnapshot());
   const localOutputRenderer = new LocalRuntimeOutputRenderer(outputChannel);
@@ -241,7 +258,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     persistence: localPersistence,
     getOperationProfile,
     getCodexCliCommand,
+    boundaryGuard,
+    playbookRegistry,
   });
+  const doctorService = new LocalDoctorService(
+    {
+      inspectEnvironment: () => environmentInspector.inspect(),
+      resolveAuth: () => authManager.resolveAuthContext(),
+      getPersistenceSnapshot: () => {
+        const snapshot = localStore.getSnapshot();
+        return {
+          dbStatus: snapshot.db_status,
+          reason: snapshot.db_error,
+        };
+      },
+      getRuntimeMode,
+      getOperationProfile,
+    },
+    boundaryGuard,
+    authPolicy,
+  );
 
   if (localPersistence instanceof PostgresPersistenceAdapter) {
     context.subscriptions.push({
@@ -286,6 +322,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }>,
   ): Promise<void> => {
     const auth = await authManager.resolveAuthContext();
+    const authDecision = authPolicy.evaluate(auth);
+    if (!authDecision.allowed) {
+      outputChannel?.appendLine(
+        `[WIS][AUTH][POLICY] ${toolLabel} blocked. code=${authDecision.code} message=${authDecision.message}`,
+      );
+      outputChannel?.show(true);
+      await vscode.window.showErrorMessage(`${toolLabel} bloqueado por policy de autenticación: ${authDecision.message}`);
+      return;
+    }
     const session = await sessionManager.getOrCreateSession();
     const config = currentConfig();
     const result = await runner({
@@ -335,6 +380,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const loadDisposable = vscode.commands.registerCommand(COMMAND_LOAD_CONTEXT, async () => {
     const auth = await authManager.resolveAuthContext();
+    const authDecision = authPolicy.evaluate(auth);
+    if (!authDecision.allowed) {
+      outputChannel?.appendLine(
+        `[WIS][AUTH][POLICY] WIS: Load Operational Context blocked. code=${authDecision.code} message=${authDecision.message}`,
+      );
+      outputChannel?.show(true);
+      await vscode.window.showErrorMessage(
+        `WIS: Load Operational Context bloqueado por policy de autenticación: ${authDecision.message}`,
+      );
+      return;
+    }
     const envelope = await loadService.load(auth);
     const authSummary = auth.mode === "none" ? "none" : `${auth.mode}/${auth.token ? "configured" : "missing"}`;
     outputChannel?.show(true);
@@ -647,6 +703,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await executeLocalCommand("WIS: Local Refresh", async () => localCommandService.localRefresh());
   });
 
+  const localDoctorDisposable = vscode.commands.registerCommand(COMMAND_LOCAL_DOCTOR, async () => {
+    const report = await doctorService.run();
+    outputChannel?.appendLine("[WIS][LOCAL][DOCTOR] report");
+    outputChannel?.appendLine(JSON.stringify(report, null, 2));
+    outputChannel?.show(true);
+
+    if (report.overall === "fail") {
+      await vscode.window.showErrorMessage("WIS: Local Doctor detectó fallos críticos. Revisa output channel.");
+      return;
+    }
+    if (report.overall === "warn") {
+      await vscode.window.showWarningMessage("WIS: Local Doctor completó con advertencias.");
+      return;
+    }
+    await vscode.window.showInformationMessage("WIS: Local Doctor completado sin hallazgos críticos.");
+  });
+
   const localConfigureDbPasswordDisposable = vscode.commands.registerCommand(
     COMMAND_LOCAL_CONFIGURE_DB_PASSWORD,
     async () => {
@@ -691,6 +764,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     localPrepareTaskDisposable,
     localRunCodexDisposable,
     localRefreshDisposable,
+    localDoctorDisposable,
     localConfigureDbPasswordDisposable,
   );
 }

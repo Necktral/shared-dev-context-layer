@@ -58,6 +58,7 @@ for cmd in \
   "WIS: Local Prepare Task" \
   "WIS: Local Run Codex" \
   "WIS: Local Refresh" \
+  "WIS: Local Doctor" \
   "WIS: Local Configure DB Password"; do
   if ! rg -q "$cmd" "$LOCAL_PRIVATE_CANON" vscode-extension/README.md; then
     echo "ERROR: comando local '$cmd' no esta documentado en canon/README de extension." >&2
