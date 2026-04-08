@@ -1,6 +1,6 @@
 # Phase 1 Local-First Closure Matrix
 
-Fecha de actualizacion: 2026-04-07  
+Fecha de actualizacion: 2026-04-08  
 Estado: `GO local separado` (scope local-first)
 
 ## Scope
@@ -22,7 +22,7 @@ No sustituye el GO global remoto/Auth0/tunnel.
 | AC3 | `OperationalContextEnvelope` consistente + truthfulness visible | PASS | `vscode-extension/src/tests/contracts/operationalEnvelope.shape.test.ts`, `vscode-extension/src/tests/domain/composeOperationalContext.test.ts` |
 | AC4 | `Prepare Handoff` produce `ready|partial|blocked` desde envelope | PASS | `vscode-extension/src/tests/application/handoffBuilder.test.ts`, `vscode-extension/src/tests/integration/loadToHandoff.integration.test.ts` |
 | AC5 | Flujo `local_private` usable (`Refresh -> Index -> Prepare -> Run`) + Doctor | PASS | `vscode-extension/src/tests/local/localCommandService.test.ts`, `vscode-extension/src/tests/platform/doctor/localDoctorService.test.ts` |
-| AC6 | Output Channel con diagnostico estructurado operativo | PASS | `vscode-extension/src/tests/presentation/contextPresenter.test.ts`, `vscode-extension/src/tests/contracts/contextPresenter.snapshot.test.ts` |
+| AC6 | Output Channel con diagnostico estructurado operativo | PASS | `vscode-extension/src/tests/presentation/contextPresenter.test.ts`, `vscode-extension/src/tests/contracts/contextPresenter.snapshot.test.ts`, `docs/context/phase4/evidence/phase1-cli-output-a1-a6.md` |
 | AC7 | Guardrails locales (sin shell auto-execution automatica / sin mutacion automatica de repo) | PASS | `vscode-extension/src/local/codexCommandValidation.ts`, `vscode-extension/src/local/codexCliRunner.ts`, `vscode-extension/src/tests/local/codexCommandValidation.test.ts` |
 | AC8 | Cierre local utilizable sin dependencia obligatoria remota | PASS | `docs/context/WIS_PHASE_1_LOCAL_FIRST_ACCEPTANCE_GATE.md`, `vscode-extension/README.md` |
 
@@ -40,6 +40,14 @@ Desglose equivalente:
 4. `./scripts/run_contract_closure.sh local-db`
 5. `PROJECT_NAME=shared-dev-context-layer BACKEND_PORT=8001 MCP_PORT=8002 SYSTEM_MODE=delegated_limited DATABASE_URL=postgresql://wis_admin:wis_strong_password_change_this@localhost:5432/wis_context ./scripts/run_contract_closure.sh backend`
 6. `cd vscode-extension && npm run compile && npm test && npm run test:local-db`
+
+## Evidencia CLI A1/A6 (terminal)
+
+Artefactos versionados:
+
+1. `docs/context/phase4/evidence/phase1-cli-output-a1-success_full.log`
+2. `docs/context/phase4/evidence/phase1-cli-output-a6-validation_stale.log`
+3. `docs/context/phase4/evidence/phase1-cli-output-a1-a6.md`
 
 ## Decision
 
