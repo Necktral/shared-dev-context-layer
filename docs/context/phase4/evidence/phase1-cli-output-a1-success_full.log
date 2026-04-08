@@ -1,0 +1,457 @@
+
+> wis-context-sync-control-plane@0.2.0-internal manual:a1
+> npm run manual:load-context-output -- --runtime-mode offline_fixture --scenario success_full
+
+
+> wis-context-sync-control-plane@0.2.0-internal manual:load-context-output
+> npm run compile && node dist/tools/loadContextOutputCli.js --runtime-mode offline_fixture --scenario success_full
+
+
+> wis-context-sync-control-plane@0.2.0-internal compile
+> tsc -p .
+
+[WIS] load_started state=preparing at=2026-04-08T18:34:44.878Z details={"endpoint":"http://localhost:8002/mcp","runtime_mode":"offline_fixture","timeout_ms":5000}
+[WIS] local_inspection_completed state=inspecting_local at=2026-04-08T18:34:44.879Z details={"inspector_status":"ok","workspace_root":"/home/necktral/projects/shared-dev-context-layer","repo_root":"/home/necktral/projects/shared-dev-context-layer"}
+[WIS] wis_bundle_loaded state=loading_remote at=2026-04-08T18:34:44.880Z details={"bundle_status":"success","transport_endpoint":"http://localhost:8002/mcp"}
+[WIS] envelope consumer=vscode_extension session_key=manual-success_full-session endpoint=http://localhost:8002/mcp runtime_mode=offline_fixture transport_status=ok load_state=loaded issues=1
+{
+  "meta": {
+    "consumer": "vscode_extension",
+    "session_key": "manual-success_full-session",
+    "endpoint": "http://localhost:8002/mcp",
+    "runtime_mode": "offline_fixture",
+    "fetched_at": "2026-04-08T18:34:44.880Z",
+    "transport_status": "ok",
+    "load_state": "loaded"
+  },
+  "local_environment": {
+    "workspace_root": "/home/necktral/projects/shared-dev-context-layer",
+    "repo_root": "/home/necktral/projects/shared-dev-context-layer",
+    "branch": "docs/phase1-cli-evidence-a1-a6",
+    "active_file": null,
+    "inspector_status": "ok",
+    "inspector_error": null,
+    "timestamp": "2026-04-08T18:34:44.875Z"
+  },
+  "wis_context": {
+    "active_task": {
+      "tool": "get_active_task",
+      "kind": "ok",
+      "status": "ok",
+      "payload": {
+        "status": "ok",
+        "task": {
+          "id": "task-fixture-001",
+          "title": "Fixture task",
+          "status": "in_progress",
+          "branch": "main"
+        },
+        "scope": {
+          "workspace_id": "ws-fixture-001",
+          "project_id": "prj-fixture-001",
+          "task_id": "task-fixture-001"
+        },
+        "resolution_metadata": {
+          "source": "fixture",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {},
+          "resolved_scope": {
+            "workspace_id": "ws-fixture-001",
+            "project_id": "prj-fixture-001",
+            "task_id": "task-fixture-001"
+          }
+        }
+      },
+      "issues": [],
+      "raw": {
+        "status": "ok",
+        "task": {
+          "id": "task-fixture-001",
+          "title": "Fixture task",
+          "status": "in_progress",
+          "branch": "main"
+        },
+        "scope": {
+          "workspace_id": "ws-fixture-001",
+          "project_id": "prj-fixture-001",
+          "task_id": "task-fixture-001"
+        },
+        "resolution_metadata": {
+          "source": "fixture",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {},
+          "resolved_scope": {
+            "workspace_id": "ws-fixture-001",
+            "project_id": "prj-fixture-001",
+            "task_id": "task-fixture-001"
+          }
+        }
+      }
+    },
+    "context_snapshot": {
+      "tool": "get_context_snapshot",
+      "kind": "ok",
+      "status": "ok",
+      "payload": {
+        "status": "ok",
+        "task_id": "task-fixture-001",
+        "source": "fixture",
+        "scope": {
+          "workspace_id": "ws-fixture-001",
+          "project_id": "prj-fixture-001",
+          "task_id": "task-fixture-001"
+        },
+        "consumer_context": {
+          "consumer_type": "vscode_extension",
+          "session_key": "fixture-session",
+          "session_status": "active"
+        },
+        "resolution_metadata": {
+          "source": "fixture",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {},
+          "resolved_scope": {
+            "workspace_id": "ws-fixture-001",
+            "project_id": "prj-fixture-001",
+            "task_id": "task-fixture-001"
+          }
+        },
+        "snapshot": {
+          "identity": {
+            "task_id": "task-fixture-001",
+            "title": "Fixture task"
+          },
+          "validation": {
+            "status": "passed"
+          }
+        },
+        "metadata": {
+          "policy": "delegated_limited",
+          "origin": "fixture",
+          "created_at": "2026-04-08T18:34:44.880Z"
+        }
+      },
+      "issues": [],
+      "raw": {
+        "status": "ok",
+        "task_id": "task-fixture-001",
+        "source": "fixture",
+        "scope": {
+          "workspace_id": "ws-fixture-001",
+          "project_id": "prj-fixture-001",
+          "task_id": "task-fixture-001"
+        },
+        "consumer_context": {
+          "consumer_type": "vscode_extension",
+          "session_key": "fixture-session",
+          "session_status": "active"
+        },
+        "resolution_metadata": {
+          "source": "fixture",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {},
+          "resolved_scope": {
+            "workspace_id": "ws-fixture-001",
+            "project_id": "prj-fixture-001",
+            "task_id": "task-fixture-001"
+          }
+        },
+        "snapshot": {
+          "identity": {
+            "task_id": "task-fixture-001",
+            "title": "Fixture task"
+          },
+          "validation": {
+            "status": "passed"
+          }
+        },
+        "metadata": {
+          "policy": "delegated_limited",
+          "origin": "fixture",
+          "created_at": "2026-04-08T18:34:44.880Z"
+        }
+      }
+    },
+    "validation_status": {
+      "tool": "get_validation_status",
+      "kind": "ok",
+      "status": "ok",
+      "payload": {
+        "status": "ok",
+        "task_id": "task-fixture-001",
+        "scope": {
+          "workspace_id": "ws-fixture-001",
+          "project_id": "prj-fixture-001",
+          "task_id": "task-fixture-001"
+        },
+        "resolution_metadata": {
+          "source": "fixture",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {},
+          "resolved_scope": {
+            "workspace_id": "ws-fixture-001",
+            "project_id": "prj-fixture-001",
+            "task_id": "task-fixture-001"
+          }
+        },
+        "current_status": "passed",
+        "last_validation_type": "ci",
+        "last_validation_source": "fixture",
+        "last_validation_at": "2026-04-08T18:34:44.880Z",
+        "summary": "All checks passing.",
+        "details": {}
+      },
+      "issues": [],
+      "raw": {
+        "status": "ok",
+        "task_id": "task-fixture-001",
+        "scope": {
+          "workspace_id": "ws-fixture-001",
+          "project_id": "prj-fixture-001",
+          "task_id": "task-fixture-001"
+        },
+        "resolution_metadata": {
+          "source": "fixture",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {},
+          "resolved_scope": {
+            "workspace_id": "ws-fixture-001",
+            "project_id": "prj-fixture-001",
+            "task_id": "task-fixture-001"
+          }
+        },
+        "current_status": "passed",
+        "last_validation_type": "ci",
+        "last_validation_source": "fixture",
+        "last_validation_at": "2026-04-08T18:34:44.880Z",
+        "summary": "All checks passing.",
+        "details": {}
+      }
+    },
+    "approved_decisions": {
+      "tool": "get_approved_decisions",
+      "kind": "ok",
+      "status": "ok",
+      "payload": {
+        "status": "ok",
+        "task_id": "task-fixture-001",
+        "scope": {
+          "workspace_id": "ws-fixture-001",
+          "project_id": "prj-fixture-001",
+          "task_id": "task-fixture-001"
+        },
+        "resolution_metadata": {
+          "source": "fixture",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {},
+          "resolved_scope": {
+            "workspace_id": "ws-fixture-001",
+            "project_id": "prj-fixture-001",
+            "task_id": "task-fixture-001"
+          }
+        },
+        "total": 2,
+        "decisions": [
+          {
+            "id": "decision-1",
+            "decision_key": "read_only",
+            "title": "Read-only enforcement",
+            "decision": "No writes in extension"
+          },
+          {
+            "id": "decision-2",
+            "decision_key": "authoritative_wis",
+            "title": "WIS authority",
+            "decision": "WIS canonical context wins"
+          }
+        ]
+      },
+      "issues": [],
+      "raw": {
+        "status": "ok",
+        "task_id": "task-fixture-001",
+        "scope": {
+          "workspace_id": "ws-fixture-001",
+          "project_id": "prj-fixture-001",
+          "task_id": "task-fixture-001"
+        },
+        "resolution_metadata": {
+          "source": "fixture",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {},
+          "resolved_scope": {
+            "workspace_id": "ws-fixture-001",
+            "project_id": "prj-fixture-001",
+            "task_id": "task-fixture-001"
+          }
+        },
+        "total": 2,
+        "decisions": [
+          {
+            "id": "decision-1",
+            "decision_key": "read_only",
+            "title": "Read-only enforcement",
+            "decision": "No writes in extension"
+          },
+          {
+            "id": "decision-2",
+            "decision_key": "authoritative_wis",
+            "title": "WIS authority",
+            "decision": "WIS canonical context wins"
+          }
+        ]
+      }
+    },
+    "recent_errors": {
+      "tool": "get_recent_errors",
+      "kind": "ok",
+      "status": "ok",
+      "payload": {
+        "status": "ok",
+        "task_id": "task-fixture-001",
+        "scope": {
+          "workspace_id": "ws-fixture-001",
+          "project_id": "prj-fixture-001",
+          "task_id": "task-fixture-001"
+        },
+        "resolution_metadata": {
+          "source": "fixture",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {},
+          "resolved_scope": {
+            "workspace_id": "ws-fixture-001",
+            "project_id": "prj-fixture-001",
+            "task_id": "task-fixture-001"
+          }
+        },
+        "window_hours": 24,
+        "limit": 20,
+        "total": 0,
+        "errors": []
+      },
+      "issues": [],
+      "raw": {
+        "status": "ok",
+        "task_id": "task-fixture-001",
+        "scope": {
+          "workspace_id": "ws-fixture-001",
+          "project_id": "prj-fixture-001",
+          "task_id": "task-fixture-001"
+        },
+        "resolution_metadata": {
+          "source": "fixture",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {},
+          "resolved_scope": {
+            "workspace_id": "ws-fixture-001",
+            "project_id": "prj-fixture-001",
+            "task_id": "task-fixture-001"
+          }
+        },
+        "window_hours": 24,
+        "limit": 20,
+        "total": 0,
+        "errors": []
+      }
+    }
+  },
+  "issues": [
+    {
+      "kind": "domain",
+      "source": "authority_map",
+      "severity": "warning",
+      "message": "Branch local difiere de la branch reportada por WIS active_task.",
+      "recoverable": true,
+      "evidence_hint": "Revisar checkout local vs contexto canónico remoto.",
+      "conflict_flag": "local_branch_vs_wis_branch_mismatch"
+    }
+  ],
+  "authority_map": {
+    "canonical_fields": [
+      "active_task",
+      "context_snapshot",
+      "validation_status",
+      "approved_decisions",
+      "recent_errors",
+      "scope",
+      "resolution_metadata"
+    ],
+    "local_hint_fields": [
+      "workspace_root",
+      "repo_root",
+      "branch",
+      "active_file",
+      "inspector_status",
+      "inspector_error"
+    ],
+    "conflict_flags": [
+      "local_branch_vs_wis_branch_mismatch"
+    ]
+  },
+  "transport_diagnostics": {
+    "endpoint": "http://localhost:8002/mcp",
+    "runtime_mode": "offline_fixture",
+    "timeout_ms": 5000,
+    "fetched_at": "2026-04-08T18:34:44.880Z"
+  }
+}
+
+[WIS] load_operational_context
+Operational Context Envelope
+
+== Session ==
+consumer: vscode_extension
+session_key: manual-success_full-session
+endpoint: http://localhost:8002/mcp
+runtime_mode: offline_fixture
+fetched_at: 2026-04-08T18:34:44.880Z
+
+== Local Environment ==
+workspace_root: /home/necktral/projects/shared-dev-context-layer
+repo_root: /home/necktral/projects/shared-dev-context-layer
+branch: docs/phase1-cli-evidence-a1-a6
+active_file: null
+inspector_status: ok
+inspector_error: null
+
+== Active Task ==
+tool_status: ok
+task: {"id":"task-fixture-001","title":"Fixture task","status":"in_progress","branch":"main"}
+
+== Validation ==
+tool_status: ok
+current_status: passed
+
+== Approved Decisions ==
+tool_status: ok
+total: 2
+
+== Recent Errors ==
+tool_status: ok
+total: 0
+
+== Load State ==
+transport_status: ok
+load_state: loaded
+
+== Diagnostics ==
+runtime_mode: offline_fixture
+transport_status: ok
+load_state: loaded
+issue_count: 1
+issue_origin_summary: local:0, transport:0, protocol:0, domain:1, presentation:0
+
+== Issues ==
+issue_1: warning/domain authority_map: Branch local difiere de la branch reportada por WIS active_task.
+
+[WIS] load_completed state=loaded at=2026-04-08T18:34:44.881Z details={"transport_status":"ok","issue_count":1}
