@@ -59,7 +59,8 @@ function baseConfig(schema: string, portOverride?: number): LocalDbConfig {
   return {
     enabled: true,
     host: envOrDotEnv("LOCAL_DB_HOST", "localhost"),
-    port: Number(process.env.LOCAL_DB_PORT ?? portOverride ?? envOrDotEnv("POSTGRES_HOST_PORT", "5432")),
+    // Explicit override must win so negative-connection tests remain deterministic in CI.
+    port: Number(portOverride ?? process.env.LOCAL_DB_PORT ?? envOrDotEnv("POSTGRES_HOST_PORT", "5432")),
     database: envOrDotEnv("LOCAL_DB_NAME", envOrDotEnv("POSTGRES_DB", "wis_context")),
     user: envOrDotEnv("LOCAL_DB_USER", envOrDotEnv("POSTGRES_USER", "wis_admin")),
     password: envOrDotEnv("LOCAL_DB_PASSWORD", envOrDotEnv("POSTGRES_PASSWORD", "")),
