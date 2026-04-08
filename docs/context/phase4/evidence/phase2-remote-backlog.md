@@ -1,11 +1,32 @@
 # Phase 2 Remote/Global Backlog
 
-Fecha de actualizacion: 2026-04-07  
-Estado: pendiente post `GO local separado`
+Fecha de actualizacion: 2026-04-08  
+Estado: en ejecucion, bloqueado por credenciales remotas
 
 ## Objetivo
 
 Cerrar el GO global remoto de fase sin afectar el baseline local-first ya cerrado.
+
+## Estado de ejecucion actual (2026-04-08)
+
+Progreso:
+
+- preflight de stack completado (`postgres`, `backend`, `mcp` en `Up`)
+- arranque de named tunnel intentado
+- validaciones remotas read/write/Auth0 intentadas
+
+Bloqueo:
+
+- falta `CF_NAMED_TUNNEL_TOKEN`
+- falta `CF_MCP_PUBLIC_BASE_URL`
+- falta `MCP_AUTH_TOKEN` para validacion write y claims OAuth
+
+Siguiente accion de desbloqueo:
+
+1. proveer `CF_NAMED_TUNNEL_TOKEN`
+2. proveer `CF_MCP_PUBLIC_BASE_URL`
+3. proveer tokens read/write y token OAuth de verificacion
+4. reejecutar scripts remotos en este orden: `start_named_cloudflare_tunnel` -> `check_named_cloudflare_tunnel` -> `validate_remote_mcp` -> `validate_remote_mcp_write` -> `validate_oauth_token_claims`
 
 ## Pendientes priorizados
 

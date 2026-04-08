@@ -14,6 +14,27 @@ Resultado ejecutado Package 8: `package-8-hardening-result.json`.
 Backlog Fase 2 remoto/global: `phase2-remote-backlog.md`.
 Script de cierre local-first reproducible: `../../../../scripts/run_phase1_local_closure.sh`.
 
+## 0. Ultimo intento operativo (2026-04-08)
+
+Resultado: `BLOCKED` por secretos/variables faltantes para cierre remoto.
+
+Ejecucion realizada:
+
+- `docker compose up --build -d postgres backend mcp` -> `OK`
+- `docker compose ps` -> `OK` (`postgres`, `backend`, `mcp` en `Up`)
+- `./scripts/start_named_cloudflare_tunnel.sh` -> `ERROR: CF_NAMED_TUNNEL_TOKEN is required`
+- `./scripts/check_named_cloudflare_tunnel.sh` -> `ERROR: CF_MCP_PUBLIC_BASE_URL is required`
+- `./scripts/validate_remote_mcp.sh "${CF_MCP_PUBLIC_BASE_URL:-}"` -> fallo por URL sin host (base URL vacia)
+- `./scripts/validate_remote_mcp_write.sh "${CF_MCP_PUBLIC_BASE_URL:-}"` -> `ERROR: MCP_AUTH_TOKEN is required`
+- `./scripts/validate_oauth_token_claims.sh --token "${MCP_AUTH_TOKEN:-}" ...` -> `ERROR: --token is required`
+
+Bloqueadores vigentes:
+
+- `CF_NAMED_TUNNEL_TOKEN`
+- `CF_MCP_PUBLIC_BASE_URL`
+- `MCP_AUTH_TOKEN` (read/write)
+- token OAuth valido para validacion de claims y pruebas `401/403`
+
 ## 1. Conectividad y endpoint canónico
 
 - [ ] named tunnel activo
@@ -53,4 +74,4 @@ Script de cierre local-first reproducible: `../../../../scripts/run_phase1_local
 ## 6. Cierre GO/NO-GO
 
 - [ ] GO: todos los checks en verde
-- [ ] NO-GO: bloqueadores documentados y plan de remediación
+- [x] NO-GO: bloqueadores documentados y plan de remediación
