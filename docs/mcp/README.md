@@ -155,3 +155,14 @@ Regla operativa:
 
 - named tunnel es la ruta por defecto para cierre y operación estable.
 - quick tunnel queda solo como fallback temporal, no endpoint canónico de aceptación.
+
+## 11. Readiness pack (sin credenciales)
+
+Cuando el entorno aún no tiene secretos remotos, preparar primero:
+
+- Contrato de secretos: `REMOTE_SECRETS_CONTRACT.md`
+- Plantilla segura: `../../.env.remote.example`
+- Preflight local sin red: `../../scripts/check_remote_readiness.sh`
+- Runbook remoto ejecutable: `REMOTE_EXECUTION_RUNBOOK.md`
+
+Regla: no marcar cierre remoto/global hasta obtener `READY_FOR_REMOTE_EXECUTION` y ejecutar evidencia remota real.

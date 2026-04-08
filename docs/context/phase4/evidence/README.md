@@ -13,6 +13,9 @@ Checklist de hardening Package 8: `package-8-hardening.md`.
 Resultado ejecutado Package 8: `package-8-hardening-result.json`.
 Backlog Fase 2 remoto/global: `phase2-remote-backlog.md`.
 Script de cierre local-first reproducible: `../../../../scripts/run_phase1_local_closure.sh`.
+Contrato de secretos remoto: `../../../mcp/REMOTE_SECRETS_CONTRACT.md`.
+Runbook remoto de ejecucion: `../../../mcp/REMOTE_EXECUTION_RUNBOOK.md`.
+Readiness preflight remoto (sin network): `../../../../scripts/check_remote_readiness.sh`.
 
 ## 0. Ultimo intento operativo (2026-04-08)
 
@@ -34,6 +37,19 @@ Bloqueadores vigentes:
 - `CF_MCP_PUBLIC_BASE_URL`
 - `MCP_AUTH_TOKEN` (read/write)
 - token OAuth valido para validacion de claims y pruebas `401/403`
+
+## 0.1 Readiness pack remoto (2026-04-08)
+
+Estado: `PREPARED` (operativamente listo para ejecutar remoto cuando existan credenciales reales).
+
+Artefactos agregados para desbloqueo futuro:
+
+- contrato de secretos: `../../../mcp/REMOTE_SECRETS_CONTRACT.md`
+- plantilla segura: `../../../../.env.remote.example`
+- readiness gate local: `../../../../scripts/check_remote_readiness.sh`
+- runbook remoto canonico: `../../../mcp/REMOTE_EXECUTION_RUNBOOK.md`
+
+Nota: este paquete no cambia el estado global actual; el cierre remoto sigue `NO-GO/BLOCKED` hasta ejecutar evidencias remotas reales.
 
 ## 1. Conectividad y endpoint canónico
 

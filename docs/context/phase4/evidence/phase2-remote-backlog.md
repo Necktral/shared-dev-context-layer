@@ -1,7 +1,7 @@
 # Phase 2 Remote/Global Backlog
 
 Fecha de actualizacion: 2026-04-08  
-Estado: en ejecucion, bloqueado por credenciales remotas
+Estado: en ejecucion, bloqueado por credenciales remotas (readiness pack preparado)
 
 ## Objetivo
 
@@ -14,6 +14,11 @@ Progreso:
 - preflight de stack completado (`postgres`, `backend`, `mcp` en `Up`)
 - arranque de named tunnel intentado
 - validaciones remotas read/write/Auth0 intentadas
+- readiness pack remoto preparado (sin ejecutar cierre remoto):
+  - `docs/mcp/REMOTE_SECRETS_CONTRACT.md`
+  - `docs/mcp/REMOTE_EXECUTION_RUNBOOK.md`
+  - `.env.remote.example`
+  - `scripts/check_remote_readiness.sh`
 
 Bloqueo:
 
@@ -26,7 +31,8 @@ Siguiente accion de desbloqueo:
 1. proveer `CF_NAMED_TUNNEL_TOKEN`
 2. proveer `CF_MCP_PUBLIC_BASE_URL`
 3. proveer tokens read/write y token OAuth de verificacion
-4. reejecutar scripts remotos en este orden: `start_named_cloudflare_tunnel` -> `check_named_cloudflare_tunnel` -> `validate_remote_mcp` -> `validate_remote_mcp_write` -> `validate_oauth_token_claims`
+4. ejecutar `./scripts/check_remote_readiness.sh` y confirmar `READY_FOR_REMOTE_EXECUTION`
+5. reejecutar scripts remotos en este orden: `start_named_cloudflare_tunnel` -> `check_named_cloudflare_tunnel` -> `validate_remote_mcp` -> `validate_remote_mcp_write` -> `validate_oauth_token_claims`
 
 ## Pendientes priorizados
 
