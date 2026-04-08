@@ -128,6 +128,26 @@ npm test
 
 En VS Code, usar `F5` para abrir Extension Host y validar comandos.
 
+### Captura de output para checklist
+
+Para generar desde terminal el mismo formato del canal `WIS Context Sync` (útil para evidencia operativa del bloque A):
+
+```bash
+npm run manual:a1
+```
+
+Runner genérico con parámetros:
+
+```bash
+npm run manual:load-context-output -- --runtime-mode offline_fixture --scenario validation_stale
+```
+
+Opcionalmente puedes guardar evidencia en archivo:
+
+```bash
+npm run manual:load-context-output -- --runtime-mode offline_fixture --scenario success_full --output-file /tmp/wis-a1.log
+```
+
 ## Referencias
 
 - Canon de fase: `../docs/context/`

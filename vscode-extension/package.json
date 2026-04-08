@@ -311,6 +311,8 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -w -p .",
+    "manual:load-context-output": "npm run compile && node dist/tools/loadContextOutputCli.js",
+    "manual:a1": "npm run manual:load-context-output -- --runtime-mode offline_fixture --scenario success_full",
     "test": "npm run compile && node --test $(find dist/tests -type f -name \"*.test.js\" | sort)",
     "test:local-db": "LOCAL_DB_TESTS=1 npm run compile && LOCAL_DB_TESTS=1 node --test $(find dist/tests/local-db -type f -name \"*.test.js\" | sort)"
   },
