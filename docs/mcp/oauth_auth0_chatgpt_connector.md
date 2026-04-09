@@ -15,6 +15,11 @@ Estado objetivo de esta fase:
 - API (Resource Server) en Auth0 con audience definida.
 - Callback URL generada por ChatGPT Connector (la UI la muestra al crear el conector).
 
+Valores operativos actuales del proyecto:
+- tenant: `https://necktral.us.auth0.com`
+- audience read: `https://wis-context-sync-read-api`
+- endpoint MCP estable: `https://mcp.wiscontext-sync.org/mcp`
+
 ## 2. Configuración en ChatGPT Connector (OAuth Avanzado)
 
 ### 2.1 Método de registro
@@ -31,30 +36,32 @@ Estado objetivo de esta fase:
 
 ### 2.3 OAuth endpoints
 
-- `URL de autorización`: `https://<TENANT>.auth0.com/authorize`
-- `URL de token`: `https://<TENANT>.auth0.com/oauth/token`
+- `URL de autorización`: `https://necktral.us.auth0.com/authorize`
+- `URL de token`: `https://necktral.us.auth0.com/oauth/token`
 - `URL de registro`: dejar vacío (si no se usa DCR)
-- `Base del servidor de autorización`: `https://<TENANT>.auth0.com/`
-- `Recurso` (audience): `https://<TU_API_AUDIENCE>`
+- `Base del servidor de autorización`: `https://necktral.us.auth0.com/`
+- `Recurso` (audience): `https://wis-context-sync-read-api`
 
 ### 2.4 OpenID Connect (OIDC)
 
 - `OIDC habilitado`: Sí
-- `URL configuración OIDC`: `https://<TENANT>.auth0.com/.well-known/openid-configuration`
-- `OIDC userinfo endpoint`: `https://<TENANT>.auth0.com/userinfo`
+- `URL configuración OIDC`: `https://necktral.us.auth0.com/.well-known/openid-configuration`
+- `OIDC userinfo endpoint`: `https://necktral.us.auth0.com/userinfo`
 - `OIDC scopes`: `openid`, `profile`, `email`
 
 ### 2.5 Scopes recomendados
 
-#### Alcances base (siempre)
+#### Conector Read (contrato oficial actual)
 
 ```text
 openid
 profile
 email
+wis.context.read
+wis.context.sync.read
 ```
 
-#### Alcances predeterminados (estrategia amplia)
+#### Alcances legacy opcionales (solo si existen en tu API Auth0)
 
 ```text
 offline_access
@@ -64,10 +71,9 @@ validation.read
 decisions.read
 errors.read
 handoff.prepare
-mcp.write
 ```
 
-`mcp.write` solo si ya existe formalmente en tu API y lo necesitas desde ya.
+Si esos scopes legacy no están definidos en Auth0 API, no incluirlos para evitar `invalid_scope`.
 
 ## 3. Configuración en Auth0 (obligatoria)
 
@@ -79,7 +85,10 @@ En la Application del conector:
 
 En la API (Resource Server):
 
-- Registrar scopes usados en el conector (`mcp.read`, `context.read`, etc.).
+- Registrar al menos:
+  - `wis.context.read`
+  - `wis.context.sync.read`
+- Scopes legacy (`mcp.read`, `context.read`, etc.) solo si realmente están soportados y versionados en esa API.
 - Confirmar audience igual al valor usado en “Recurso”.
 
 ## 4. Validación mínima obligatoria
@@ -104,19 +113,23 @@ Puedes usar:
 ```bash
 ./scripts/validate_oauth_token_claims.sh \
   --token "<ACCESS_TOKEN>" \
-  --expected-iss "https://<TENANT>.auth0.com/" \
-  --expected-aud "https://<TU_API_AUDIENCE>" \
-  --require-scopes "openid,profile,email,mcp.read,context.read"
+  --expected-iss "https://necktral.us.auth0.com/" \
+  --expected-aud "https://wis-context-sync-read-api" \
+  --require-scopes "wis.context.read,wis.context.sync.read"
 ```
 
-Smoke test MCP con header de auth:
+Smoke test MCP read-plane con header de auth:
 
 ```bash
 MCP_AUTH_TOKEN="<ACCESS_TOKEN>" \
 MCP_AUTH_HEADER_NAME="Authorization" \
 MCP_AUTH_SCHEME="Bearer" \
-./scripts/validate_remote_mcp.sh https://<stable-domain>/mcp
+./scripts/validate_remote_mcp_read.sh https://mcp.wiscontext-sync.org
 ```
+
+Nota:
+- `validate_remote_mcp.sh` evalúa contrato global `all_published`.
+- para conector Read usar `validate_remote_mcp_read.sh` (`read_plane`).
 
 ## 5. Notas de seguridad y alcance de fase
 

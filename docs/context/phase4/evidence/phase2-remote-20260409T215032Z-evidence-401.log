@@ -1,0 +1,3 @@
+timestamp_utc=2026-04-09T21:50:32Z
+command=MCP_AUTH_TOKEN=invalid MCP_AUTH_HEADER_NAME=Authorization MCP_AUTH_SCHEME=Bearer ./scripts/validate_remote_mcp_read.sh https://mcp.wiscontext-sync.org
+exit_code=1

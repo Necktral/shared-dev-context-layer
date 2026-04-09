@@ -1,0 +1,1296 @@
+timestamp_utc=2026-04-09T21:49:46Z
+command=MCP_AUTH_TOKEN=*** MCP_AUTH_HEADER_NAME=Authorization MCP_AUTH_SCHEME=Bearer ./scripts/validate_remote_mcp_read.sh https://mcp.wiscontext-sync.org
+MCP reachability check OK: HTTP 400 with mcp-session-id header
+MCP client endpoint: https://mcp.wiscontext-sync.org/mcp
+{
+  "policy": "read_plane",
+  "payload_registry": "/home/necktral/projects/shared-dev-context-layer/scripts/mcp_validation_payloads.json",
+  "tools": [
+    "get_active_task",
+    "get_context_snapshot",
+    "get_recent_errors",
+    "get_validation_status",
+    "get_approved_decisions",
+    "search_context",
+    "get_context_by_id",
+    "list_context_windows",
+    "resolve_related_items",
+    "get_sync_status",
+    "preview_write_impact",
+    "upsert_context_item",
+    "append_context_event",
+    "link_context_entities",
+    "set_context_labels",
+    "archive_context_item",
+    "apply_sync_batch"
+  ],
+  "total_tools": 17,
+  "read_tools_total": 10,
+  "read_tools_ok": 10,
+  "write_tools_total": 7,
+  "write_tools_blocked_as_expected": 7,
+  "unexpected_failures_count": 0,
+  "unexpected_successes_count": 0,
+  "unexpected_block_reasons_count": 0,
+  "unexpected_failures": [],
+  "unexpected_successes": [],
+  "unexpected_block_reasons": [],
+  "contract_drift": {
+    "unknown_published_tools": [],
+    "missing_from_published": []
+  },
+  "attempted_tools": [
+    {
+      "tool": "get_active_task",
+      "category": "read",
+      "payload_source": "registry",
+      "payload": {}
+    },
+    {
+      "tool": "get_context_snapshot",
+      "category": "read",
+      "payload_source": "registry",
+      "payload": {}
+    },
+    {
+      "tool": "get_recent_errors",
+      "category": "read",
+      "payload_source": "registry",
+      "payload": {
+        "limit": 20,
+        "window_hours": 24
+      }
+    },
+    {
+      "tool": "get_validation_status",
+      "category": "read",
+      "payload_source": "registry",
+      "payload": {}
+    },
+    {
+      "tool": "get_approved_decisions",
+      "category": "read",
+      "payload_source": "registry",
+      "payload": {}
+    },
+    {
+      "tool": "search_context",
+      "category": "read",
+      "payload_source": "registry",
+      "payload": {
+        "query": "bootstrap",
+        "limit": 10,
+        "offset": 0
+      }
+    },
+    {
+      "tool": "get_context_by_id",
+      "category": "read",
+      "payload_source": "registry",
+      "payload": {
+        "context_item_id": "00000000-0000-4000-8000-000000000001"
+      }
+    },
+    {
+      "tool": "list_context_windows",
+      "category": "read",
+      "payload_source": "registry",
+      "payload": {
+        "window_hours": 24,
+        "limit": 10
+      }
+    },
+    {
+      "tool": "resolve_related_items",
+      "category": "read",
+      "payload_source": "registry",
+      "payload": {
+        "context_item_id": "00000000-0000-4000-8000-000000000001",
+        "limit": 10
+      }
+    },
+    {
+      "tool": "get_sync_status",
+      "category": "read",
+      "payload_source": "registry",
+      "payload": {
+        "limit": 10
+      }
+    },
+    {
+      "tool": "preview_write_impact",
+      "category": "write",
+      "payload_source": "registry",
+      "payload": {
+        "operation": "upsert_context_item",
+        "payload": {
+          "item_key": "registry.preview.item"
+        }
+      }
+    },
+    {
+      "tool": "upsert_context_item",
+      "category": "write",
+      "payload_source": "registry",
+      "payload": {
+        "item_key": "registry.validation.item",
+        "item_type": "note",
+        "title": "Registry validation item",
+        "dry_run": true
+      }
+    },
+    {
+      "tool": "append_context_event",
+      "category": "write",
+      "payload_source": "registry",
+      "payload": {
+        "event_type": "info",
+        "summary": "registry validation event",
+        "dry_run": true
+      }
+    },
+    {
+      "tool": "link_context_entities",
+      "category": "write",
+      "payload_source": "registry",
+      "payload": {
+        "source_item_id": "00000000-0000-4000-8000-000000000001",
+        "target_item_id": "00000000-0000-4000-8000-000000000002",
+        "relation": "depends_on",
+        "dry_run": true
+      }
+    },
+    {
+      "tool": "set_context_labels",
+      "category": "write",
+      "payload_source": "registry",
+      "payload": {
+        "context_item_id": "00000000-0000-4000-8000-000000000001",
+        "labels": [
+          "registry"
+        ],
+        "dry_run": true
+      }
+    },
+    {
+      "tool": "archive_context_item",
+      "category": "write",
+      "payload_source": "registry",
+      "payload": {
+        "context_item_id": "00000000-0000-4000-8000-000000000001",
+        "dry_run": true
+      }
+    },
+    {
+      "tool": "apply_sync_batch",
+      "category": "write",
+      "payload_source": "registry",
+      "payload": {
+        "operations": [
+          {
+            "operation": "upsert_context_item"
+          }
+        ],
+        "dry_run": true
+      }
+    }
+  ],
+  "tool_results": {
+    "get_active_task": {
+      "category": "read",
+      "result": "read_ok",
+      "status": "ok",
+      "structured": {
+        "status": "ok",
+        "task": {
+          "id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "title": "bootstrap del sistema",
+          "goal": "levantar arquitectura base",
+          "status": "in_progress",
+          "priority": "alta",
+          "repo": "shared-dev-context-layer",
+          "branch": "main",
+          "next_action": "definir tools MCP v1",
+          "current_phase": "phase5_domain_enrichment",
+          "is_active": true,
+          "created_at": "2026-03-28T19:25:00.773997+00:00",
+          "updated_at": "2026-03-28T20:52:12.536862+00:00",
+          "last_snapshot_at": "2026-04-07T22:40:14.246149+00:00",
+          "last_validation_status": "passed"
+        },
+        "mode": "delegated_limited",
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        }
+      }
+    },
+    "get_context_snapshot": {
+      "category": "read",
+      "result": "read_ok",
+      "status": "ok",
+      "structured": {
+        "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+        "status": "ok",
+        "source": "derived_runtime",
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "consumer_context": {
+          "consumer_type": null,
+          "consumer_name": null,
+          "session_key": null,
+          "session_status": null
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        },
+        "snapshot": {
+          "identity": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "task_title": "bootstrap del sistema",
+            "goal": "levantar arquitectura base",
+            "phase": "phase5_domain_enrichment"
+          },
+          "execution_state": {
+            "focus": "phase5_domain_enrichment",
+            "repo": "shared-dev-context-layer",
+            "branch": "main",
+            "next_action": "definir tools MCP v1",
+            "status": "in_progress",
+            "priority": "alta"
+          },
+          "validation": {
+            "status": "passed",
+            "last_validation_type": "mcp_tools",
+            "last_validation_source": "manual",
+            "last_validation_at": "2026-04-08T16:43:37.920509+00:00",
+            "summary": "5 tools read-only validadas",
+            "details": {
+              "tools_ok": 5
+            }
+          },
+          "decisions": {
+            "count": 5,
+            "items": [
+              {
+                "decision_key": "integration.v1.read_only",
+                "title": "V1 read-only",
+                "category": "architecture",
+                "decision": "la primera integración con ChatGPT permanece solo lectura",
+                "rationale": "minimizar riesgo mientras madura el dominio",
+                "constraints": {},
+                "approved_at": "2026-04-08T16:43:37.928305+00:00"
+              },
+              {
+                "decision_key": "policy.mode.delegated_limited",
+                "title": "Política delegated_limited",
+                "category": "policy",
+                "decision": "la publicación de contexto queda gobernada por política controlada por WIS",
+                "rationale": "control fuerte sin alterar instrucciones de agentes",
+                "constraints": {},
+                "approved_at": "2026-04-08T16:43:37.927215+00:00"
+              },
+              {
+                "decision_key": "stack.database.postgresql",
+                "title": "PostgreSQL como base principal",
+                "category": "stack",
+                "decision": "usar PostgreSQL como fuente de verdad",
+                "rationale": "robustez, auditoría y crecimiento",
+                "constraints": {},
+                "approved_at": "2026-04-08T16:43:37.925956+00:00"
+              },
+              {
+                "decision_key": "stack.backend.python_fastapi",
+                "title": "Backend en Python con FastAPI",
+                "category": "stack",
+                "decision": "usar Python + FastAPI para backend, policy engine y mcp",
+                "rationale": "velocidad de iteración y separación limpia del dominio",
+                "constraints": {},
+                "approved_at": "2026-04-08T16:43:37.924624+00:00"
+              },
+              {
+                "decision_key": "project.default.branch_policy",
+                "title": "Project default branch policy",
+                "category": "operations",
+                "decision": "usar main como branch por defecto del proyecto canónico",
+                "rationale": "reducir ambigüedad de foco durante bootstrap multi-scope",
+                "constraints": {},
+                "approved_at": "2026-04-08T16:43:37.930435+00:00"
+              }
+            ]
+          },
+          "errors": {
+            "recent_errors_count": 0,
+            "dominant_error": null,
+            "items": []
+          },
+          "next_action": "definir tools MCP v1",
+          "scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          },
+          "consumer_context": {
+            "consumer_type": null,
+            "consumer_name": null,
+            "session_key": null,
+            "session_status": null
+          },
+          "resolution_metadata": {
+            "source": "canonical_scope",
+            "fallback_level": "none",
+            "conflict_flags": [],
+            "requested": {
+              "workspace_id": null,
+              "project_id": null,
+              "task_id": null,
+              "consumer": null,
+              "session_key": null
+            },
+            "resolved_scope": {
+              "workspace_id": "11111111-1111-4111-8111-111111111111",
+              "project_id": "22222222-2222-4222-8222-222222222222",
+              "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+            }
+          },
+          "metadata": {
+            "policy": "delegated_limited",
+            "origin": "derived_runtime",
+            "generated_at": "2026-04-09T21:49:49.296196+00:00"
+          }
+        },
+        "metadata": {
+          "policy": "delegated_limited",
+          "origin": "derived_runtime",
+          "created_at": "2026-04-09T21:49:49.296196+00:00"
+        }
+      }
+    },
+    "get_recent_errors": {
+      "category": "read",
+      "result": "read_ok",
+      "status": "ok",
+      "structured": {
+        "status": "ok",
+        "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        },
+        "window_hours": 24,
+        "limit": 20,
+        "total": 0,
+        "errors": []
+      }
+    },
+    "get_validation_status": {
+      "category": "read",
+      "result": "read_ok",
+      "status": "ok",
+      "structured": {
+        "status": "ok",
+        "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        },
+        "current_status": "passed",
+        "last_validation_type": "mcp_tools",
+        "last_validation_source": "manual",
+        "last_validation_at": "2026-04-08T16:43:37.920509+00:00",
+        "summary": "5 tools read-only validadas",
+        "details": {
+          "tools_ok": 5
+        }
+      }
+    },
+    "get_approved_decisions": {
+      "category": "read",
+      "result": "read_ok",
+      "status": "ok",
+      "structured": {
+        "status": "ok",
+        "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        },
+        "total": 5,
+        "decisions": [
+          {
+            "id": "c64510de-d73e-4b93-aa90-83ada2a7c594",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "decision_key": "integration.v1.read_only",
+            "title": "V1 read-only",
+            "category": "architecture",
+            "decision": "la primera integración con ChatGPT permanece solo lectura",
+            "rationale": "minimizar riesgo mientras madura el dominio",
+            "constraints": {},
+            "approved_at": "2026-04-08T16:43:37.928305+00:00",
+            "is_active": true,
+            "updated_at": "2026-04-08T16:43:37.879060+00:00"
+          },
+          {
+            "id": "cc607de1-bcb0-4fa8-af16-689491573851",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "decision_key": "policy.mode.delegated_limited",
+            "title": "Política delegated_limited",
+            "category": "policy",
+            "decision": "la publicación de contexto queda gobernada por política controlada por WIS",
+            "rationale": "control fuerte sin alterar instrucciones de agentes",
+            "constraints": {},
+            "approved_at": "2026-04-08T16:43:37.927215+00:00",
+            "is_active": true,
+            "updated_at": "2026-04-08T16:43:37.879060+00:00"
+          },
+          {
+            "id": "ccaf3aca-2447-4718-9779-7b1af47b9680",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "decision_key": "stack.database.postgresql",
+            "title": "PostgreSQL como base principal",
+            "category": "stack",
+            "decision": "usar PostgreSQL como fuente de verdad",
+            "rationale": "robustez, auditoría y crecimiento",
+            "constraints": {},
+            "approved_at": "2026-04-08T16:43:37.925956+00:00",
+            "is_active": true,
+            "updated_at": "2026-04-08T16:43:37.879060+00:00"
+          },
+          {
+            "id": "c11cb281-9bdf-4ba0-b155-7c93dc98821d",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "decision_key": "stack.backend.python_fastapi",
+            "title": "Backend en Python con FastAPI",
+            "category": "stack",
+            "decision": "usar Python + FastAPI para backend, policy engine y mcp",
+            "rationale": "velocidad de iteración y separación limpia del dominio",
+            "constraints": {},
+            "approved_at": "2026-04-08T16:43:37.924624+00:00",
+            "is_active": true,
+            "updated_at": "2026-04-08T16:43:37.879060+00:00"
+          },
+          {
+            "id": "e65e77e9-dfb9-4e24-8f0c-0e5e10e14f0a",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": null,
+            "decision_key": "project.default.branch_policy",
+            "title": "Project default branch policy",
+            "category": "operations",
+            "decision": "usar main como branch por defecto del proyecto canónico",
+            "rationale": "reducir ambigüedad de foco durante bootstrap multi-scope",
+            "constraints": {},
+            "approved_at": "2026-04-08T16:43:37.930435+00:00",
+            "is_active": true,
+            "updated_at": "2026-04-08T16:43:37.879060+00:00"
+          }
+        ]
+      }
+    },
+    "search_context": {
+      "category": "read",
+      "result": "read_ok",
+      "status": "ok",
+      "structured": {
+        "status": "ok",
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        },
+        "query": "bootstrap",
+        "total": 0,
+        "limit": 10,
+        "offset": 0,
+        "items": []
+      }
+    },
+    "get_context_by_id": {
+      "category": "read",
+      "result": "read_ok",
+      "status": "not_found",
+      "structured": {
+        "status": "not_found",
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        },
+        "context_item_id": "00000000-0000-4000-8000-000000000001",
+        "item": null
+      }
+    },
+    "list_context_windows": {
+      "category": "read",
+      "result": "read_ok",
+      "status": "ok",
+      "structured": {
+        "status": "ok",
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        },
+        "window_hours": 24,
+        "since": "2026-04-08T21:49:50.802809+00:00",
+        "items_total": 0,
+        "errors_total": 0,
+        "snapshots_total": 0,
+        "items": []
+      }
+    },
+    "resolve_related_items": {
+      "category": "read",
+      "result": "read_ok",
+      "status": "ok",
+      "structured": {
+        "status": "ok",
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        },
+        "context_item_id": "00000000-0000-4000-8000-000000000001",
+        "total": 0,
+        "related": []
+      }
+    },
+    "get_sync_status": {
+      "category": "read",
+      "result": "read_ok",
+      "status": "ok",
+      "structured": {
+        "status": "ok",
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        },
+        "total": 10,
+        "batches": [
+          {
+            "id": "931a4f50-fa1a-4bc4-b1b1-19c38bcc8c06",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "idempotency_key": "test-batch-1-608d57cd58224ceebcf4d526d4d0cad9",
+            "operation_count": 2,
+            "status": "applied",
+            "dry_run": false,
+            "summary": {
+              "dry_run": false,
+              "operations": 2,
+              "operation_names": [
+                "archive_context_item",
+                "append_context_event"
+              ]
+            },
+            "requested_by": "local_bypass",
+            "created_at": "2026-04-08T16:43:39.022771+00:00",
+            "updated_at": "2026-04-08T16:43:39.022771+00:00"
+          },
+          {
+            "id": "d9dbd6aa-098b-4a0f-b40b-05f20d6329fe",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "idempotency_key": "test-batch-1-3003778ad6174b21b5a898fab039239b",
+            "operation_count": 2,
+            "status": "applied",
+            "dry_run": false,
+            "summary": {
+              "dry_run": false,
+              "operations": 2,
+              "operation_names": [
+                "archive_context_item",
+                "append_context_event"
+              ]
+            },
+            "requested_by": "local_bypass",
+            "created_at": "2026-04-08T16:42:26.594801+00:00",
+            "updated_at": "2026-04-08T16:42:26.594801+00:00"
+          },
+          {
+            "id": "06667f1f-6801-4565-9abf-360a2efd70e8",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "idempotency_key": "test-batch-1-5e099f2a0326469b8c383c545231d75c",
+            "operation_count": 2,
+            "status": "applied",
+            "dry_run": false,
+            "summary": {
+              "dry_run": false,
+              "operations": 2,
+              "operation_names": [
+                "archive_context_item",
+                "append_context_event"
+              ]
+            },
+            "requested_by": "local_bypass",
+            "created_at": "2026-04-08T16:40:49.865267+00:00",
+            "updated_at": "2026-04-08T16:40:49.865267+00:00"
+          },
+          {
+            "id": "13789e92-6ae7-4cdf-a2f4-866f474291ad",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "idempotency_key": "write-validate-1775601594-batch",
+            "operation_count": 1,
+            "status": "applied",
+            "dry_run": false,
+            "summary": {
+              "dry_run": false,
+              "operations": 1,
+              "operation_names": [
+                "upsert_context_item"
+              ]
+            },
+            "requested_by": "local_bypass",
+            "created_at": "2026-04-07T22:39:57.286935+00:00",
+            "updated_at": "2026-04-07T22:39:57.286935+00:00"
+          },
+          {
+            "id": "43125b32-fed0-40a7-8625-d98b2dbd003f",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "idempotency_key": "test-batch-1-55ffc516f72c4864bb61ae2d5cde3d86",
+            "operation_count": 2,
+            "status": "applied",
+            "dry_run": false,
+            "summary": {
+              "dry_run": false,
+              "operations": 2,
+              "operation_names": [
+                "archive_context_item",
+                "append_context_event"
+              ]
+            },
+            "requested_by": "local_bypass",
+            "created_at": "2026-04-07T22:20:31.862962+00:00",
+            "updated_at": "2026-04-07T22:20:31.862962+00:00"
+          },
+          {
+            "id": "fd76a4f0-0fdb-402c-928a-dfef641ac6ce",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "idempotency_key": "test-batch-1-9d3b7492571740169dba80712e0358a8",
+            "operation_count": 2,
+            "status": "applied",
+            "dry_run": false,
+            "summary": {
+              "dry_run": false,
+              "operations": 2,
+              "operation_names": [
+                "archive_context_item",
+                "append_context_event"
+              ]
+            },
+            "requested_by": "local_bypass",
+            "created_at": "2026-04-07T22:19:18.564964+00:00",
+            "updated_at": "2026-04-07T22:19:18.564964+00:00"
+          },
+          {
+            "id": "ddcc68de-0b81-4230-80fe-ae9928460bde",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "idempotency_key": "test-batch-1-2a8ee5d9466a4dbdb6669543f7aee9d9",
+            "operation_count": 2,
+            "status": "applied",
+            "dry_run": false,
+            "summary": {
+              "dry_run": false,
+              "operations": 2,
+              "operation_names": [
+                "archive_context_item",
+                "append_context_event"
+              ]
+            },
+            "requested_by": "local_bypass",
+            "created_at": "2026-04-07T22:09:49.984078+00:00",
+            "updated_at": "2026-04-07T22:09:49.984078+00:00"
+          },
+          {
+            "id": "89a13dd1-ce13-4a10-bbc6-cd11d27fa133",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "idempotency_key": "test-batch-1-314a53a09a65464291643fc8a161abf3",
+            "operation_count": 2,
+            "status": "applied",
+            "dry_run": false,
+            "summary": {
+              "dry_run": false,
+              "operations": 2,
+              "operation_names": [
+                "archive_context_item",
+                "append_context_event"
+              ]
+            },
+            "requested_by": "local_bypass",
+            "created_at": "2026-04-07T17:55:34.225058+00:00",
+            "updated_at": "2026-04-07T17:55:34.225058+00:00"
+          },
+          {
+            "id": "bd8ba559-2f39-4558-b504-1682a2159511",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "idempotency_key": "test-batch-1-046e59aa5b7b4570b11efb46261a45e4",
+            "operation_count": 2,
+            "status": "applied",
+            "dry_run": false,
+            "summary": {
+              "dry_run": false,
+              "operations": 2,
+              "operation_names": [
+                "archive_context_item",
+                "append_context_event"
+              ]
+            },
+            "requested_by": "local_bypass",
+            "created_at": "2026-04-07T17:53:42.219562+00:00",
+            "updated_at": "2026-04-07T17:53:42.219562+00:00"
+          },
+          {
+            "id": "0c8c84f7-b36a-4fe6-bf72-d754b7066d91",
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e",
+            "idempotency_key": "test-batch-1-e8d6be0d31fe44ee8ccaaec72f3657cb",
+            "operation_count": 2,
+            "status": "applied",
+            "dry_run": false,
+            "summary": {
+              "dry_run": false,
+              "operations": 2,
+              "operation_names": [
+                "archive_context_item",
+                "append_context_event"
+              ]
+            },
+            "requested_by": "local_bypass",
+            "created_at": "2026-04-06T23:47:10.783394+00:00",
+            "updated_at": "2026-04-06T23:47:10.783394+00:00"
+          }
+        ]
+      }
+    },
+    "preview_write_impact": {
+      "category": "write",
+      "result": "write_blocked_as_expected",
+      "status": "forbidden",
+      "error": "insufficient_scope",
+      "structured": {
+        "status": "forbidden",
+        "error": "insufficient_scope",
+        "message": "Token does not include required scopes for this tool.",
+        "required_scopes": [
+          "wis.context.write"
+        ],
+        "present_scopes": [
+          "wis.context.read",
+          "wis.context.sync.read"
+        ],
+        "missing_scopes": [
+          "wis.context.write"
+        ],
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        }
+      }
+    },
+    "upsert_context_item": {
+      "category": "write",
+      "result": "write_blocked_as_expected",
+      "status": "forbidden",
+      "error": "insufficient_scope",
+      "structured": {
+        "status": "forbidden",
+        "error": "insufficient_scope",
+        "message": "Token does not include required scopes for this tool.",
+        "required_scopes": [
+          "wis.context.write"
+        ],
+        "present_scopes": [
+          "wis.context.read",
+          "wis.context.sync.read"
+        ],
+        "missing_scopes": [
+          "wis.context.write"
+        ],
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        }
+      }
+    },
+    "append_context_event": {
+      "category": "write",
+      "result": "write_blocked_as_expected",
+      "status": "forbidden",
+      "error": "insufficient_scope",
+      "structured": {
+        "status": "forbidden",
+        "error": "insufficient_scope",
+        "message": "Token does not include required scopes for this tool.",
+        "required_scopes": [
+          "wis.context.write"
+        ],
+        "present_scopes": [
+          "wis.context.read",
+          "wis.context.sync.read"
+        ],
+        "missing_scopes": [
+          "wis.context.write"
+        ],
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        }
+      }
+    },
+    "link_context_entities": {
+      "category": "write",
+      "result": "write_blocked_as_expected",
+      "status": "forbidden",
+      "error": "insufficient_scope",
+      "structured": {
+        "status": "forbidden",
+        "error": "insufficient_scope",
+        "message": "Token does not include required scopes for this tool.",
+        "required_scopes": [
+          "wis.context.write"
+        ],
+        "present_scopes": [
+          "wis.context.read",
+          "wis.context.sync.read"
+        ],
+        "missing_scopes": [
+          "wis.context.write"
+        ],
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        }
+      }
+    },
+    "set_context_labels": {
+      "category": "write",
+      "result": "write_blocked_as_expected",
+      "status": "forbidden",
+      "error": "insufficient_scope",
+      "structured": {
+        "status": "forbidden",
+        "error": "insufficient_scope",
+        "message": "Token does not include required scopes for this tool.",
+        "required_scopes": [
+          "wis.context.write"
+        ],
+        "present_scopes": [
+          "wis.context.read",
+          "wis.context.sync.read"
+        ],
+        "missing_scopes": [
+          "wis.context.write"
+        ],
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        }
+      }
+    },
+    "archive_context_item": {
+      "category": "write",
+      "result": "write_blocked_as_expected",
+      "status": "forbidden",
+      "error": "insufficient_scope",
+      "structured": {
+        "status": "forbidden",
+        "error": "insufficient_scope",
+        "message": "Token does not include required scopes for this tool.",
+        "required_scopes": [
+          "wis.context.write"
+        ],
+        "present_scopes": [
+          "wis.context.read",
+          "wis.context.sync.read"
+        ],
+        "missing_scopes": [
+          "wis.context.write"
+        ],
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        }
+      }
+    },
+    "apply_sync_batch": {
+      "category": "write",
+      "result": "write_blocked_as_expected",
+      "status": "forbidden",
+      "error": "insufficient_scope",
+      "structured": {
+        "status": "forbidden",
+        "error": "insufficient_scope",
+        "message": "Token does not include required scopes for this tool.",
+        "required_scopes": [
+          "wis.context.sync.write"
+        ],
+        "present_scopes": [
+          "wis.context.read",
+          "wis.context.sync.read"
+        ],
+        "missing_scopes": [
+          "wis.context.sync.write"
+        ],
+        "scope": {
+          "workspace_id": "11111111-1111-4111-8111-111111111111",
+          "project_id": "22222222-2222-4222-8222-222222222222",
+          "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+        },
+        "resolution_metadata": {
+          "source": "canonical_scope",
+          "fallback_level": "none",
+          "conflict_flags": [],
+          "requested": {
+            "workspace_id": null,
+            "project_id": null,
+            "task_id": null,
+            "consumer": null,
+            "session_key": null
+          },
+          "resolved_scope": {
+            "workspace_id": "11111111-1111-4111-8111-111111111111",
+            "project_id": "22222222-2222-4222-8222-222222222222",
+            "task_id": "044b8274-dcd6-43fc-80a0-3ef46fc97c3e"
+          }
+        }
+      }
+    }
+  },
+  "audit_deltas": {
+    "publish_audit": 10,
+    "context_write_audit": 0
+  },
+  "domain_deltas": {
+    "tasks": 0,
+    "approved_decisions": 0,
+    "events": 0,
+    "context_snapshots": 0,
+    "context_items": 0,
+    "context_item_links": 0,
+    "context_item_labels": 0,
+    "context_sync_batches": 0,
+    "policy_state": 0
+  }
+}
+__READ_VALIDATION_COUNTS__ read_ok=10 read_total=10 write_blocked=7 write_total=7 unexpected_failures=0 unexpected_successes=0 unexpected_block_reasons=0
+
+Remote MCP read-plane validation PASSED
+Host endpoint: https://mcp.wiscontext-sync.org/mcp
+Client endpoint: https://mcp.wiscontext-sync.org/mcp
+Tool validation policy: read_plane
+Payload registry: /home/necktral/projects/shared-dev-context-layer/scripts/mcp_validation_payloads.json
+Read tools OK: 10/10
+Write tools blocked as expected: 7/7
+Domain tables unchanged; publish_audit increased by +10, context_write_audit delta=0.
