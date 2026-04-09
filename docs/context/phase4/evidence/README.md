@@ -2,6 +2,10 @@
 
 Esta matriz consolida evidencia de cierre para read/write MCP con OAuth Auth0 y política `all_published`.
 
+Estado vigente (2026-04-09):
+- `read_plane` remoto en `PASS` sobre `https://mcp.wiscontext-sync.org/mcp`.
+- el cierre global sigue `NO-GO/BLOCKED` hasta cerrar write-plane y conector Read en ChatGPT.
+
 Nota de alcance:
 - esta matriz corresponde al **GO global** (remoto/Auth0/endpoint estable).
 - el **GO local separado de Fase 1** vive en `phase1-local-first-matrix.md`.
@@ -16,7 +20,7 @@ Script de cierre local-first reproducible: `../../../../scripts/run_phase1_local
 Runbook tunnel + hostname (sin Auth0): `../../../mcp/TUNNEL_HOSTNAME_RUNBOOK.md`.
 Preflight tunnel-only sin red: `../../../../scripts/check_tunnel_hostname_readiness.sh`.
 
-## 0. Ultimo intento operativo (2026-04-08)
+## 0. Intento histórico bloqueado (2026-04-08)
 
 Resultado: `BLOCKED` por secretos/variables faltantes para cierre remoto.
 
@@ -30,7 +34,7 @@ Ejecucion realizada:
 - `./scripts/validate_remote_mcp_write.sh "${CF_MCP_PUBLIC_BASE_URL:-}"` -> `ERROR: MCP_AUTH_TOKEN is required`
 - `./scripts/validate_oauth_token_claims.sh --token "${MCP_AUTH_TOKEN:-}" ...` -> `ERROR: --token is required`
 
-Bloqueadores vigentes:
+Bloqueadores de ese intento:
 
 - `CF_NAMED_TUNNEL_TOKEN`
 - `CF_MCP_PUBLIC_BASE_URL`
@@ -49,18 +53,39 @@ Alcance de esta preparacion:
 
 Limite explicito: esta etapa no ejecuta Auth0/OAuth ni cambia el estado global `NO-GO/BLOCKED`.
 
+## 0.2 Gate público read-plane (2026-04-09)
+
+Resultado: `PASS` en endpoint estable bajo auth real.
+
+Ejecución y evidencia:
+
+- claims read (`iss/aud/scope/exp`) en verde:
+  - `phase2-remote-20260409T214945Z-validate-oauth-claims-read.log`
+- `validate_remote_mcp_read.sh` contra `https://mcp.wiscontext-sync.org` en verde:
+  - `phase2-remote-20260409T214945Z-validate-remote-mcp-read-plane.log`
+  - `phase2-remote-20260409T214945Z-public-read-plane-summary.md`
+- evidencia negativa pública:
+  - `401 invalid_token`: `phase2-remote-20260409T215032Z-evidence-401.log`
+  - `403 insufficient_scope` (token read contra write-plane):
+    `phase2-remote-20260409T215032Z-evidence-403-insufficient-scope.log`
+
+Deriva operativa resuelta:
+- PR #15 mergeada a `main` (commit `12d474852bc339916e38e6b5d9d3bb9ae0c6c474`).
+- PR #14 cerrada como `superseded` para evitar narrativa paralela.
+
 ## 1. Conectividad y endpoint canónico
 
-- [ ] named tunnel activo
-- [ ] dominio estable resolviendo
-- [ ] endpoint `https://<dominio-estable>/mcp` alcanzable
+- [x] named tunnel/forwarding efectivo
+- [x] dominio estable resolviendo
+- [x] endpoint `https://mcp.wiscontext-sync.org/mcp` alcanzable
 
 ## 2. Descubrimiento dinámico y validación read plane
 
-- [ ] `published_tools` no vacía (`list_tools`)
-- [ ] `all_published` en verde con `scripts/validate_remote_mcp.sh`
-- [ ] `audit_delta_expected = N_success` en verde
-- [ ] no mutación de tablas de dominio durante validación `dry_run`
+- [x] `published_tools` no vacía (`list_tools`)
+- [x] `read_plane` en verde con `scripts/validate_remote_mcp_read.sh`
+- [x] `audit_delta_expected = read_ok` en verde para read-plane
+- [x] no mutación de tablas de dominio durante validación read-plane `dry_run`
+- [ ] `all_published` en verde con `scripts/validate_remote_mcp.sh` (pendiente cierre global)
 
 ## 3. Validación write plane
 
@@ -71,11 +96,11 @@ Limite explicito: esta etapa no ejecuta Auth0/OAuth ni cambia el estado global `
 
 ## 4. OAuth/Auth0
 
-- [ ] claims válidos (`iss`, `aud`, `scope/scp`, `exp`)
-- [ ] conector Read autenticado y operativo
+- [x] claims válidos (`iss`, `aud`, `scope/scp`, `exp`) para token read
+- [ ] conector Read autenticado y operativo (pendiente alta/config en ChatGPT)
 - [ ] conector Write autenticado y operativo
-- [ ] evidencia de `401` token inválido/ausente
-- [ ] evidencia de `403 insufficient_scope`
+- [x] evidencia de `401` token inválido/ausente
+- [x] evidencia de `403 insufficient_scope`
 
 ## 5. VS Code extension
 
@@ -88,4 +113,5 @@ Limite explicito: esta etapa no ejecuta Auth0/OAuth ni cambia el estado global `
 ## 6. Cierre GO/NO-GO
 
 - [ ] GO: todos los checks en verde
+- [x] Gate público Read cerrado
 - [x] NO-GO: bloqueadores documentados y plan de remediación

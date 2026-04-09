@@ -1,0 +1,7 @@
+timestamp_utc=2026-04-09T21:49:46Z
+command=./scripts/validate_oauth_token_claims.sh --token *** --expected-iss https://necktral.us.auth0.com/ --expected-aud https://wis-context-sync-read-api --require-scopes wis.context.read,wis.context.sync.read
+JWT claims validation PASSED
+iss=https://necktral.us.auth0.com/
+aud=https://wis-context-sync-read-api
+exp=1775857786
+scopes=['wis.context.read', 'wis.context.sync.read']
