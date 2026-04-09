@@ -13,6 +13,8 @@ Checklist de hardening Package 8: `package-8-hardening.md`.
 Resultado ejecutado Package 8: `package-8-hardening-result.json`.
 Backlog Fase 2 remoto/global: `phase2-remote-backlog.md`.
 Script de cierre local-first reproducible: `../../../../scripts/run_phase1_local_closure.sh`.
+Runbook tunnel + hostname (sin Auth0): `../../../mcp/TUNNEL_HOSTNAME_RUNBOOK.md`.
+Preflight tunnel-only sin red: `../../../../scripts/check_tunnel_hostname_readiness.sh`.
 
 ## 0. Ultimo intento operativo (2026-04-08)
 
@@ -34,6 +36,18 @@ Bloqueadores vigentes:
 - `CF_MCP_PUBLIC_BASE_URL`
 - `MCP_AUTH_TOKEN` (read/write)
 - token OAuth valido para validacion de claims y pruebas `401/403`
+
+## 0.1 Preparacion tunnel + hostname (2026-04-08)
+
+Estado: `READY FOR BASIC VALIDATION` (solo tunnel/hostname; no cierre global).
+
+Alcance de esta preparacion:
+
+- verificar precondiciones minimas de tunnel con `check_tunnel_hostname_readiness.sh`
+- seguir runbook operacional para public hostname `mcp.wiscontext-sync.org -> HTTP -> localhost:8002`
+- validar local (`localhost:8002`, `localhost:8002/mcp`) y publico (`https://mcp.wiscontext-sync.org/mcp`)
+
+Limite explicito: esta etapa no ejecuta Auth0/OAuth ni cambia el estado global `NO-GO/BLOCKED`.
 
 ## 1. Conectividad y endpoint canónico
 

@@ -1,0 +1,95 @@
+command=docker compose up --build -d postgres backend mcp
+timestamp_utc=2026-04-08T22:49:27Z
+ Image shared-dev-context-layer-mcp Building 
+ Image shared-dev-context-layer-backend Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 1.10kB done
+#1 DONE 0.0s
+
+#2 [backend internal] load build definition from Dockerfile
+#2 transferring dockerfile: 325B done
+#2 DONE 0.0s
+
+#3 [backend internal] load metadata for docker.io/library/python:3.12-slim
+#3 ...
+
+#4 [auth] library/python:pull token for registry-1.docker.io
+#4 DONE 0.0s
+
+#3 [backend internal] load metadata for docker.io/library/python:3.12-slim
+#3 DONE 1.0s
+
+#5 [backend internal] load .dockerignore
+#5 transferring context: 2B done
+#5 DONE 0.0s
+
+#6 [backend 1/8] FROM docker.io/library/python:3.12-slim@sha256:5072b08ad74609c5329ab4085a96dfa873de565fb4751a4cfcd7dcc427661df0
+#6 resolve docker.io/library/python:3.12-slim@sha256:5072b08ad74609c5329ab4085a96dfa873de565fb4751a4cfcd7dcc427661df0 0.0s done
+#6 DONE 0.0s
+
+#7 [mcp internal] load build context
+#7 transferring context: 438.26kB 0.0s done
+#7 DONE 0.2s
+
+#8 [mcp 7/8] COPY alembic.ini ./alembic.ini
+#8 CACHED
+
+#9 [mcp 2/8] WORKDIR /app
+#9 CACHED
+
+#10 [mcp 4/8] RUN pip install --no-cache-dir -r requirements.txt
+#10 CACHED
+
+#11 [mcp 6/8] COPY alembic ./alembic
+#11 CACHED
+
+#12 [mcp 3/8] COPY requirements.txt .
+#12 CACHED
+
+#13 [mcp 5/8] COPY app ./app
+#13 CACHED
+
+#14 [mcp 8/8] COPY tests ./tests
+#14 CACHED
+
+#15 [backend] exporting to image
+#15 exporting layers done
+#15 exporting manifest sha256:c1560c2199a834f62205ecc3327565a6adf5885777985c6a200facd6ac6c8ef3 done
+#15 exporting config sha256:c619de3ba55d8290af3cc7813bb0a1d393215b5dbc08e12baf1b6b23b539b400 done
+#15 exporting attestation manifest sha256:ef72a63585e035cfcbcc91514319d2aff229aa2b5acabdfdb81cc38fdcfc12e0
+#15 ...
+
+#16 [mcp] exporting to image
+#16 exporting layers done
+#16 exporting manifest sha256:57ebc1769bae5c8edb0ecfb932b43c3dc196646fd3567ea57cb1c190cbcade39 done
+#16 exporting config sha256:9621ae69fbbe03aa4813fdc0e2f2bddbfa83cb0057945e105099d95b297daca4 done
+#16 exporting attestation manifest sha256:d0bbd35c0f174f1f83b3084fb4cc6f3d7ea69eb6b103579d57add1b20ce42715 0.1s done
+#16 exporting manifest list sha256:a1803f796811b88e9aa607238b03fa6a9fccd6416e6d172885f7f67cb1c46d26 0.1s done
+#16 naming to docker.io/library/shared-dev-context-layer-mcp:latest 0.0s done
+#16 unpacking to docker.io/library/shared-dev-context-layer-mcp:latest 0.0s done
+#16 DONE 0.3s
+
+#15 [backend] exporting to image
+#15 exporting attestation manifest sha256:ef72a63585e035cfcbcc91514319d2aff229aa2b5acabdfdb81cc38fdcfc12e0 0.1s done
+#15 exporting manifest list sha256:f63e8bf4d88f1a2649a28f4752bd3f65e243613c39e3306ca1bdb7b121977dd9 0.1s done
+#15 naming to docker.io/library/shared-dev-context-layer-backend:latest done
+#15 unpacking to docker.io/library/shared-dev-context-layer-backend:latest 0.0s done
+#15 DONE 0.3s
+
+#17 [mcp] resolving provenance for metadata file
+#17 DONE 0.0s
+
+#18 [backend] resolving provenance for metadata file
+#18 DONE 0.0s
+ Image shared-dev-context-layer-mcp Built 
+ Image shared-dev-context-layer-backend Built 
+ Container wis_context_postgres Running 
+ Container wis_context_mcp Recreate 
+ Container wis_context_backend Recreate 
+ Container wis_context_mcp Recreated 
+ Container wis_context_backend Recreated 
+ Container wis_context_mcp Starting 
+ Container wis_context_backend Starting 
+ Container wis_context_mcp Started 
+ Container wis_context_backend Started 
+exit_code=0

@@ -7,7 +7,10 @@ Runbook para operar el modo `mcp` de la extensión y validar conectividad local/
 - Mantener policy mode `delegated_limited`.
 - Mantener contrato `all_published` para validación de tools publicadas.
 - Operar write con `dry_run|commit`, `idempotency_key` y auditoría.
-- Diferenciar validación read-only (`validate_remote_mcp.sh`) y write (`validate_remote_mcp_write.sh`).
+- Diferenciar políticas de validación:
+  - global `all_published` con `validate_remote_mcp.sh`
+  - read-plane con token read-only usando `validate_remote_mcp_read.sh`
+  - write-plane con token write usando `validate_remote_mcp_write.sh`
 
 ## 2. Relacion con runtimeMode de extension
 
@@ -42,7 +45,27 @@ Esperado:
 - health con DB operativa
 - MCP levantado en `streamable-http`
 
+### 4.1 Preflight read (pasos 2-4)
+
+Para cerrar solo lectura en local (sin tocar write), usar:
+
+```bash
+./scripts/mcp_read_preflight.sh
+```
+
+Este comando:
+
+- valida en `.env` que existan `MCP_AUTH0_ISSUER`, `MCP_AUTH0_AUDIENCE`, `MCP_AUTH0_JWKS_URL`
+- ejecuta `docker compose up --build -d mcp`
+- imprime salida completa de `docker compose ps`
+- imprime salida completa de `docker compose logs mcp --tail=60`
+- falla (`exit 1`) si `mcp` no queda `Up`, si entra en `Restarting`, o si los logs muestran auth incompleta
+
+Nota: la validacion de scopes en Auth0 (app read) se hace fuera de este repo. La validacion con token (`read plane`) se ejecuta despues con `validate_remote_mcp_read.sh`.
+
 ## 5. Validación MCP (before ChatGPT)
+
+### 5.1 Validación global de publicación (`all_published`)
 
 ```bash
 ./scripts/validate_remote_mcp.sh https://<stable-domain>
@@ -66,6 +89,30 @@ La validacion debe confirmar:
 - si una tool publicada falla por parámetros y no tiene entry en registry, el gate falla
 - sin cambios en tablas de dominio durante validación `dry_run`
 - delta esperado en `publish_audit`: `+N` (donde `N = tools invocadas exitosamente`)
+
+### 5.2 Validación read-plane con token read-only
+
+```bash
+MCP_AUTH_TOKEN="<access_token_read>" \
+MCP_AUTH_HEADER_NAME="Authorization" \
+MCP_AUTH_SCHEME="Bearer" \
+./scripts/validate_remote_mcp_read.sh https://<stable-domain>
+```
+
+PASS en `read_plane` requiere:
+
+- todas las tools read en `ok`
+- todas las tools write bloqueadas como `forbidden` con `error=insufficient_scope`
+- sin cambios en tablas de dominio
+- `context_write_audit` delta `= 0`
+- `publish_audit` delta igual a tools read exitosas
+
+Este contrato es distinto a `all_published`:
+
+- `validate_remote_mcp.sh` exige éxito de todas las tools publicadas
+- `validate_remote_mcp_read.sh` exige bloqueo esperado de write bajo token read-only
+
+### 5.3 Validación write (`commit`) con token write
 
 Validación write (`commit`) con token write:
 
@@ -131,7 +178,8 @@ Debe confirmar mutación esperada + auditoría write.
 - En esta fase v0.2.0, el backend MCP aplica enforcement JWT estricto para runtime conectado.
 - Validación recomendada:
   - claims con `scripts/validate_oauth_token_claims.sh`
-  - read plane con `scripts/validate_remote_mcp.sh`
+  - global `all_published` con `scripts/validate_remote_mcp.sh`
+  - read plane con `scripts/validate_remote_mcp_read.sh`
   - write plane con `scripts/validate_remote_mcp_write.sh`
 
 ## 10. Named tunnel como ruta canónica
@@ -155,3 +203,16 @@ Regla operativa:
 
 - named tunnel es la ruta por defecto para cierre y operación estable.
 - quick tunnel queda solo como fallback temporal, no endpoint canónico de aceptación.
+
+## 11. Tunnel + hostname readiness (sin Auth0)
+
+Para la etapa previa a OAuth/Auth0, usar el runbook dedicado:
+
+- `TUNNEL_HOSTNAME_RUNBOOK.md`
+- preflight local sin red: `../../scripts/check_tunnel_hostname_readiness.sh`
+
+Objetivo de esta etapa:
+
+- confirmar que `localhost:8002` y `localhost:8002/mcp` responden;
+- confirmar que `https://mcp.wiscontext-sync.org/mcp` responde una vez publicado el public hostname;
+- dejar el proyecto listo para validacion remota basica sin declarar GO global.
