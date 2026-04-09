@@ -1,0 +1,6 @@
+timestamp_utc=2026-04-08T22:50:14Z
+command=./scripts/validate_oauth_token_claims.sh --token *** --expected-iss "<AUTH0_EXPECTED_ISS>" --expected-aud "<AUTH0_EXPECTED_AUD>" --require-scopes "<AUTH0_REQUIRED_SCOPES_WRITE>"
+status=SKIPPED
+reason=hard_gate_blocked_missing_credentials
+source_gate=phase2-remote-20260408T224900Z-00-preconditions.log
+exit_code=SKIPPED

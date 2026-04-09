@@ -1,0 +1,7 @@
+command=docker compose ps
+timestamp_utc=2026-04-08T22:49:35Z
+NAME                   IMAGE                              COMMAND                  SERVICE    CREATED         STATUS                  PORTS
+wis_context_backend    shared-dev-context-layer-backend   "uvicorn app.main:ap…"   backend    5 seconds ago   Up 4 seconds            0.0.0.0:8001->8001/tcp, [::]:8001->8001/tcp
+wis_context_mcp        shared-dev-context-layer-mcp       "python -m app.mcp.s…"   mcp        5 seconds ago   Up Less than a second   0.0.0.0:8002->8002/tcp, [::]:8002->8002/tcp
+wis_context_postgres   postgres:16                        "docker-entrypoint.s…"   postgres   4 days ago      Up 19 minutes           0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
+exit_code=0

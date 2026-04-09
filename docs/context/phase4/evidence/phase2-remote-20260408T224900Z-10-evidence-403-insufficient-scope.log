@@ -1,0 +1,6 @@
+timestamp_utc=2026-04-08T22:50:14Z
+command=MCP_AUTH_TOKEN=<read_token> MCP_AUTH_HEADER_NAME=Authorization MCP_AUTH_SCHEME=Bearer ./scripts/validate_remote_mcp_write.sh "<CF_MCP_PUBLIC_BASE_URL>/mcp"
+status=SKIPPED
+reason=hard_gate_blocked_missing_credentials
+source_gate=phase2-remote-20260408T224900Z-00-preconditions.log
+exit_code=SKIPPED
