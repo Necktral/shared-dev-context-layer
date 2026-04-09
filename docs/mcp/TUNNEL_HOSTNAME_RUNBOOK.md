@@ -43,6 +43,22 @@ curl -i -H 'Accept: text/event-stream' http://localhost:8002/mcp
 
 Esperado: el servicio responde localmente; si no responde, el tunnel no puede exponer `/mcp` correctamente.
 
+### Si el origen local no responde por auth incompleta
+
+Caso observado: contenedor `mcp` en restart con error:
+
+`MCP auth is enabled but MCP_AUTH0_ISSUER/MCP_AUTH0_AUDIENCE/MCP_AUTH0_JWKS_URL are not fully configured.`
+
+Bypass temporal (solo tunnel-only, sin cerrar GO global):
+
+```bash
+docker compose up --build -d postgres backend
+docker compose rm -sf mcp
+docker compose run --rm --service-ports -e MCP_AUTH_BYPASS_LOCAL=true mcp
+```
+
+En otra terminal, ejecutar verificacion local/public. Este bypass no reemplaza la configuracion Auth0 final.
+
 ## 4) Verificacion publica
 
 ```bash

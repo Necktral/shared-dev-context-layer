@@ -1,13 +1,13 @@
 # Phase 2 Remote/Global Backlog
 
-Fecha de actualizacion: 2026-04-08  
-Estado: en ejecucion, bloqueado por credenciales remotas (tunnel + hostname en preparacion basica)
+Fecha de actualizacion: 2026-04-09  
+Estado: en ejecucion, tunnel + hostname validados en basico; GO global bloqueado por Auth0/tokens
 
 ## Objetivo
 
 Cerrar el GO global remoto de fase sin afectar el baseline local-first ya cerrado.
 
-## Estado de ejecucion actual (2026-04-08)
+## Estado de ejecucion actual (2026-04-09)
 
 Progreso:
 
@@ -17,21 +17,24 @@ Progreso:
 - paquete tunnel-only preparado:
   - `scripts/check_tunnel_hostname_readiness.sh`
   - `docs/mcp/TUNNEL_HOSTNAME_RUNBOOK.md`
+- diagnostico tecnico de origen local:
+  - no era bloqueo de DNS/CNAME
+  - `mcp` local reiniciaba por auth habilitada sin `MCP_AUTH0_*` completos
+- validacion basica tunnel+hostname con bypass temporal local:
+  - local `http://localhost:8002/mcp` responde con `mcp-session-id`
+  - publico `https://mcp.wiscontext-sync.org/mcp` responde con `mcp-session-id`
 
 Bloqueo:
 
-- falta `CF_NAMED_TUNNEL_TOKEN`
-- falta `CF_MCP_PUBLIC_BASE_URL`
-- falta `MCP_AUTH_TOKEN` para validacion write y claims OAuth
+- falta configuracion Auth0 operativa (`issuer`/`audience`/`jwks`) para runtime protegido sin bypass
+- faltan tokens OAuth read/write para validacion remota global (`all_published`, write plane, 401/403)
 
 Siguiente accion de desbloqueo:
 
-1. proveer `CF_NAMED_TUNNEL_TOKEN`
-2. proveer `CF_MCP_PUBLIC_BASE_URL`
-3. ejecutar `./scripts/check_tunnel_hostname_readiness.sh` y confirmar `READY_FOR_TUNNEL_BASIC_VALIDATION`
-4. verificar local: `curl -i http://localhost:8002` y `curl -i -H 'Accept: text/event-stream' http://localhost:8002/mcp`
-5. verificar publico: `curl -i -H 'Accept: text/event-stream' https://mcp.wiscontext-sync.org/mcp`
-6. luego de tunnel/hostname estable, proveer tokens OAuth/Auth0 y reejecutar secuencia global: `start_named_cloudflare_tunnel` -> `check_named_cloudflare_tunnel` -> `validate_remote_mcp` -> `validate_remote_mcp_write` -> `validate_oauth_token_claims`
+1. completar configuracion Auth0 para MCP protegido (`MCP_AUTH0_ISSUER`, `MCP_AUTH0_AUDIENCE`, `MCP_AUTH0_JWKS_URL`)
+2. desactivar bypass temporal local y validar que `mcp` levanta en modo protegido
+3. proveer token read y token write para validaciones remotas
+4. ejecutar secuencia global: `start_named_cloudflare_tunnel` -> `check_named_cloudflare_tunnel` -> `validate_remote_mcp` -> `validate_remote_mcp_write` -> `validate_oauth_token_claims`
 
 ## Pendientes priorizados
 
