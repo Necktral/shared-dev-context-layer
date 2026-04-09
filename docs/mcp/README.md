@@ -155,3 +155,16 @@ Regla operativa:
 
 - named tunnel es la ruta por defecto para cierre y operación estable.
 - quick tunnel queda solo como fallback temporal, no endpoint canónico de aceptación.
+
+## 11. Tunnel + hostname readiness (sin Auth0)
+
+Para la etapa previa a OAuth/Auth0, usar el runbook dedicado:
+
+- `TUNNEL_HOSTNAME_RUNBOOK.md`
+- preflight local sin red: `../../scripts/check_tunnel_hostname_readiness.sh`
+
+Objetivo de esta etapa:
+
+- confirmar que `localhost:8002` y `localhost:8002/mcp` responden;
+- confirmar que `https://mcp.wiscontext-sync.org/mcp` responde una vez publicado el public hostname;
+- dejar el proyecto listo para validacion remota basica sin declarar GO global.

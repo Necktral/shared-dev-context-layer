@@ -1,7 +1,7 @@
 # Phase 2 Remote/Global Backlog
 
 Fecha de actualizacion: 2026-04-08  
-Estado: en ejecucion, bloqueado por credenciales remotas
+Estado: en ejecucion, bloqueado por credenciales remotas (tunnel + hostname en preparacion basica)
 
 ## Objetivo
 
@@ -14,6 +14,9 @@ Progreso:
 - preflight de stack completado (`postgres`, `backend`, `mcp` en `Up`)
 - arranque de named tunnel intentado
 - validaciones remotas read/write/Auth0 intentadas
+- paquete tunnel-only preparado:
+  - `scripts/check_tunnel_hostname_readiness.sh`
+  - `docs/mcp/TUNNEL_HOSTNAME_RUNBOOK.md`
 
 Bloqueo:
 
@@ -25,8 +28,10 @@ Siguiente accion de desbloqueo:
 
 1. proveer `CF_NAMED_TUNNEL_TOKEN`
 2. proveer `CF_MCP_PUBLIC_BASE_URL`
-3. proveer tokens read/write y token OAuth de verificacion
-4. reejecutar scripts remotos en este orden: `start_named_cloudflare_tunnel` -> `check_named_cloudflare_tunnel` -> `validate_remote_mcp` -> `validate_remote_mcp_write` -> `validate_oauth_token_claims`
+3. ejecutar `./scripts/check_tunnel_hostname_readiness.sh` y confirmar `READY_FOR_TUNNEL_BASIC_VALIDATION`
+4. verificar local: `curl -i http://localhost:8002` y `curl -i -H 'Accept: text/event-stream' http://localhost:8002/mcp`
+5. verificar publico: `curl -i -H 'Accept: text/event-stream' https://mcp.wiscontext-sync.org/mcp`
+6. luego de tunnel/hostname estable, proveer tokens OAuth/Auth0 y reejecutar secuencia global: `start_named_cloudflare_tunnel` -> `check_named_cloudflare_tunnel` -> `validate_remote_mcp` -> `validate_remote_mcp_write` -> `validate_oauth_token_claims`
 
 ## Pendientes priorizados
 
