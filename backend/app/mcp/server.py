@@ -5,8 +5,10 @@ from typing import Any
 from typing import cast
 
 from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.server.auth.routes import build_resource_metadata_url
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from sqlalchemy import select
 
 from app.audit.service import record_publish_audit
@@ -70,6 +72,48 @@ def _auth_runtime_enabled() -> bool:
     return settings.mcp_auth_enabled and not settings.mcp_auth_bypass_local
 
 
+def _is_write_tool(scopes: list[str]) -> bool:
+    return any(scope.endswith(".write") for scope in scopes)
+
+
+def _tool_security_schemes(scopes: list[str]) -> list[dict[str, Any]]:
+    return [{"type": "oauth2", "scopes": scopes}]
+
+
+def _resource_metadata_url() -> str | None:
+    if not _auth_runtime_enabled() or not settings.mcp_public_base_url:
+        return None
+    try:
+        return str(build_resource_metadata_url(settings.mcp_public_base_url))
+    except Exception:  # pragma: no cover - defensive fallback
+        return None
+
+
+def _build_www_authenticate(
+    *,
+    error: str,
+    description: str,
+    required_scopes: list[str] | None = None,
+) -> str:
+    parts = [f'error="{error}"', f'error_description="{description}"']
+    if required_scopes:
+        parts.append(f'scope="{" ".join(required_scopes)}"')
+    metadata_url = _resource_metadata_url()
+    if metadata_url:
+        parts.append(f'resource_metadata="{metadata_url}"')
+    return f"Bearer {', '.join(parts)}"
+
+
+def _auth_error_meta(*, error: str, description: str, required_scopes: list[str] | None = None) -> dict[str, Any]:
+    return {
+        "mcp/www_authenticate": _build_www_authenticate(
+            error=error,
+            description=description,
+            required_scopes=required_scopes,
+        ),
+    }
+
+
 def _build_mcp_server() -> FastMCP:
     auth_settings: AuthSettings | None = None
     token_verifier = None
@@ -80,9 +124,13 @@ def _build_mcp_server() -> FastMCP:
             raise RuntimeError(
                 "MCP auth is enabled but MCP_AUTH0_ISSUER/MCP_AUTH0_AUDIENCE/MCP_AUTH0_JWKS_URL are not fully configured.",
             )
+        if not settings.mcp_public_base_url:
+            raise RuntimeError(
+                "MCP auth is enabled but MCP_PUBLIC_BASE_URL is not configured.",
+            )
         auth_settings = AuthSettings(
             issuer_url=settings.mcp_auth0_issuer,
-            resource_server_url=settings.mcp_auth0_audience,
+            resource_server_url=settings.mcp_public_base_url,
             required_scopes=["wis.context.read"],
         )
         token_verifier = Auth0JWTTokenVerifier(
@@ -203,6 +251,11 @@ def _scope_guard(tool_name: str) -> dict[str, Any] | None:
             "message": "Authentication required for this tool.",
             "required_scopes": required,
             "present_scopes": [],
+            "_meta": _auth_error_meta(
+                error="invalid_token",
+                description="Authentication required for this tool.",
+                required_scopes=required,
+            ),
         }
     present = sorted(set(token.scopes))
     missing = [scope for scope in required if scope not in present]
@@ -214,6 +267,11 @@ def _scope_guard(tool_name: str) -> dict[str, Any] | None:
             "required_scopes": required,
             "present_scopes": present,
             "missing_scopes": missing,
+            "_meta": _auth_error_meta(
+                error="insufficient_scope",
+                description="Token does not include required scopes for this tool.",
+                required_scopes=required,
+            ),
         }
     return None
 
@@ -1575,6 +1633,34 @@ def apply_sync_batch(
         )
     finally:
         db.close()
+
+
+def _apply_tool_auth_metadata() -> None:
+    tool_manager = getattr(mcp, "_tool_manager", None)
+    if tool_manager is None:
+        return
+
+    tools = getattr(tool_manager, "_tools", None)
+    if not isinstance(tools, dict):
+        return
+
+    for tool_name, tool in tools.items():
+        scopes = TOOL_SCOPES.get(tool_name, [])
+        if not scopes:
+            continue
+
+        # Keep MCP tool metadata explicit so clients can discover auth requirements
+        # from list_tools without probing protected calls.
+        tool_meta = dict(tool.meta or {})
+        tool_meta["securitySchemes"] = _tool_security_schemes(scopes)
+        tool.meta = tool_meta
+
+        if tool.annotations is None:
+            tool.annotations = ToolAnnotations()
+        tool.annotations.readOnlyHint = not _is_write_tool(scopes)
+
+
+_apply_tool_auth_metadata()
 
 
 if __name__ == "__main__":

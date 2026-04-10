@@ -176,11 +176,15 @@ Debe confirmar mutación esperada + auditoría write.
 
 - Implementado a nivel de guía operativa del conector.
 - En esta fase v0.2.0, el backend MCP aplica enforcement JWT estricto para runtime conectado.
+- Separación explícita en backend:
+  - `MCP_AUTH0_AUDIENCE`: audience del token (`aud`) para validación JWT.
+  - `MCP_PUBLIC_BASE_URL`: base pública del recurso MCP para anunciar `resource_metadata` en `WWW-Authenticate`.
 - Validación recomendada:
   - claims con `scripts/validate_oauth_token_claims.sh`
   - global `all_published` con `scripts/validate_remote_mcp.sh`
   - read plane con `scripts/validate_remote_mcp_read.sh`
   - write plane con `scripts/validate_remote_mcp_write.sh`
+  - refrescar el conector en ChatGPT después de cambios en tools/metadata auth para que relea `list_tools`
 
 ## 10. Named tunnel como ruta canónica
 

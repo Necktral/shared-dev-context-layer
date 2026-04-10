@@ -19,6 +19,7 @@ Valores operativos actuales del proyecto:
 - tenant: `https://necktral.us.auth0.com`
 - audience read: `https://wis-context-sync-read-api`
 - endpoint MCP estable: `https://mcp.wiscontext-sync.org/mcp`
+- public base URL MCP (resource metadata): `https://mcp.wiscontext-sync.org`
 
 ## 2. Configuración en ChatGPT Connector (OAuth Avanzado)
 
@@ -41,6 +42,10 @@ Valores operativos actuales del proyecto:
 - `URL de registro`: dejar vacío (si no se usa DCR)
 - `Base del servidor de autorización`: `https://necktral.us.auth0.com/`
 - `Recurso` (audience): `https://wis-context-sync-read-api`
+
+Importante:
+- `Recurso` mantiene la audience Auth0 (`https://wis-context-sync-read-api`) para emisión/validación de access tokens.
+- La URL pública del recurso protegido MCP es distinta y se configura en backend con `MCP_PUBLIC_BASE_URL`.
 
 ### 2.4 OpenID Connect (OIDC)
 
@@ -91,6 +96,12 @@ En la API (Resource Server):
 - Scopes legacy (`mcp.read`, `context.read`, etc.) solo si realmente están soportados y versionados en esa API.
 - Confirmar audience igual al valor usado en “Recurso”.
 
+En runtime MCP (backend):
+
+- Definir `MCP_PUBLIC_BASE_URL=https://mcp.wiscontext-sync.org`
+- No usar path operativo (`/mcp`) en esta variable.
+- Este valor controla el `resource_metadata` que el servidor anuncia en `WWW-Authenticate`.
+
 ## 4. Validación mínima obligatoria
 
 1. Probar autenticación en la UI del conector (debe completar login sin error).
@@ -130,6 +141,7 @@ MCP_AUTH_SCHEME="Bearer" \
 Nota:
 - `validate_remote_mcp.sh` evalúa contrato global `all_published`.
 - para conector Read usar `validate_remote_mcp_read.sh` (`read_plane`).
+- después de cambiar tools publicadas o metadata auth (`securitySchemes`, `readOnlyHint`, auth settings), refrescar el conector en ChatGPT para forzar relectura de definición.
 
 ## 5. Notas de seguridad y alcance de fase
 

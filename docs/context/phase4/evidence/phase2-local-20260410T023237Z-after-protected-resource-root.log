@@ -1,0 +1,8 @@
+HTTP/1.1 200 OK
+date: Fri, 10 Apr 2026 02:32:54 GMT
+server: uvicorn
+cache-control: public, max-age=3600
+content-length: 184
+content-type: application/json
+
+{"resource":"https://mcp.wiscontext-sync.org/","authorization_servers":["https://necktral.us.auth0.com/"],"scopes_supported":["wis.context.read"],"bearer_methods_supported":["header"]}
