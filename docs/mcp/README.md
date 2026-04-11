@@ -287,6 +287,9 @@ Script operativo:
 - requiere `jq`
 - `tail` es el único subcomando que abre fuente (`docker compose logs --no-log-prefix -f mcp`)
 - los demás subcomandos leen `stdin` y permiten composición por pipe
+- `failures` incluye: `mcp_request_failed`, `mcp_call_tool_failed`, `mcp_list_tools_failed`,
+  `mcp_handshake_initialize_failed`, `mcp_auth_invalid`, `mcp_auth_scope_denied`,
+  `mcp_contract_drift_detected`
 
 ### Flujo recomendado de triage
 

@@ -134,6 +134,7 @@ filter_failures() {
       or .event_name == "mcp_handshake_initialize_failed"
       or .event_name == "mcp_auth_invalid"
       or .event_name == "mcp_auth_scope_denied"
+      or .event_name == "mcp_contract_drift_detected"
     )
   '
 }
