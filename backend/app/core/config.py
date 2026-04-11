@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     mcp_auth0_jwks_url: str | None = None
     mcp_public_base_url: str | None = None
     mcp_auth_clock_skew_seconds: int = 60
+    mcp_log_level: str = "INFO"
+    mcp_log_json: bool = True
+    mcp_log_payloads: bool = False
+    mcp_log_include_headers_allowlist: str = (
+        "x-request-id,mcp-session-id,user-agent,x-forwarded-for,traceparent,"
+        "mcp-protocol-version,accept,content-type"
+    )
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -37,6 +44,23 @@ class Settings(BaseSettings):
         if not normalized:
             return None
         return normalized.rstrip("/")
+
+    @field_validator("mcp_log_level", mode="before")
+    @classmethod
+    def normalize_log_level(cls, value: str) -> str:
+        normalized = str(value).strip().upper() if value is not None else "INFO"
+        valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+        if normalized not in valid_levels:
+            raise ValueError(f"MCP_LOG_LEVEL must be one of: {', '.join(sorted(valid_levels))}.")
+        return normalized
+
+    @field_validator("mcp_log_include_headers_allowlist", mode="before")
+    @classmethod
+    def normalize_headers_allowlist(cls, value: str | None) -> str:
+        if value is None:
+            return ""
+        headers = [header.strip().lower() for header in str(value).split(",") if header.strip()]
+        return ",".join(headers)
 
     @model_validator(mode="after")
     def validate_auth_runtime_settings(self) -> "Settings":

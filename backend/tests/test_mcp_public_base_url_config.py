@@ -54,3 +54,19 @@ def test_mcp_public_base_url_is_optional_when_auth_runtime_is_bypassed() -> None
         mcp_public_base_url=None,
     )
     assert settings.mcp_public_base_url is None
+
+
+def test_mcp_log_level_validation_and_normalization() -> None:
+    settings = _build_settings(mcp_auth_enabled=False, mcp_log_level="debug")
+    assert settings.mcp_log_level == "DEBUG"
+
+    with pytest.raises(ValidationError, match="MCP_LOG_LEVEL must be one of"):
+        _build_settings(mcp_auth_enabled=False, mcp_log_level="TRACE")
+
+
+def test_mcp_log_header_allowlist_is_normalized() -> None:
+    settings = _build_settings(
+        mcp_auth_enabled=False,
+        mcp_log_include_headers_allowlist="  X-Request-ID , User-Agent  , x-forwarded-for ",
+    )
+    assert settings.mcp_log_include_headers_allowlist == "x-request-id,user-agent,x-forwarded-for"

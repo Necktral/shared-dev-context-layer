@@ -4,6 +4,7 @@ import uuid
 from typing import Any
 from typing import cast
 
+import mcp.types as mcp_types
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.routes import build_resource_metadata_url
 from mcp.server.auth.settings import AuthSettings
@@ -16,6 +17,10 @@ from app.audit.write_audit_service import get_existing_request_audit, record_wri
 from app.auth.jwt_verifier import Auth0JWTTokenVerifier, decode_unverified_claims
 from app.core.config import Settings, get_settings
 from app.db.session import SessionLocal
+from app.mcp.observability import MCPTransportObservabilityASGI
+from app.mcp.observability import build_mcp_logger
+from app.mcp.observability import sanitize_auth_claims
+from app.mcp.observability import sanitize_structure
 from app.models.context_item import ContextItem
 from app.models.context_snapshot import ContextSnapshot
 from app.models.event import Event
@@ -46,6 +51,7 @@ from app.schemas.event import EventCreate
 from app.schemas.snapshot import ManualSnapshotCreate
 
 settings: Settings = get_settings()
+mcp_logger = build_mcp_logger(settings)
 
 TOOL_SCOPES: dict[str, list[str]] = {
     "get_active_task": ["wis.context.read"],
@@ -236,15 +242,84 @@ def _extract_actor_context() -> dict[str, Any]:
     }
 
 
+def _runtime_request_context_fields() -> dict[str, Any]:
+    try:
+        ctx = mcp.get_context()
+        request_context = ctx.request_context
+    except Exception:
+        return {}
+
+    request = getattr(request_context, "request", None)
+    headers = getattr(request, "headers", None) if request is not None else None
+    mcp_session_id = headers.get("mcp-session-id") if headers else None
+    user_agent = headers.get("user-agent") if headers else None
+    path = request.url.path if request is not None else None
+    method = request.method if request is not None else None
+
+    return {
+        "request_id": str(ctx.request_id),
+        "mcp_session_id": mcp_session_id,
+        "user_agent": user_agent,
+        "path": path,
+        "method": method,
+    }
+
+
+def _auth_context_fields(token: Any | None) -> dict[str, Any]:
+    if token is None:
+        return {
+            "auth_present": False,
+            "scopes": [],
+            "issuer": None,
+            "audience": None,
+            "sub": None,
+            "azp": None,
+        }
+
+    claims = decode_unverified_claims(token.token)
+    sanitized_claims = sanitize_auth_claims(claims)
+    return {
+        "auth_present": True,
+        "scopes": sorted(set(token.scopes or [])),
+        "issuer": sanitized_claims.get("iss"),
+        "audience": sanitized_claims.get("aud"),
+        "sub": sanitized_claims.get("sub"),
+        "azp": sanitized_claims.get("azp") or sanitized_claims.get("client_id"),
+    }
+
+
 def _scope_guard(tool_name: str) -> dict[str, Any] | None:
     required = TOOL_SCOPES.get(tool_name, [])
     if not required:
         return None
     # For direct local invocations (tests/scripts) bypass can be explicit.
     if settings.mcp_auth_bypass_local:
+        mcp_logger.emit(
+            "mcp_scope_guard_evaluated",
+            tool_name=tool_name,
+            required_scopes=required,
+            present_scopes=[],
+            missing_scopes=[],
+            outcome="allowed",
+            auth_stage="tool_runtime",
+            bypass_local=True,
+            **_runtime_request_context_fields(),
+        )
         return None
     token = get_access_token()
     if token is None:
+        mcp_logger.emit(
+            "mcp_auth_missing",
+            level="WARNING",
+            tool_name=tool_name,
+            required_scopes=required,
+            present_scopes=[],
+            missing_scopes=required,
+            outcome="unauthorized",
+            auth_stage="tool_runtime",
+            **_runtime_request_context_fields(),
+            **_auth_context_fields(token),
+        )
         return {
             "status": "unauthorized",
             "error": "invalid_token",
@@ -260,6 +335,18 @@ def _scope_guard(tool_name: str) -> dict[str, Any] | None:
     present = sorted(set(token.scopes))
     missing = [scope for scope in required if scope not in present]
     if missing:
+        mcp_logger.emit(
+            "mcp_auth_scope_denied",
+            level="WARNING",
+            tool_name=tool_name,
+            required_scopes=required,
+            present_scopes=present,
+            missing_scopes=missing,
+            outcome="forbidden",
+            auth_stage="tool_runtime",
+            **_runtime_request_context_fields(),
+            **_auth_context_fields(token),
+        )
         return {
             "status": "forbidden",
             "error": "insufficient_scope",
@@ -273,6 +360,17 @@ def _scope_guard(tool_name: str) -> dict[str, Any] | None:
                 required_scopes=required,
             ),
         }
+    mcp_logger.emit(
+        "mcp_scope_guard_evaluated",
+        tool_name=tool_name,
+        required_scopes=required,
+        present_scopes=present,
+        missing_scopes=[],
+        outcome="allowed",
+        auth_stage="tool_runtime",
+        **_runtime_request_context_fields(),
+        **_auth_context_fields(token),
+    )
     return None
 
 
@@ -1660,8 +1758,219 @@ def _apply_tool_auth_metadata() -> None:
         tool.annotations.readOnlyHint = not _is_write_tool(scopes)
 
 
+def _instrument_runtime_handlers() -> None:
+    lowlevel_server = getattr(mcp, "_mcp_server", None)
+    if lowlevel_server is None:
+        return
+
+    handlers = getattr(lowlevel_server, "request_handlers", None)
+    if not isinstance(handlers, dict):
+        return
+
+    list_tools_handler = handlers.get(mcp_types.ListToolsRequest)
+    if callable(list_tools_handler) and not getattr(list_tools_handler, "_mcp_observed", False):
+
+        async def observed_list_tools(req: mcp_types.ListToolsRequest) -> mcp_types.ServerResult:
+            context_fields = _runtime_request_context_fields()
+            mcp_logger.emit(
+                "mcp_list_tools_started",
+                auth_stage="tool_runtime",
+                **context_fields,
+            )
+            try:
+                result = await list_tools_handler(req)
+            except Exception as exc:  # noqa: BLE001
+                mcp_logger.emit(
+                    "mcp_list_tools_failed",
+                    level="ERROR",
+                    auth_stage="tool_runtime",
+                    exception={"class": exc.__class__.__name__, "message": str(exc)},
+                    **context_fields,
+                )
+                raise
+
+            root = getattr(result, "root", None)
+            if not isinstance(root, mcp_types.ListToolsResult):
+                mcp_logger.emit(
+                    "mcp_list_tools_failed",
+                    level="ERROR",
+                    auth_stage="tool_runtime",
+                    reason="invalid_result_shape",
+                    result_type=type(root).__name__,
+                    **context_fields,
+                )
+                return result
+
+            published_tools = [tool.name for tool in root.tools]
+            known_tools = set(TOOL_SCOPES.keys())
+            published_set = set(published_tools)
+            unknown_published_tools = sorted(published_set - known_tools)
+            missing_from_published = sorted(known_tools - published_set)
+            read_tools_total = sum(
+                1 for tool_name in published_tools if tool_name in TOOL_SCOPES and not _is_write_tool(TOOL_SCOPES[tool_name])
+            )
+            write_tools_total = sum(
+                1 for tool_name in published_tools if tool_name in TOOL_SCOPES and _is_write_tool(TOOL_SCOPES[tool_name])
+            )
+
+            mcp_logger.emit(
+                "mcp_list_tools_succeeded",
+                auth_stage="tool_runtime",
+                total_tools=len(published_tools),
+                tool_names=published_tools,
+                read_tools_total=read_tools_total,
+                write_tools_total=write_tools_total,
+                unknown_published_tools=unknown_published_tools,
+                missing_from_published=missing_from_published,
+                **context_fields,
+            )
+
+            if unknown_published_tools or missing_from_published:
+                mcp_logger.emit(
+                    "mcp_contract_drift_detected",
+                    level="WARNING",
+                    auth_stage="tool_runtime",
+                    reason="tool_scope_drift",
+                    unknown_published_tools=unknown_published_tools,
+                    missing_from_published=missing_from_published,
+                    **context_fields,
+                )
+
+            return result
+
+        observed_list_tools._mcp_observed = True  # type: ignore[attr-defined]
+        handlers[mcp_types.ListToolsRequest] = observed_list_tools
+
+    call_tool_handler = handlers.get(mcp_types.CallToolRequest)
+    if callable(call_tool_handler) and not getattr(call_tool_handler, "_mcp_observed", False):
+
+        async def observed_call_tool(req: mcp_types.CallToolRequest) -> mcp_types.ServerResult:
+            tool_name = req.params.name
+            arguments = req.params.arguments or {}
+            context_fields = _runtime_request_context_fields()
+            started_payload = {
+                "tool_name": tool_name,
+                "auth_stage": "tool_runtime",
+                **context_fields,
+            }
+            if mcp_logger.log_payloads:
+                started_payload["arguments"] = sanitize_structure(arguments)
+
+            mcp_logger.emit(
+                "mcp_call_tool_started",
+                **started_payload,
+            )
+
+            try:
+                result = await call_tool_handler(req)
+            except Exception as exc:  # noqa: BLE001
+                mcp_logger.emit(
+                    "mcp_call_tool_failed",
+                    level="ERROR",
+                    tool_name=tool_name,
+                    auth_stage="tool_runtime",
+                    failure_classification="tool_exception",
+                    exception={"class": exc.__class__.__name__, "message": str(exc)},
+                    **context_fields,
+                )
+                raise
+
+            root = getattr(result, "root", None)
+            if isinstance(root, mcp_types.CallToolResult):
+                structured = root.structuredContent
+                structured_is_dict = isinstance(structured, dict)
+                status = structured.get("status") if structured_is_dict else None
+                error = structured.get("error") if structured_is_dict else None
+                classification = "ok"
+                event_name = "mcp_call_tool_succeeded"
+                log_level = "INFO"
+
+                if root.isError:
+                    classification = "unexpected_error"
+                    event_name = "mcp_call_tool_failed"
+                    log_level = "ERROR"
+                elif not structured_is_dict:
+                    classification = "invalid_structured_content"
+                    event_name = "mcp_call_tool_failed"
+                    log_level = "ERROR"
+                elif status == "forbidden" and error == "insufficient_scope":
+                    classification = "scope_denied"
+                    event_name = "mcp_call_tool_failed"
+                    log_level = "WARNING"
+                elif status in {"invalid_request"}:
+                    classification = "schema_validation_error"
+                    event_name = "mcp_call_tool_failed"
+                    log_level = "WARNING"
+                elif status in {"unauthorized", "forbidden"}:
+                    classification = "scope_denied"
+                    event_name = "mcp_call_tool_failed"
+                    log_level = "WARNING"
+                elif status == "error":
+                    classification = "tool_exception"
+                    event_name = "mcp_call_tool_failed"
+                    log_level = "ERROR"
+
+                mcp_logger.emit(
+                    event_name,
+                    level=log_level,
+                    tool_name=tool_name,
+                    auth_stage="tool_runtime",
+                    is_error=root.isError,
+                    structured_content_type=type(structured).__name__,
+                    status=status,
+                    error=error,
+                    failure_classification=classification,
+                    **context_fields,
+                )
+                return result
+
+            if isinstance(root, mcp_types.ErrorData):
+                mcp_logger.emit(
+                    "mcp_call_tool_failed",
+                    level="ERROR",
+                    tool_name=tool_name,
+                    auth_stage="tool_runtime",
+                    failure_classification="unexpected_error",
+                    error_code=root.code,
+                    error_message=root.message,
+                    **context_fields,
+                )
+                return result
+
+            mcp_logger.emit(
+                "mcp_call_tool_failed",
+                level="ERROR",
+                tool_name=tool_name,
+                auth_stage="tool_runtime",
+                failure_classification="unexpected_error",
+                result_type=type(root).__name__,
+                **context_fields,
+            )
+            return result
+
+        observed_call_tool._mcp_observed = True  # type: ignore[attr-defined]
+        handlers[mcp_types.CallToolRequest] = observed_call_tool
+
+
+def build_observed_streamable_http_app() -> MCPTransportObservabilityASGI:
+    base_app = mcp.streamable_http_app()
+    return MCPTransportObservabilityASGI(
+        base_app,
+        logger=mcp_logger,
+        streamable_path=mcp.settings.streamable_http_path,
+    )
+
+
 _apply_tool_auth_metadata()
+_instrument_runtime_handlers()
 
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
+    import uvicorn
+
+    uvicorn.run(
+        build_observed_streamable_http_app(),
+        host=mcp.settings.host,
+        port=mcp.settings.port,
+        log_level=mcp.settings.log_level.lower(),
+    )
