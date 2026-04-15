@@ -62,6 +62,24 @@ Siguiente accion de desbloqueo:
 - checklist global firmado
 - decision publicada en `phase4/evidence/README.md`
 
+## Trabajo Pendiente (No bloqueante para merge)
+
+P1 para proximo ciclo (hardening CI):
+
+1. P1-A: hardening de ripgrep para validacion docs
+- baseline actual: `docs-consistency` en `.github/workflows/phase3-ci.yml` ya instala `ripgrep` antes de `run_contract_closure.sh docs`.
+- pendiente: agregar verificacion explicita `rg --version` y cubrir jobs que ejecuten scripts dependientes de `rg` (por ejemplo `governance` si aplica por script).
+- logical_owner: maintainers CI + docs/canon.
+- exit_criteria: workflows relevantes de CI ejecutan install/check de `rg` antes de validaciones que lo usan; falla temprana y diagnostico claro si falta binario.
+- status: open.
+
+2. P1-B: hardening de PostgreSQL para tests backend en CI
+- baseline actual: `backend-pytest` en `.github/workflows/phase3-ci.yml` ya define service `postgres:16` con healthcheck y `DATABASE_URL`.
+- pendiente: agregar espera activa previa a `alembic upgrade head` y `pytest` (preflight `pg_isready`) para reducir flakes intermitentes de readiness.
+- logical_owner: maintainers CI + backend.
+- exit_criteria: job backend solo inicia migraciones/tests cuando preflight de DB responde OK; logs muestran diagnostico claro en timeout de readiness.
+- status: open.
+
 ## Referencias
 
 - `phase4/evidence/README.md`
