@@ -195,10 +195,27 @@ def _extract_client_ip(scope: Scope, headers: Mapping[str, str]) -> str | None:
 
 
 class MCPTransportObservabilityASGI:
-    def __init__(self, app: ASGIApp, *, logger: MCPStructuredLogger, streamable_path: str) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        logger: MCPStructuredLogger,
+        streamable_path: str,
+        allowed_origins: list[str] | None = None,
+    ) -> None:
         self.app = app
         self.logger = logger
         self.streamable_path = streamable_path
+        self.allowed_origins = {
+            origin.strip().lower() for origin in (allowed_origins or []) if origin and origin.strip()
+        }
+
+    def _is_origin_allowed(self, origin: str | None) -> bool:
+        if not self.allowed_origins:
+            return True
+        if not origin:
+            return True
+        return origin.strip().lower() in self.allowed_origins
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope.get("type") != "http" or scope.get("path") != self.streamable_path:
@@ -216,6 +233,44 @@ class MCPTransportObservabilityASGI:
         method = str(scope.get("method", "UNKNOWN"))
         path = str(scope.get("path", ""))
         request_mcp_session = request_headers.get("mcp-session-id")
+        request_origin = request_headers.get("origin")
+
+        if not self._is_origin_allowed(request_origin):
+            request_id = request_headers.get("x-request-id") or str(uuid.uuid4())
+            self.logger.emit(
+                "mcp_origin_denied",
+                level="WARNING",
+                request_id=request_id,
+                path=path,
+                method=method,
+                origin=request_origin,
+                allowed_origins=sorted(self.allowed_origins),
+                auth_stage="transport",
+                remote_addr=remote_addr,
+            )
+            body = json.dumps(
+                {
+                    "error": "invalid_origin",
+                    "error_description": "Origin header is not allowed for this MCP endpoint.",
+                }
+            ).encode("utf-8")
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 403,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(body)).encode("ascii")),
+                    ],
+                }
+            )
+            await send(
+                {
+                    "type": "http.response.body",
+                    "body": body,
+                }
+            )
+            return
 
         request_body = bytearray()
         rpc_method: str | None = None

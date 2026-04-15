@@ -26,7 +26,9 @@ def test_scope_guard_unauthorized_preserves_payload_and_emits_www_authenticate(m
     challenge = meta.get("mcp/www_authenticate")
     assert isinstance(challenge, str)
     assert 'error="invalid_token"' in challenge
+    assert 'error_description="Authentication required for this tool."' in challenge
     assert 'scope="wis.context.read"' in challenge
+    assert 'resource_metadata="' in challenge
     assert "https://mcp.wiscontext-sync.org/.well-known/oauth-protected-resource" in challenge
 
 
@@ -55,5 +57,7 @@ def test_scope_guard_insufficient_scope_preserves_payload_and_emits_www_authenti
     challenge = meta.get("mcp/www_authenticate")
     assert isinstance(challenge, str)
     assert 'error="insufficient_scope"' in challenge
+    assert 'error_description="Token does not include required scopes for this tool."' in challenge
     assert 'scope="wis.context.write"' in challenge
+    assert 'resource_metadata="' in challenge
     assert "https://mcp.wiscontext-sync.org/.well-known/oauth-protected-resource" in challenge

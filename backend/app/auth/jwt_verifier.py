@@ -81,11 +81,13 @@ class Auth0JWTTokenVerifier(TokenVerifier):
         issuer: str,
         audience: str,
         jwks_url: str,
+        resource_id: str | None = None,
         clock_skew_seconds: int = 60,
         algorithms: Iterable[str] = ("RS256",),
     ) -> None:
         self.issuer = issuer.rstrip("/") + "/"
         self.audience = audience
+        self.resource_id = resource_id or audience
         self.jwks_client = PyJWKClient(jwks_url)
         self.clock_skew_seconds = clock_skew_seconds
         self.algorithms = list(algorithms)
@@ -194,5 +196,5 @@ class Auth0JWTTokenVerifier(TokenVerifier):
             client_id=client_id,
             scopes=scopes,
             expires_at=expires_at_value,
-            resource=self.audience,
+            resource=self.resource_id,
         )

@@ -16,6 +16,7 @@ def test_mcp_public_base_url_normalizes_trailing_slash_when_auth_runtime_enabled
         mcp_auth_enabled=True,
         mcp_auth_bypass_local=False,
         mcp_public_base_url="https://mcp.wiscontext-sync.org/",
+        mcp_auth0_audience="https://wis-context-sync-read-api",
     )
     assert settings.mcp_public_base_url == "https://mcp.wiscontext-sync.org"
 
@@ -70,3 +71,47 @@ def test_mcp_log_header_allowlist_is_normalized() -> None:
         mcp_log_include_headers_allowlist="  X-Request-ID , User-Agent  , x-forwarded-for ",
     )
     assert settings.mcp_log_include_headers_allowlist == "x-request-id,user-agent,x-forwarded-for"
+
+
+def test_mcp_resource_id_is_validated_as_absolute_uri() -> None:
+    settings = _build_settings(
+        mcp_auth_enabled=False,
+        mcp_resource_id=" https://wis-context-sync-read-api ",
+    )
+    assert settings.mcp_resource_id == "https://wis-context-sync-read-api"
+
+    with pytest.raises(ValidationError, match="MCP_RESOURCE_ID must be an absolute URI"):
+        _build_settings(mcp_auth_enabled=False, mcp_resource_id="wis-context-sync-read-api")
+
+
+def test_effective_resource_id_falls_back_to_auth0_audience() -> None:
+    settings = _build_settings(
+        mcp_auth_enabled=True,
+        mcp_auth_bypass_local=False,
+        mcp_public_base_url="https://mcp.wiscontext-sync.org",
+        mcp_auth0_audience="https://wis-context-sync-read-api",
+        mcp_resource_id=None,
+    )
+    assert settings.effective_mcp_resource_id == "https://wis-context-sync-read-api"
+    assert settings.has_legacy_resource_id_divergence is False
+
+
+def test_legacy_divergence_is_allowed_without_failing_validation() -> None:
+    settings = _build_settings(
+        mcp_auth_enabled=True,
+        mcp_auth_bypass_local=False,
+        mcp_public_base_url="https://mcp.wiscontext-sync.org",
+        mcp_auth0_audience="https://wis-context-sync-read-api",
+        mcp_resource_id="https://mcp.wiscontext-sync.org",
+    )
+    assert settings.effective_mcp_resource_id == "https://mcp.wiscontext-sync.org"
+    assert settings.has_legacy_resource_id_divergence is True
+
+
+def test_mcp_allowed_origins_csv_is_normalized() -> None:
+    settings = _build_settings(
+        mcp_auth_enabled=False,
+        mcp_allowed_origins=" https://chatgpt.com,HTTPS://chat.openai.com , https://chatgpt.com ",
+    )
+    assert settings.mcp_allowed_origins == "https://chatgpt.com,https://chat.openai.com"
+    assert settings.mcp_allowed_origins_list == ["https://chatgpt.com", "https://chat.openai.com"]

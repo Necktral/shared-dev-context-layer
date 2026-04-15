@@ -20,6 +20,7 @@ Valores operativos actuales del proyecto:
 - audience read: `https://wis-context-sync-read-api`
 - endpoint MCP estable: `https://mcp.wiscontext-sync.org/mcp`
 - public base URL MCP (resource metadata): `https://mcp.wiscontext-sync.org`
+- resource id MCP (canónico OAuth): `MCP_RESOURCE_ID` (fallback legacy a `MCP_AUTH0_AUDIENCE`)
 
 ## 2. Configuración en ChatGPT Connector (OAuth Avanzado)
 
@@ -44,8 +45,10 @@ Valores operativos actuales del proyecto:
 - `Recurso` (audience): `https://wis-context-sync-read-api`
 
 Importante:
-- `Recurso` mantiene la audience Auth0 (`https://wis-context-sync-read-api`) para emisión/validación de access tokens.
-- La URL pública del recurso protegido MCP es distinta y se configura en backend con `MCP_PUBLIC_BASE_URL`.
+- `MCP_RESOURCE_ID` es el identificador OAuth canónico del recurso MCP (`resource=`).
+- Si `MCP_RESOURCE_ID` no está definido, el backend usa fallback legacy a `MCP_AUTH0_AUDIENCE`.
+- Si `MCP_RESOURCE_ID` y `MCP_AUTH0_AUDIENCE` divergen, el backend no falla startup (modo compatibilidad legacy) y lo reporta en logs.
+- `MCP_PUBLIC_BASE_URL` es independiente y solo define la base pública para `resource_metadata`.
 
 ### 2.4 OpenID Connect (OIDC)
 
@@ -93,6 +96,8 @@ En la API (Resource Server):
 - Registrar al menos:
   - `wis.context.read`
   - `wis.context.sync.read`
+  - `wis.context.write`
+  - `wis.context.sync.write`
 - Scopes legacy (`mcp.read`, `context.read`, etc.) solo si realmente están soportados y versionados en esa API.
 - Confirmar audience igual al valor usado en “Recurso”.
 
@@ -101,6 +106,9 @@ En runtime MCP (backend):
 - Definir `MCP_PUBLIC_BASE_URL=https://mcp.wiscontext-sync.org`
 - No usar path operativo (`/mcp`) en esta variable.
 - Este valor controla el `resource_metadata` que el servidor anuncia en `WWW-Authenticate`.
+- Definir `MCP_RESOURCE_ID=https://wis-context-sync-read-api` (recomendado para conservar compatibilidad actual).
+- `MCP_AUTH0_AUDIENCE` se mantiene para validación JWT.
+- Opcional hardening DNS-rebinding: `MCP_ALLOWED_ORIGINS=https://chatgpt.com,https://chat.openai.com`
 
 ## 4. Validación mínima obligatoria
 
@@ -141,6 +149,7 @@ MCP_AUTH_SCHEME="Bearer" \
 Nota:
 - `validate_remote_mcp.sh` evalúa contrato global `all_published`.
 - para conector Read usar `validate_remote_mcp_read.sh` (`read_plane`).
+- `validate_oauth_token_claims.sh` debe ejecutarse con token real emitido por Auth0 (no solo JWT sintético).
 - después de cambiar tools publicadas o metadata auth (`securitySchemes`, `readOnlyHint`, auth settings), refrescar el conector en ChatGPT para forzar relectura de definición.
 
 ## 5. Notas de seguridad y alcance de fase

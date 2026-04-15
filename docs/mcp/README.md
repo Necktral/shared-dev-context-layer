@@ -177,8 +177,15 @@ Debe confirmar mutación esperada + auditoría write.
 - Implementado a nivel de guía operativa del conector.
 - En esta fase v0.2.0, el backend MCP aplica enforcement JWT estricto para runtime conectado.
 - Separación explícita en backend:
-  - `MCP_AUTH0_AUDIENCE`: audience del token (`aud`) para validación JWT.
-  - `MCP_PUBLIC_BASE_URL`: base pública del recurso MCP para anunciar `resource_metadata` en `WWW-Authenticate`.
+  - `MCP_PUBLIC_BASE_URL`: base pública del recurso MCP para construir `resource_metadata` en `WWW-Authenticate`.
+  - `MCP_RESOURCE_ID`: identificador OAuth canónico del recurso MCP (`resource=`).
+  - `MCP_AUTH0_AUDIENCE`: audience para validación JWT (compat legacy con fallback de `MCP_RESOURCE_ID` cuando no se define explícitamente).
+  - `MCP_ALLOWED_ORIGINS`: allowlist CSV opcional para validar header `Origin` en `/mcp` (vacío = modo permisivo).
+- Compatibilidad legacy:
+  - si `MCP_RESOURCE_ID` no está definido, el runtime usa `MCP_AUTH0_AUDIENCE`;
+  - si ambos existen y divergen, el runtime no falla (modo compatibilidad legacy) y lo reporta en logs.
+- Discovery OAuth:
+  - endpoint explícito `GET /.well-known/oauth-protected-resource` con `resource`, `authorization_servers` y `scopes_supported`.
 - Validación recomendada:
   - claims con `scripts/validate_oauth_token_claims.sh`
   - global `all_published` con `scripts/validate_remote_mcp.sh`

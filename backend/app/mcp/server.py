@@ -6,11 +6,14 @@ from typing import cast
 
 import mcp.types as mcp_types
 from mcp.server.auth.middleware.auth_context import get_access_token
-from mcp.server.auth.routes import build_resource_metadata_url
+from mcp.server.auth.routes import build_resource_metadata_url, cors_middleware
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from sqlalchemy import select
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+from starlette.routing import Route
 
 from app.audit.service import record_publish_audit
 from app.audit.write_audit_service import get_existing_request_audit, record_write_audit
@@ -73,6 +76,13 @@ TOOL_SCOPES: dict[str, list[str]] = {
     "apply_sync_batch": ["wis.context.sync.write"],
 }
 
+RESOURCE_SCOPES_SUPPORTED = [
+    "wis.context.read",
+    "wis.context.sync.read",
+    "wis.context.write",
+    "wis.context.sync.write",
+]
+
 
 def _auth_runtime_enabled() -> bool:
     return settings.mcp_auth_enabled and not settings.mcp_auth_bypass_local
@@ -93,6 +103,24 @@ def _resource_metadata_url() -> str | None:
         return str(build_resource_metadata_url(settings.mcp_public_base_url))
     except Exception:  # pragma: no cover - defensive fallback
         return None
+
+
+def _effective_resource_id() -> str | None:
+    return settings.effective_mcp_resource_id
+
+
+def _protected_resource_metadata_payload() -> dict[str, Any]:
+    issuer = settings.mcp_auth0_issuer.rstrip("/") + "/" if settings.mcp_auth0_issuer else None
+    return {
+        "resource": _effective_resource_id(),
+        "authorization_servers": [issuer] if issuer else [],
+        "scopes_supported": RESOURCE_SCOPES_SUPPORTED,
+        "bearer_methods_supported": ["header"],
+    }
+
+
+async def _protected_resource_metadata_endpoint(_request: Request) -> Response:
+    return JSONResponse(_protected_resource_metadata_payload())
 
 
 def _build_www_authenticate(
@@ -143,6 +171,7 @@ def _build_mcp_server() -> FastMCP:
             issuer=settings.mcp_auth0_issuer,
             audience=settings.mcp_auth0_audience,
             jwks_url=settings.mcp_auth0_jwks_url,
+            resource_id=_effective_resource_id(),
             clock_skew_seconds=max(settings.mcp_auth_clock_skew_seconds, 0),
         )
         instructions = "OAuth-protected context server with read/write planes and scope guards."
@@ -159,6 +188,18 @@ def _build_mcp_server() -> FastMCP:
 
 
 mcp = _build_mcp_server()
+if settings.has_legacy_resource_id_divergence:
+    mcp_logger.emit(
+        "mcp_auth_legacy_resource_id_divergence",
+        level="WARNING",
+        auth_stage="startup",
+        mcp_resource_id=settings.mcp_resource_id,
+        mcp_auth0_audience=settings.mcp_auth0_audience,
+        message=(
+            "MCP_RESOURCE_ID differs from MCP_AUTH0_AUDIENCE; keeping legacy-compatible mode "
+            "without blocking startup."
+        ),
+    )
 
 
 def _task_to_dict(task: Any) -> dict[str, Any]:
@@ -1952,12 +1993,27 @@ def _instrument_runtime_handlers() -> None:
         handlers[mcp_types.CallToolRequest] = observed_call_tool
 
 
-def build_observed_streamable_http_app() -> MCPTransportObservabilityASGI:
-    base_app = mcp.streamable_http_app()
+def build_observed_streamable_http_app(target_mcp: FastMCP | None = None) -> MCPTransportObservabilityASGI:
+    resolved_mcp = target_mcp or mcp
+    base_app = resolved_mcp.streamable_http_app()
+    protected_resource_path = "/.well-known/oauth-protected-resource"
+    route_endpoint = cors_middleware(_protected_resource_metadata_endpoint, ["GET", "OPTIONS"])
+    custom_route = Route(
+        protected_resource_path,
+        endpoint=route_endpoint,
+        methods=["GET", "OPTIONS"],
+    )
+    existing_routes = getattr(base_app.router, "routes", [])
+    base_app.router.routes = [
+        route for route in existing_routes if getattr(route, "path", None) != protected_resource_path
+    ]
+    base_app.router.routes.insert(0, custom_route)
+
     return MCPTransportObservabilityASGI(
         base_app,
         logger=mcp_logger,
-        streamable_path=mcp.settings.streamable_http_path,
+        streamable_path=resolved_mcp.settings.streamable_http_path,
+        allowed_origins=settings.mcp_allowed_origins_list,
     )
 
 

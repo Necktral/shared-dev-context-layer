@@ -245,3 +245,76 @@ def test_runtime_logs_scope_denied_and_tool_exception(monkeypatch) -> None:
     assert failed_events
     assert any(event.get("failure_classification") == "scope_denied" for event in failed_events)
     assert any(event.get("failure_classification") == "unexpected_error" for event in failed_events)
+
+
+def test_origin_guard_blocks_unlisted_origin() -> None:
+    collector = _CollectorLogger()
+
+    async def ok_handler(_request):
+        return JSONResponse({"status": "ok"}, status_code=200)
+
+    wrapped = MCPTransportObservabilityASGI(
+        _build_post_mcp_app(ok_handler),
+        logger=collector,
+        streamable_path="/mcp",
+        allowed_origins=["https://chatgpt.com"],
+    )
+
+    with TestClient(wrapped) as client:
+        response = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": "1", "method": "ping"},
+            headers={"Origin": "https://evil.example"},
+        )
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "invalid_origin"
+    assert "mcp_origin_denied" in _event_names(collector.events)
+
+
+def test_origin_guard_allows_listed_origin() -> None:
+    collector = _CollectorLogger()
+
+    async def ok_handler(_request):
+        return JSONResponse({"status": "ok"}, status_code=200)
+
+    wrapped = MCPTransportObservabilityASGI(
+        _build_post_mcp_app(ok_handler),
+        logger=collector,
+        streamable_path="/mcp",
+        allowed_origins=["https://chatgpt.com"],
+    )
+
+    with TestClient(wrapped) as client:
+        response = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": "1", "method": "ping"},
+            headers={"Origin": "https://chatgpt.com"},
+        )
+
+    assert response.status_code == 200
+    assert "mcp_origin_denied" not in _event_names(collector.events)
+
+
+def test_origin_guard_is_permissive_when_allowlist_is_empty() -> None:
+    collector = _CollectorLogger()
+
+    async def ok_handler(_request):
+        return JSONResponse({"status": "ok"}, status_code=200)
+
+    wrapped = MCPTransportObservabilityASGI(
+        _build_post_mcp_app(ok_handler),
+        logger=collector,
+        streamable_path="/mcp",
+        allowed_origins=[],
+    )
+
+    with TestClient(wrapped) as client:
+        response = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": "1", "method": "ping"},
+            headers={"Origin": "https://any-origin.example"},
+        )
+
+    assert response.status_code == 200
+    assert "mcp_origin_denied" not in _event_names(collector.events)
