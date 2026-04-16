@@ -73,6 +73,17 @@ Deriva operativa resuelta:
 - PR #15 mergeada a `main` (commit `12d474852bc339916e38e6b5d9d3bb9ae0c6c474`).
 - PR #14 cerrada como `superseded` para evitar narrativa paralela.
 
+## 0.3 P0 local (metadata resource URL) (2026-04-10)
+
+Resultado: `PASS` local reproducible del cambio de `resource_metadata` en `WWW-Authenticate`.
+
+Evidencia:
+- `phase2-local-20260410T023237Z-p0-www-authenticate-before-after.md`
+- `phase2-local-20260410T023237Z-before-401-www-authenticate.log`
+- `phase2-local-20260410T023237Z-after-401-www-authenticate.log`
+- `phase2-local-20260410T023237Z-before-protected-resource-root.log`
+- `phase2-local-20260410T023237Z-after-protected-resource-root.log`
+
 ## 1. Conectividad y endpoint canónico
 
 - [x] named tunnel/forwarding efectivo

@@ -176,11 +176,22 @@ Debe confirmar mutación esperada + auditoría write.
 
 - Implementado a nivel de guía operativa del conector.
 - En esta fase v0.2.0, el backend MCP aplica enforcement JWT estricto para runtime conectado.
+- Separación explícita en backend:
+  - `MCP_PUBLIC_BASE_URL`: base pública del recurso MCP para construir `resource_metadata` en `WWW-Authenticate`.
+  - `MCP_RESOURCE_ID`: identificador OAuth canónico del recurso MCP (`resource=`).
+  - `MCP_AUTH0_AUDIENCE`: audience para validación JWT (compat legacy con fallback de `MCP_RESOURCE_ID` cuando no se define explícitamente).
+  - `MCP_ALLOWED_ORIGINS`: allowlist CSV opcional para validar header `Origin` en `/mcp` (vacío = modo permisivo).
+- Compatibilidad legacy:
+  - si `MCP_RESOURCE_ID` no está definido, el runtime usa `MCP_AUTH0_AUDIENCE`;
+  - si ambos existen y divergen, el runtime no falla (modo compatibilidad legacy) y lo reporta en logs.
+- Discovery OAuth:
+  - endpoint explícito `GET /.well-known/oauth-protected-resource` con `resource`, `authorization_servers` y `scopes_supported`.
 - Validación recomendada:
   - claims con `scripts/validate_oauth_token_claims.sh`
   - global `all_published` con `scripts/validate_remote_mcp.sh`
   - read plane con `scripts/validate_remote_mcp_read.sh`
   - write plane con `scripts/validate_remote_mcp_write.sh`
+  - refrescar el conector en ChatGPT después de cambios en tools/metadata auth para que relea `list_tools`
 
 ## 10. Named tunnel como ruta canónica
 
@@ -216,3 +227,180 @@ Objetivo de esta etapa:
 - confirmar que `localhost:8002` y `localhost:8002/mcp` responden;
 - confirmar que `https://mcp.wiscontext-sync.org/mcp` responde una vez publicado el public hostname;
 - dejar el proyecto listo para validacion remota basica sin declarar GO global.
+
+## 12. Observabilidad MCP (transporte + runtime)
+
+Instrumentación operativa agregada para diagnosticar conexión ChatGPT -> MCP:
+
+- módulo: `backend/app/mcp/observability.py`
+- integración runtime/tools: `backend/app/mcp/server.py`
+- verificación JWT (sin token crudo): `backend/app/auth/jwt_verifier.py`
+
+### Variables de entorno
+
+- `MCP_LOG_LEVEL` (default `INFO`)
+- `MCP_LOG_JSON` (default `true`)
+- `MCP_LOG_PAYLOADS` (default `false`)
+- `MCP_LOG_INCLUDE_HEADERS_ALLOWLIST` (CSV)
+
+Default allowlist recomendado:
+
+```text
+x-request-id,mcp-session-id,user-agent,x-forwarded-for,traceparent,mcp-protocol-version,accept,content-type
+```
+
+Notas:
+
+- logs salen a `stdout` (Docker-friendly)
+- redacción estricta para `token`, `password`, `api_key`, `credential`, `secret`
+- nunca se registra bearer token crudo, refresh token, authorization code o cookies
+
+### Eventos principales
+
+- transporte: `mcp_request_started`, `mcp_request_completed`, `mcp_request_failed`
+- auth/transporte: `mcp_auth_missing`, `mcp_auth_invalid`, `mcp_auth_scope_denied`
+- handshake: `mcp_handshake_initialize_started|succeeded|failed`
+- tools: `mcp_list_tools_started|succeeded|failed`, `mcp_call_tool_started|succeeded|failed`
+- contrato: `mcp_contract_drift_detected`
+
+Campos comunes:
+
+- `event_name`, `timestamp`, `level`, `request_id`, `path`, `method`, `status_code`, `duration_ms`
+- `mcp_session_id` (si existe)
+- `tool_name` (cuando aplica)
+- `auth_stage` (`transport`, `tool_runtime`, `jwt_verifier`)
+
+### Correlación con `validate_remote_mcp_read.sh`
+
+Usar los logs para seguir exactamente esta secuencia:
+
+1. reachability HTTP (`mcp_request_started/completed`)
+2. `initialize` (`mcp_handshake_initialize_*`)
+3. `list_tools` (`mcp_list_tools_*`)
+4. `call_tool` (`mcp_call_tool_*`)
+
+Diagnóstico rápido:
+
+- 401 sin `Authorization` -> `mcp_auth_missing`
+- 401 con `Authorization` -> `mcp_auth_invalid`
+- 403 con scope insuficiente -> `mcp_auth_scope_denied`
+- drift tools/metadata -> `mcp_contract_drift_detected`
+
+## 13. Cookbook Operativo (`grep/jq`) para MCP
+
+Script operativo:
+
+- `scripts/mcp_log_filters.sh`
+- requiere `jq`
+- `tail` es el único subcomando que abre fuente (`docker compose logs --no-log-prefix -f mcp`)
+- los demás subcomandos leen `stdin` y permiten composición por pipe
+- `failures` incluye: `mcp_request_failed`, `mcp_call_tool_failed`, `mcp_list_tools_failed`,
+  `mcp_handshake_initialize_failed`, `mcp_auth_invalid`, `mcp_auth_scope_denied`,
+  `mcp_contract_drift_detected`
+
+### Flujo recomendado de triage
+
+1. `transport`
+2. `initialize`
+3. `list_tools`
+4. `call_tool`
+5. `jwt` y `scope_guard`
+
+### Comandos copy/paste
+
+1. Stream base de eventos estructurados:
+
+```bash
+./scripts/mcp_log_filters.sh tail | ./scripts/mcp_log_filters.sh parse
+```
+
+2. Solo etapa transporte/auth HTTP:
+
+```bash
+./scripts/mcp_log_filters.sh tail | ./scripts/mcp_log_filters.sh stage transport
+```
+
+3. Handshake `initialize`:
+
+```bash
+./scripts/mcp_log_filters.sh tail | ./scripts/mcp_log_filters.sh stage initialize
+```
+
+4. `list_tools` + posibles drift de tools/scopes:
+
+```bash
+./scripts/mcp_log_filters.sh tail | ./scripts/mcp_log_filters.sh stage list_tools
+```
+
+5. `call_tool` en tiempo real:
+
+```bash
+./scripts/mcp_log_filters.sh tail | ./scripts/mcp_log_filters.sh stage call_tool
+```
+
+6. OAuth correcto pero `list_tools` falla:
+
+```bash
+./scripts/mcp_log_filters.sh tail \
+  | ./scripts/mcp_log_filters.sh failures \
+  | jq -c 'select(.event_name=="mcp_list_tools_failed" or .event_name=="mcp_contract_drift_detected")'
+```
+
+7. Token válido pero scope insuficiente:
+
+```bash
+./scripts/mcp_log_filters.sh tail \
+  | ./scripts/mcp_log_filters.sh failures \
+  | jq -c 'select(.event_name=="mcp_auth_scope_denied" or .failure_classification=="scope_denied")'
+```
+
+8. `initialize` correcto pero `call_tool` rompe:
+
+```bash
+./scripts/mcp_log_filters.sh tail \
+  | ./scripts/mcp_log_filters.sh parse \
+  | jq -c 'select(.event_name=="mcp_handshake_initialize_succeeded" or .event_name=="mcp_call_tool_failed")'
+```
+
+9. Endpoint responde pero falta `mcp-session-id`:
+
+```bash
+./scripts/mcp_log_filters.sh tail \
+  | ./scripts/mcp_log_filters.sh stage drift \
+  | jq -c 'select(.reason=="missing_mcp_session_id")'
+```
+
+10. Resumen agregado de incidente:
+
+```bash
+./scripts/mcp_log_filters.sh tail | ./scripts/mcp_log_filters.sh summary
+```
+
+### Correlación por clave
+
+Por request:
+
+```bash
+./scripts/mcp_log_filters.sh tail | ./scripts/mcp_log_filters.sh request <request_id>
+```
+
+Por sesión MCP:
+
+```bash
+./scripts/mcp_log_filters.sh tail | ./scripts/mcp_log_filters.sh session <mcp_session_id>
+```
+
+Por tool:
+
+```bash
+./scripts/mcp_log_filters.sh tail | ./scripts/mcp_log_filters.sh tool <tool_name>
+```
+
+### Validación rápida local con fixture
+
+```bash
+bash -n scripts/mcp_log_filters.sh
+cat scripts/mcp_log_filters_fixture.log | ./scripts/mcp_log_filters.sh parse
+cat scripts/mcp_log_filters_fixture.log | ./scripts/mcp_log_filters.sh stage call_tool
+cat scripts/mcp_log_filters_fixture.log | ./scripts/mcp_log_filters.sh summary
+```

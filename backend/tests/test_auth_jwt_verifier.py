@@ -27,6 +27,7 @@ def test_auth0_verifier_maps_claims_to_access_token() -> None:
         issuer="https://tenant.auth0.com/",
         audience="https://wis-context-sync-api",
         jwks_url="https://tenant.auth0.com/.well-known/jwks.json",
+        resource_id="https://mcp.resource.id",
     )
 
     claims = {
@@ -43,7 +44,6 @@ def test_auth0_verifier_maps_claims_to_access_token() -> None:
 
     assert token is not None
     assert token.client_id == "auth0|user-123"
-    assert token.resource == "https://wis-context-sync-api"
+    assert token.resource == "https://mcp.resource.id"
     assert sorted(token.scopes) == ["wis.context.read", "wis.context.write"]
     assert token.expires_at == 4102444800
-

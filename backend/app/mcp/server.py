@@ -4,16 +4,26 @@ import uuid
 from typing import Any
 from typing import cast
 
+import mcp.types as mcp_types
 from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.server.auth.routes import build_resource_metadata_url, cors_middleware
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from sqlalchemy import select
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+from starlette.routing import Route
 
 from app.audit.service import record_publish_audit
 from app.audit.write_audit_service import get_existing_request_audit, record_write_audit
 from app.auth.jwt_verifier import Auth0JWTTokenVerifier, decode_unverified_claims
 from app.core.config import Settings, get_settings
 from app.db.session import SessionLocal
+from app.mcp.observability import MCPTransportObservabilityASGI
+from app.mcp.observability import build_mcp_logger
+from app.mcp.observability import sanitize_auth_claims
+from app.mcp.observability import sanitize_structure
 from app.models.context_item import ContextItem
 from app.models.context_snapshot import ContextSnapshot
 from app.models.event import Event
@@ -44,6 +54,7 @@ from app.schemas.event import EventCreate
 from app.schemas.snapshot import ManualSnapshotCreate
 
 settings: Settings = get_settings()
+mcp_logger = build_mcp_logger(settings)
 
 TOOL_SCOPES: dict[str, list[str]] = {
     "get_active_task": ["wis.context.read"],
@@ -65,9 +76,76 @@ TOOL_SCOPES: dict[str, list[str]] = {
     "apply_sync_batch": ["wis.context.sync.write"],
 }
 
+RESOURCE_SCOPES_SUPPORTED = [
+    "wis.context.read",
+    "wis.context.sync.read",
+    "wis.context.write",
+    "wis.context.sync.write",
+]
+
 
 def _auth_runtime_enabled() -> bool:
     return settings.mcp_auth_enabled and not settings.mcp_auth_bypass_local
+
+
+def _is_write_tool(scopes: list[str]) -> bool:
+    return any(scope.endswith(".write") for scope in scopes)
+
+
+def _tool_security_schemes(scopes: list[str]) -> list[dict[str, Any]]:
+    return [{"type": "oauth2", "scopes": scopes}]
+
+
+def _resource_metadata_url() -> str | None:
+    if not _auth_runtime_enabled() or not settings.mcp_public_base_url:
+        return None
+    try:
+        return str(build_resource_metadata_url(settings.mcp_public_base_url))
+    except Exception:  # pragma: no cover - defensive fallback
+        return None
+
+
+def _effective_resource_id() -> str | None:
+    return settings.effective_mcp_resource_id
+
+
+def _protected_resource_metadata_payload() -> dict[str, Any]:
+    issuer = settings.mcp_auth0_issuer.rstrip("/") + "/" if settings.mcp_auth0_issuer else None
+    return {
+        "resource": _effective_resource_id(),
+        "authorization_servers": [issuer] if issuer else [],
+        "scopes_supported": RESOURCE_SCOPES_SUPPORTED,
+        "bearer_methods_supported": ["header"],
+    }
+
+
+async def _protected_resource_metadata_endpoint(_request: Request) -> Response:
+    return JSONResponse(_protected_resource_metadata_payload())
+
+
+def _build_www_authenticate(
+    *,
+    error: str,
+    description: str,
+    required_scopes: list[str] | None = None,
+) -> str:
+    parts = [f'error="{error}"', f'error_description="{description}"']
+    if required_scopes:
+        parts.append(f'scope="{" ".join(required_scopes)}"')
+    metadata_url = _resource_metadata_url()
+    if metadata_url:
+        parts.append(f'resource_metadata="{metadata_url}"')
+    return f"Bearer {', '.join(parts)}"
+
+
+def _auth_error_meta(*, error: str, description: str, required_scopes: list[str] | None = None) -> dict[str, Any]:
+    return {
+        "mcp/www_authenticate": _build_www_authenticate(
+            error=error,
+            description=description,
+            required_scopes=required_scopes,
+        ),
+    }
 
 
 def _build_mcp_server() -> FastMCP:
@@ -80,15 +158,20 @@ def _build_mcp_server() -> FastMCP:
             raise RuntimeError(
                 "MCP auth is enabled but MCP_AUTH0_ISSUER/MCP_AUTH0_AUDIENCE/MCP_AUTH0_JWKS_URL are not fully configured.",
             )
+        if not settings.mcp_public_base_url:
+            raise RuntimeError(
+                "MCP auth is enabled but MCP_PUBLIC_BASE_URL is not configured.",
+            )
         auth_settings = AuthSettings(
             issuer_url=settings.mcp_auth0_issuer,
-            resource_server_url=settings.mcp_auth0_audience,
+            resource_server_url=settings.mcp_public_base_url,
             required_scopes=["wis.context.read"],
         )
         token_verifier = Auth0JWTTokenVerifier(
             issuer=settings.mcp_auth0_issuer,
             audience=settings.mcp_auth0_audience,
             jwks_url=settings.mcp_auth0_jwks_url,
+            resource_id=_effective_resource_id(),
             clock_skew_seconds=max(settings.mcp_auth_clock_skew_seconds, 0),
         )
         instructions = "OAuth-protected context server with read/write planes and scope guards."
@@ -105,6 +188,18 @@ def _build_mcp_server() -> FastMCP:
 
 
 mcp = _build_mcp_server()
+if settings.has_legacy_resource_id_divergence:
+    mcp_logger.emit(
+        "mcp_auth_legacy_resource_id_divergence",
+        level="WARNING",
+        auth_stage="startup",
+        mcp_resource_id=settings.mcp_resource_id,
+        mcp_auth0_audience=settings.mcp_auth0_audience,
+        message=(
+            "MCP_RESOURCE_ID differs from MCP_AUTH0_AUDIENCE; keeping legacy-compatible mode "
+            "without blocking startup."
+        ),
+    )
 
 
 def _task_to_dict(task: Any) -> dict[str, Any]:
@@ -188,25 +283,111 @@ def _extract_actor_context() -> dict[str, Any]:
     }
 
 
+def _runtime_request_context_fields() -> dict[str, Any]:
+    try:
+        ctx = mcp.get_context()
+        request_context = ctx.request_context
+    except Exception:
+        return {}
+
+    request = getattr(request_context, "request", None)
+    headers = getattr(request, "headers", None) if request is not None else None
+    mcp_session_id = headers.get("mcp-session-id") if headers else None
+    user_agent = headers.get("user-agent") if headers else None
+    path = request.url.path if request is not None else None
+    method = request.method if request is not None else None
+
+    return {
+        "request_id": str(ctx.request_id),
+        "mcp_session_id": mcp_session_id,
+        "user_agent": user_agent,
+        "path": path,
+        "method": method,
+    }
+
+
+def _auth_context_fields(token: Any | None) -> dict[str, Any]:
+    if token is None:
+        return {
+            "auth_present": False,
+            "scopes": [],
+            "issuer": None,
+            "audience": None,
+            "sub": None,
+            "azp": None,
+        }
+
+    claims = decode_unverified_claims(token.token)
+    sanitized_claims = sanitize_auth_claims(claims)
+    return {
+        "auth_present": True,
+        "scopes": sorted(set(token.scopes or [])),
+        "issuer": sanitized_claims.get("iss"),
+        "audience": sanitized_claims.get("aud"),
+        "sub": sanitized_claims.get("sub"),
+        "azp": sanitized_claims.get("azp") or sanitized_claims.get("client_id"),
+    }
+
+
 def _scope_guard(tool_name: str) -> dict[str, Any] | None:
     required = TOOL_SCOPES.get(tool_name, [])
     if not required:
         return None
     # For direct local invocations (tests/scripts) bypass can be explicit.
     if settings.mcp_auth_bypass_local:
+        mcp_logger.emit(
+            "mcp_scope_guard_evaluated",
+            tool_name=tool_name,
+            required_scopes=required,
+            present_scopes=[],
+            missing_scopes=[],
+            outcome="allowed",
+            auth_stage="tool_runtime",
+            bypass_local=True,
+            **_runtime_request_context_fields(),
+        )
         return None
     token = get_access_token()
     if token is None:
+        mcp_logger.emit(
+            "mcp_auth_missing",
+            level="WARNING",
+            tool_name=tool_name,
+            required_scopes=required,
+            present_scopes=[],
+            missing_scopes=required,
+            outcome="unauthorized",
+            auth_stage="tool_runtime",
+            **_runtime_request_context_fields(),
+            **_auth_context_fields(token),
+        )
         return {
             "status": "unauthorized",
             "error": "invalid_token",
             "message": "Authentication required for this tool.",
             "required_scopes": required,
             "present_scopes": [],
+            "_meta": _auth_error_meta(
+                error="invalid_token",
+                description="Authentication required for this tool.",
+                required_scopes=required,
+            ),
         }
     present = sorted(set(token.scopes))
     missing = [scope for scope in required if scope not in present]
     if missing:
+        mcp_logger.emit(
+            "mcp_auth_scope_denied",
+            level="WARNING",
+            tool_name=tool_name,
+            required_scopes=required,
+            present_scopes=present,
+            missing_scopes=missing,
+            outcome="forbidden",
+            auth_stage="tool_runtime",
+            **_runtime_request_context_fields(),
+            **_auth_context_fields(token),
+        )
         return {
             "status": "forbidden",
             "error": "insufficient_scope",
@@ -214,7 +395,23 @@ def _scope_guard(tool_name: str) -> dict[str, Any] | None:
             "required_scopes": required,
             "present_scopes": present,
             "missing_scopes": missing,
+            "_meta": _auth_error_meta(
+                error="insufficient_scope",
+                description="Token does not include required scopes for this tool.",
+                required_scopes=required,
+            ),
         }
+    mcp_logger.emit(
+        "mcp_scope_guard_evaluated",
+        tool_name=tool_name,
+        required_scopes=required,
+        present_scopes=present,
+        missing_scopes=[],
+        outcome="allowed",
+        auth_stage="tool_runtime",
+        **_runtime_request_context_fields(),
+        **_auth_context_fields(token),
+    )
     return None
 
 
@@ -1577,5 +1774,259 @@ def apply_sync_batch(
         db.close()
 
 
+def _apply_tool_auth_metadata() -> None:
+    tool_manager = getattr(mcp, "_tool_manager", None)
+    if tool_manager is None:
+        return
+
+    tools = getattr(tool_manager, "_tools", None)
+    if not isinstance(tools, dict):
+        return
+
+    for tool_name, tool in tools.items():
+        scopes = TOOL_SCOPES.get(tool_name, [])
+        if not scopes:
+            continue
+
+        # Keep MCP tool metadata explicit so clients can discover auth requirements
+        # from list_tools without probing protected calls.
+        tool_meta = dict(tool.meta or {})
+        tool_meta["securitySchemes"] = _tool_security_schemes(scopes)
+        tool.meta = tool_meta
+
+        if tool.annotations is None:
+            tool.annotations = ToolAnnotations()
+        tool.annotations.readOnlyHint = not _is_write_tool(scopes)
+
+
+def _instrument_runtime_handlers() -> None:
+    lowlevel_server = getattr(mcp, "_mcp_server", None)
+    if lowlevel_server is None:
+        return
+
+    handlers = getattr(lowlevel_server, "request_handlers", None)
+    if not isinstance(handlers, dict):
+        return
+
+    list_tools_handler = handlers.get(mcp_types.ListToolsRequest)
+    if callable(list_tools_handler) and not getattr(list_tools_handler, "_mcp_observed", False):
+
+        async def observed_list_tools(req: mcp_types.ListToolsRequest) -> mcp_types.ServerResult:
+            context_fields = _runtime_request_context_fields()
+            mcp_logger.emit(
+                "mcp_list_tools_started",
+                auth_stage="tool_runtime",
+                **context_fields,
+            )
+            try:
+                result = await list_tools_handler(req)
+            except Exception as exc:  # noqa: BLE001
+                mcp_logger.emit(
+                    "mcp_list_tools_failed",
+                    level="ERROR",
+                    auth_stage="tool_runtime",
+                    exception={"class": exc.__class__.__name__, "message": str(exc)},
+                    **context_fields,
+                )
+                raise
+
+            root = getattr(result, "root", None)
+            if not isinstance(root, mcp_types.ListToolsResult):
+                mcp_logger.emit(
+                    "mcp_list_tools_failed",
+                    level="ERROR",
+                    auth_stage="tool_runtime",
+                    reason="invalid_result_shape",
+                    result_type=type(root).__name__,
+                    **context_fields,
+                )
+                return result
+
+            published_tools = [tool.name for tool in root.tools]
+            known_tools = set(TOOL_SCOPES.keys())
+            published_set = set(published_tools)
+            unknown_published_tools = sorted(published_set - known_tools)
+            missing_from_published = sorted(known_tools - published_set)
+            read_tools_total = sum(
+                1 for tool_name in published_tools if tool_name in TOOL_SCOPES and not _is_write_tool(TOOL_SCOPES[tool_name])
+            )
+            write_tools_total = sum(
+                1 for tool_name in published_tools if tool_name in TOOL_SCOPES and _is_write_tool(TOOL_SCOPES[tool_name])
+            )
+
+            mcp_logger.emit(
+                "mcp_list_tools_succeeded",
+                auth_stage="tool_runtime",
+                total_tools=len(published_tools),
+                tool_names=published_tools,
+                read_tools_total=read_tools_total,
+                write_tools_total=write_tools_total,
+                unknown_published_tools=unknown_published_tools,
+                missing_from_published=missing_from_published,
+                **context_fields,
+            )
+
+            if unknown_published_tools or missing_from_published:
+                mcp_logger.emit(
+                    "mcp_contract_drift_detected",
+                    level="WARNING",
+                    auth_stage="tool_runtime",
+                    reason="tool_scope_drift",
+                    unknown_published_tools=unknown_published_tools,
+                    missing_from_published=missing_from_published,
+                    **context_fields,
+                )
+
+            return result
+
+        observed_list_tools._mcp_observed = True  # type: ignore[attr-defined]
+        handlers[mcp_types.ListToolsRequest] = observed_list_tools
+
+    call_tool_handler = handlers.get(mcp_types.CallToolRequest)
+    if callable(call_tool_handler) and not getattr(call_tool_handler, "_mcp_observed", False):
+
+        async def observed_call_tool(req: mcp_types.CallToolRequest) -> mcp_types.ServerResult:
+            tool_name = req.params.name
+            arguments = req.params.arguments or {}
+            context_fields = _runtime_request_context_fields()
+            started_payload = {
+                "tool_name": tool_name,
+                "auth_stage": "tool_runtime",
+                **context_fields,
+            }
+            if mcp_logger.log_payloads:
+                started_payload["arguments"] = sanitize_structure(arguments)
+
+            mcp_logger.emit(
+                "mcp_call_tool_started",
+                **started_payload,
+            )
+
+            try:
+                result = await call_tool_handler(req)
+            except Exception as exc:  # noqa: BLE001
+                mcp_logger.emit(
+                    "mcp_call_tool_failed",
+                    level="ERROR",
+                    tool_name=tool_name,
+                    auth_stage="tool_runtime",
+                    failure_classification="tool_exception",
+                    exception={"class": exc.__class__.__name__, "message": str(exc)},
+                    **context_fields,
+                )
+                raise
+
+            root = getattr(result, "root", None)
+            if isinstance(root, mcp_types.CallToolResult):
+                structured = root.structuredContent
+                structured_is_dict = isinstance(structured, dict)
+                status = structured.get("status") if structured_is_dict else None
+                error = structured.get("error") if structured_is_dict else None
+                classification = "ok"
+                event_name = "mcp_call_tool_succeeded"
+                log_level = "INFO"
+
+                if root.isError:
+                    classification = "unexpected_error"
+                    event_name = "mcp_call_tool_failed"
+                    log_level = "ERROR"
+                elif not structured_is_dict:
+                    classification = "invalid_structured_content"
+                    event_name = "mcp_call_tool_failed"
+                    log_level = "ERROR"
+                elif status == "forbidden" and error == "insufficient_scope":
+                    classification = "scope_denied"
+                    event_name = "mcp_call_tool_failed"
+                    log_level = "WARNING"
+                elif status in {"invalid_request"}:
+                    classification = "schema_validation_error"
+                    event_name = "mcp_call_tool_failed"
+                    log_level = "WARNING"
+                elif status in {"unauthorized", "forbidden"}:
+                    classification = "scope_denied"
+                    event_name = "mcp_call_tool_failed"
+                    log_level = "WARNING"
+                elif status == "error":
+                    classification = "tool_exception"
+                    event_name = "mcp_call_tool_failed"
+                    log_level = "ERROR"
+
+                mcp_logger.emit(
+                    event_name,
+                    level=log_level,
+                    tool_name=tool_name,
+                    auth_stage="tool_runtime",
+                    is_error=root.isError,
+                    structured_content_type=type(structured).__name__,
+                    status=status,
+                    error=error,
+                    failure_classification=classification,
+                    **context_fields,
+                )
+                return result
+
+            if isinstance(root, mcp_types.ErrorData):
+                mcp_logger.emit(
+                    "mcp_call_tool_failed",
+                    level="ERROR",
+                    tool_name=tool_name,
+                    auth_stage="tool_runtime",
+                    failure_classification="unexpected_error",
+                    error_code=root.code,
+                    error_message=root.message,
+                    **context_fields,
+                )
+                return result
+
+            mcp_logger.emit(
+                "mcp_call_tool_failed",
+                level="ERROR",
+                tool_name=tool_name,
+                auth_stage="tool_runtime",
+                failure_classification="unexpected_error",
+                result_type=type(root).__name__,
+                **context_fields,
+            )
+            return result
+
+        observed_call_tool._mcp_observed = True  # type: ignore[attr-defined]
+        handlers[mcp_types.CallToolRequest] = observed_call_tool
+
+
+def build_observed_streamable_http_app(target_mcp: FastMCP | None = None) -> MCPTransportObservabilityASGI:
+    resolved_mcp = target_mcp or mcp
+    base_app = resolved_mcp.streamable_http_app()
+    protected_resource_path = "/.well-known/oauth-protected-resource"
+    route_endpoint = cors_middleware(_protected_resource_metadata_endpoint, ["GET", "OPTIONS"])
+    custom_route = Route(
+        protected_resource_path,
+        endpoint=route_endpoint,
+        methods=["GET", "OPTIONS"],
+    )
+    existing_routes = getattr(base_app.router, "routes", [])
+    base_app.router.routes = [
+        route for route in existing_routes if getattr(route, "path", None) != protected_resource_path
+    ]
+    base_app.router.routes.insert(0, custom_route)
+
+    return MCPTransportObservabilityASGI(
+        base_app,
+        logger=mcp_logger,
+        streamable_path=resolved_mcp.settings.streamable_http_path,
+        allowed_origins=settings.mcp_allowed_origins_list,
+    )
+
+
+_apply_tool_auth_metadata()
+_instrument_runtime_handlers()
+
+
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
+    import uvicorn
+
+    uvicorn.run(
+        build_observed_streamable_http_app(),
+        host=mcp.settings.host,
+        port=mcp.settings.port,
+        log_level=mcp.settings.log_level.lower(),
+    )
