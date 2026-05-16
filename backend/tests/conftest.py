@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 
 import pytest
+import socket
+import urllib.parse
 from sqlalchemy import select
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -27,6 +29,31 @@ def db():
         yield session
     finally:
         session.close()
+
+
+def _server_reachable(base_url: str, timeout: float = 2.0) -> bool:
+    """Devuelve True si host:port del base_url acepta conexión TCP."""
+    parsed = urllib.parse.urlparse(base_url)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "e2e: tests de integración contra servidor real (requiere servidor en marcha)")
+
+
+@pytest.fixture(autouse=True)
+def skip_e2e_if_server_down(request: pytest.FixtureRequest) -> None:
+    """Auto-skip tests marcados con @pytest.mark.e2e si el servidor no es accesible."""
+    if request.node.get_closest_marker("e2e"):
+        base_url = os.environ.get("MCP_E2E_BASE_URL", "http://localhost:8002")
+        if not _server_reachable(base_url):
+            pytest.skip(f"Servidor E2E no accesible: {base_url}")
 
 
 @pytest.fixture()
