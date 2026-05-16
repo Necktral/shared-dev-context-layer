@@ -30,6 +30,12 @@ Este directorio concentra la fuente de verdad documental para el control plane (
   - `docs/context/BRANCH-CLOSURE-TECHNICAL-VERDICT.md`
 - Debt register:
   - `docs/context/TECHNICAL-DEBT-REGISTER.md`
+- Architecture/ADR:
+  - `docs/context/ARCHITECTURE_V2_RELIABILITY.md`
+  - `docs/context/ADR-EXECUTION-STATE-MACHINE.md`
+  - `docs/context/ADR-IDEMPOTENCY-AND-LOCKING.md`
+- Runbook:
+  - `docs/context/RUNBOOK-RECOVERY-AND-REPLAY.md`
 
 Regla: documentos de `campaign` o `debt register` no sustituyen contrato activo.
 
@@ -51,8 +57,9 @@ No hay fallback silencioso entre modos.
 5. `docs/context/LOCAL_PRIVATE-EVOLUTION-POLICY.md`
 6. `docs/context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
 7. `docs/context/WIS_VSCODE_EXTENSION_ARCHITECTURE.md`
-8. `docs/context/BRANCH-CLOSURE-TECHNICAL-VERDICT.md`
-9. `docs/mcp/README.md`
+8. `docs/context/ARCHITECTURE_V2_RELIABILITY.md`
+9. `docs/context/BRANCH-CLOSURE-TECHNICAL-VERDICT.md`
+10. `docs/mcp/README.md`
 
 ## Evidencia clave
 

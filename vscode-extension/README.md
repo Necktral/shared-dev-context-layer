@@ -74,6 +74,11 @@ Los playbooks resueltos para post-review se exponen de forma aditiva en `result.
 - `wisContextSync.localDb.password` (default: `""`; si vacío usa `SecretStorage`)
 - `wisContextSync.localDb.schema` (default: `local_private`)
 - `wisContextSync.localDb.ssl` (default: `false`)
+- `wisContextSync.localIndex.excludeDirs`
+- `wisContextSync.localIndex.includeExtensions`
+- `wisContextSync.localIndex.maxFileBytes` (default: `2097152`)
+- `wisContextSync.localIndex.chunkSizeChars` (default: `1200`)
+- `wisContextSync.localIndex.chunkOverlapChars` (default: `120`)
 
 Token de autenticación se guarda en `SecretStorage` (no en settings de texto plano) usando `WIS: Configure Authentication`.
 Password de PostgreSQL para `local_private` puede guardarse con `WIS: Local Configure DB Password` (`wisContextSync.localDbPassword`).
