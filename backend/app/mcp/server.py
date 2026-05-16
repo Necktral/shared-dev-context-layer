@@ -2009,12 +2009,25 @@ def build_observed_streamable_http_app(target_mcp: FastMCP | None = None) -> MCP
     ]
     base_app.router.routes.insert(0, custom_route)
 
-    return MCPTransportObservabilityASGI(
+    app = MCPTransportObservabilityASGI(
         base_app,
         logger=mcp_logger,
         streamable_path=resolved_mcp.settings.streamable_http_path,
         allowed_origins=settings.mcp_allowed_origins_list,
     )
+
+    if _auth_runtime_enabled() and not settings.mcp_allowed_origins_list:
+        mcp_logger.emit(
+            "mcp_origin_guard_permissive",
+            level="WARNING",
+            auth_stage="startup",
+            message=(
+                "MCP_ALLOWED_ORIGINS is not configured — Origin guard is permissive "
+                "(all origins allowed). Set MCP_ALLOWED_ORIGINS for production."
+            ),
+        )
+
+    return app
 
 
 _apply_tool_auth_metadata()

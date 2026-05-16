@@ -2,12 +2,23 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import jwt as pyjwt
+
 from app.auth.jwt_verifier import (
     Auth0JWTTokenVerifier,
     decode_unverified_claims,
     extract_scopes_from_claims,
     normalize_scopes,
 )
+
+
+def _make_verifier() -> Auth0JWTTokenVerifier:
+    return Auth0JWTTokenVerifier(
+        issuer="https://necktral.us.auth0.com/",
+        audience="https://wis-context-sync-read-api",
+        jwks_url="https://necktral.us.auth0.com/.well-known/jwks.json",
+        resource_id="https://wis-context-sync-read-api",
+    )
 
 
 def test_normalize_scopes_and_extractors() -> None:
@@ -47,3 +58,55 @@ def test_auth0_verifier_maps_claims_to_access_token() -> None:
     assert token.resource == "https://mcp.resource.id"
     assert sorted(token.scopes) == ["wis.context.read", "wis.context.write"]
     assert token.expires_at == 4102444800
+
+
+# ---------------------------------------------------------------------------
+# Task 7 — token con aud incorrecta → verifier devuelve None
+# ---------------------------------------------------------------------------
+
+def test_verifier_returns_none_on_invalid_audience() -> None:
+    """InvalidAudienceError from PyJWT causes verify_token to return None."""
+    verifier = _make_verifier()
+
+    with patch.object(verifier.jwks_client, "get_signing_key_from_jwt", return_value=SimpleNamespace(key="fake")):
+        with patch("app.auth.jwt_verifier.jwt.decode", side_effect=pyjwt.exceptions.InvalidAudienceError("wrong aud")):
+            result = asyncio.run(verifier.verify_token("header.payload.signature"))
+
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Task 8 — token con iss incorrecto → verifier devuelve None
+# ---------------------------------------------------------------------------
+
+def test_verifier_returns_none_on_invalid_issuer() -> None:
+    """InvalidIssuerError from PyJWT causes verify_token to return None."""
+    verifier = _make_verifier()
+
+    with patch.object(verifier.jwks_client, "get_signing_key_from_jwt", return_value=SimpleNamespace(key="fake")):
+        with patch("app.auth.jwt_verifier.jwt.decode", side_effect=pyjwt.exceptions.InvalidIssuerError("wrong iss")):
+            result = asyncio.run(verifier.verify_token("header.payload.signature"))
+
+    assert result is None
+
+
+def test_verifier_returns_none_on_expired_token() -> None:
+    """ExpiredSignatureError from PyJWT causes verify_token to return None."""
+    verifier = _make_verifier()
+
+    with patch.object(verifier.jwks_client, "get_signing_key_from_jwt", return_value=SimpleNamespace(key="fake")):
+        with patch("app.auth.jwt_verifier.jwt.decode", side_effect=pyjwt.exceptions.ExpiredSignatureError("expired")):
+            result = asyncio.run(verifier.verify_token("header.payload.signature"))
+
+    assert result is None
+
+
+def test_verifier_returns_none_on_invalid_signature() -> None:
+    """InvalidSignatureError from PyJWT causes verify_token to return None."""
+    verifier = _make_verifier()
+
+    with patch.object(verifier.jwks_client, "get_signing_key_from_jwt", return_value=SimpleNamespace(key="fake")):
+        with patch("app.auth.jwt_verifier.jwt.decode", side_effect=pyjwt.exceptions.InvalidSignatureError("bad sig")):
+            result = asyncio.run(verifier.verify_token("header.payload.signature"))
+
+    assert result is None
