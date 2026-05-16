@@ -21,10 +21,10 @@ from mcp.server.fastmcp import FastMCP
 __version__ = "0.1.0"
 
 mcp = FastMCP(
-    name="Shared Dev Context Layer MCP",
+    name="Standalone MCP Example (lab/demo only)",
     instructions=(
-        "Lightweight MCP server for the Shared Dev Context Layer. "
-        "Provides utility tools for development context and diagnostics."
+        "Demo-only MCP server. No database, no OAuth, no audit trail. "
+        "For the official project MCP see backend/app/mcp/server.py."
     ),
 )
 
