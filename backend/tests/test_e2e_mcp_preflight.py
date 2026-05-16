@@ -21,10 +21,13 @@ Con token Auth0 real para P4:
 """
 from __future__ import annotations
 
+import json
 import os
+import urllib.error
+import urllib.request
+from typing import Any
 
 import pytest
-import requests
 
 # ---------------------------------------------------------------------------
 # Configuración
@@ -47,25 +50,53 @@ pytestmark = pytest.mark.e2e
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _post_mcp_initialize(token: str | None = None, timeout: int = 10) -> requests.Response:
-    headers: dict[str, str] = {"Content-Type": "application/json"}
+class _Response:
+    """Wrapper mínimo sobre urllib para presentar interfaz similar a requests."""
+
+    def __init__(self, status_code: int, headers: dict[str, str], body: bytes) -> None:
+        self.status_code = status_code
+        self.headers = headers
+        self.body = body
+
+    @property
+    def text(self) -> str:
+        return self.body.decode("utf-8", errors="replace")
+
+    def json(self) -> Any:
+        return json.loads(self.body)
+
+
+def _http_get(url: str, token: str | None = None, timeout: int = 10) -> _Response:
+    req = urllib.request.Request(url, method="GET")
     if token:
-        headers["Authorization"] = f"Bearer {token}"
-    return requests.post(
-        f"{_BASE_URL}/mcp",
-        json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "e2e-preflight", "version": "1.0"},
-            },
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return _Response(resp.status, dict(resp.headers), resp.read())
+    except urllib.error.HTTPError as exc:
+        return _Response(exc.code, dict(exc.headers), exc.read())
+
+
+def _http_post_mcp_initialize(token: str | None = None, timeout: int = 10) -> _Response:
+    payload = json.dumps({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "e2e-preflight", "version": "1.0"},
         },
-        headers=headers,
-        timeout=timeout,
-    )
+    }).encode()
+    req = urllib.request.Request(f"{_BASE_URL}/mcp", data=payload, method="POST")
+    req.add_header("Content-Type", "application/json")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return _Response(resp.status, dict(resp.headers), resp.read())
+    except urllib.error.HTTPError as exc:
+        return _Response(exc.code, dict(exc.headers), exc.read())
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +105,7 @@ def _post_mcp_initialize(token: str | None = None, timeout: int = 10) -> request
 
 def test_oauth_protected_resource_metadata() -> None:
     """El endpoint de resource metadata devuelve payload correcto."""
-    resp = requests.get(f"{_BASE_URL}/.well-known/oauth-protected-resource", timeout=10)
+    resp = _http_get(f"{_BASE_URL}/.well-known/oauth-protected-resource")
     assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
 
     data = resp.json()
@@ -95,10 +126,10 @@ def test_oauth_protected_resource_metadata() -> None:
 
 def test_get_mcp_without_token_returns_401() -> None:
     """GET /mcp sin Authorization → 401 con WWW-Authenticate Bearer."""
-    resp = requests.get(f"{_BASE_URL}/mcp", timeout=10)
+    resp = _http_get(f"{_BASE_URL}/mcp")
     assert resp.status_code == 401, f"Expected 401, got {resp.status_code}"
 
-    www_auth = resp.headers.get("www-authenticate", "")
+    www_auth = resp.headers.get("www-authenticate", resp.headers.get("Www-Authenticate", ""))
     assert "Bearer" in www_auth, f"WWW-Authenticate no contiene Bearer: {www_auth}"
     assert 'error="invalid_token"' in www_auth, f"www-authenticate: {www_auth}"
     assert _RESOURCE_METADATA_URL in www_auth, (
@@ -112,10 +143,10 @@ def test_get_mcp_without_token_returns_401() -> None:
 
 def test_post_mcp_initialize_without_token_returns_401() -> None:
     """POST /mcp initialize sin token → 401 con WWW-Authenticate Bearer."""
-    resp = _post_mcp_initialize(token=None)
+    resp = _http_post_mcp_initialize(token=None)
     assert resp.status_code == 401, f"Expected 401, got {resp.status_code}: {resp.text}"
 
-    www_auth = resp.headers.get("www-authenticate", "")
+    www_auth = resp.headers.get("www-authenticate", resp.headers.get("Www-Authenticate", ""))
     assert "Bearer" in www_auth, f"WWW-Authenticate no contiene Bearer: {www_auth}"
     assert 'error="invalid_token"' in www_auth, f"www-authenticate: {www_auth}"
     assert _RESOURCE_METADATA_URL in www_auth, (
@@ -130,11 +161,10 @@ def test_post_mcp_initialize_without_token_returns_401() -> None:
 @pytest.mark.skipif(not _E2E_TOKEN, reason="MCP_E2E_TOKEN no definido; test de token real omitido")
 def test_post_mcp_initialize_with_real_auth0_token() -> None:
     """POST /mcp initialize con token Auth0 real → servidor responde (no 401/403)."""
-    resp = _post_mcp_initialize(token=_E2E_TOKEN)
+    resp = _http_post_mcp_initialize(token=_E2E_TOKEN)
     assert resp.status_code not in (401, 403), (
         f"Token rechazado ({resp.status_code}): {resp.text[:300]}"
     )
-    # El servidor devuelve 200 o inicia sesión SSE; cualquiera que no sea 4xx es válido
     assert resp.status_code < 500, f"Error de servidor ({resp.status_code}): {resp.text[:300]}"
 
 
