@@ -265,8 +265,8 @@ def upsert_context_item(
             created_by=actor,
             updated_by=actor,
         )
-        _sync_labels_table(db, workspace_id=workspace_id, item_id=created.id, labels=normalized_labels, actor=actor)
         db.add(created)
+        _sync_labels_table(db, workspace_id=workspace_id, item_id=created.id, labels=normalized_labels, actor=actor)
         db.commit()
         db.refresh(created)
         return {"result": "created", "before": None, "after": context_item_to_dict(created)}
