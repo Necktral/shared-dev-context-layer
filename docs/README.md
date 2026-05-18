@@ -30,6 +30,8 @@ Este directorio concentra la fuente de verdad documental para el control plane (
   - `docs/context/BRANCH-CLOSURE-TECHNICAL-VERDICT.md`
 - Debt register:
   - `docs/context/TECHNICAL-DEBT-REGISTER.md`
+- Code analysis:
+  - `docs/context/SYSTEM_CODE_ANALYSIS.md`
 
 Regla: documentos de `campaign` o `debt register` no sustituyen contrato activo.
 
