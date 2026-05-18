@@ -4,6 +4,19 @@ import type { OperationalIssue, IssueSeverity } from "./errorModel";
 export type HandoffTarget = "codex" | "chatgpt" | "github_copilot" | "custom";
 export type HandoffDetailLevel = "compact" | "standard" | "full";
 
+export function getDefaultHandoffTargetLabel(target: HandoffTarget): string {
+  switch (target) {
+    case "codex":
+      return "Codex";
+    case "chatgpt":
+      return "ChatGPT";
+    case "github_copilot":
+      return "GitHub Copilot";
+    case "custom":
+      return "Custom Agent";
+  }
+}
+
 export interface HandoffIntent {
   user_intent: string;
   local_focus?: string[];

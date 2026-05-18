@@ -26,7 +26,7 @@ import {
   DEFAULT_RUNTIME_MODE,
   LOCAL_DB_PASSWORD_STORAGE_KEY,
 } from "./constants";
-import type { HandoffTarget } from "./domain/handoff";
+import { getDefaultHandoffTargetLabel, type HandoffTarget } from "./domain/handoff";
 import type { RuntimeMode } from "./domain/operationalContext";
 import type { FixtureScenario } from "./infrastructure/wis/fixtureWISGateway";
 import type { AuthMode, ResolvedAuthConfig } from "./infrastructure/wis/wisGateway";
@@ -98,17 +98,6 @@ function normalizeHandoffTarget(value: string | undefined): HandoffTarget {
     return value;
   }
   return DEFAULT_HANDOFF_TARGET as HandoffTarget;
-}
-
-function getDefaultHandoffTargetLabel(target: Exclude<HandoffTarget, "custom">): string {
-  switch (target) {
-    case "codex":
-      return "Codex";
-    case "chatgpt":
-      return "ChatGPT";
-    case "github_copilot":
-      return "GitHub Copilot";
-  }
 }
 
 export function getMcpEndpoint(): string {

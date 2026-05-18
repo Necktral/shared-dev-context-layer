@@ -1,5 +1,6 @@
 import type { OperationalContextEnvelope, ToolResult } from "../domain/operationalContext";
 import {
+  getDefaultHandoffTargetLabel,
   handoffIssue,
   type HandoffArtifact,
   type HandoffBuildResult,
@@ -140,17 +141,7 @@ function resolveTargetLabel(target: HandoffTarget, override?: string): string {
   if (trimmed) {
     return trimmed;
   }
-
-  switch (target) {
-    case "codex":
-      return "Codex";
-    case "chatgpt":
-      return "ChatGPT";
-    case "github_copilot":
-      return "GitHub Copilot";
-    case "custom":
-      return "Custom Agent";
-  }
+  return getDefaultHandoffTargetLabel(target);
 }
 
 function buildPrompts(artifact: HandoffArtifact): { ask: string; code: string } {
