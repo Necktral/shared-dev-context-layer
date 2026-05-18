@@ -17,7 +17,7 @@ La extension de VS Code no reemplaza la verdad canonica. Consume contexto de WIS
 3. `WIS: Configure Authentication` (cuando `authMode != none`)
 4. `WIS: Search Context` y comandos write (`Upsert/Append/Link/Set Labels/Archive/Apply Sync Batch`) en modo `dry_run|commit`
 
-`Load Operational Context` construye `OperationalContextEnvelope`. `Prepare Handoff` genera `HandoffArtifact` (Codex-first) en memoria. El plano MCP adicional permite operaciones read/write con `dry_run` y auditoría.
+`Load Operational Context` construye `OperationalContextEnvelope`. `Prepare Handoff` genera `HandoffArtifact` (estructura Codex-first) en memoria y ahora permite etiquetar el handoff para `codex`, `chatgpt`, `github_copilot` o un agente custom configurado. El plano MCP adicional permite operaciones read/write con `dry_run` y auditoría.
 
 ## Runtime modes
 

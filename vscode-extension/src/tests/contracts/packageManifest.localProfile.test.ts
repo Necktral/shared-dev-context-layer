@@ -40,6 +40,8 @@ test("package.json incluye comandos/settings de local_private sin remover comand
 
   const properties = manifest.contributes.configuration.properties;
   assert.ok(Object.hasOwn(properties, "wisContextSync.operationProfile"));
+  assert.ok(Object.hasOwn(properties, "wisContextSync.handoffTarget"));
+  assert.ok(Object.hasOwn(properties, "wisContextSync.customHandoffTargetName"));
   assert.ok(Object.hasOwn(properties, "wisContextSync.codexCliCommand"));
   assert.ok(Object.hasOwn(properties, "wisContextSync.localDb.enabled"));
   assert.ok(Object.hasOwn(properties, "wisContextSync.localDb.host"));

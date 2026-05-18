@@ -1,7 +1,7 @@
 import type { LoadState, TransportStatus } from "./loadState";
 import type { OperationalIssue, IssueSeverity } from "./errorModel";
 
-export type HandoffTarget = "codex" | "chatgpt" | "github_copilot";
+export type HandoffTarget = "codex" | "chatgpt" | "github_copilot" | "custom";
 export type HandoffDetailLevel = "compact" | "standard" | "full";
 
 export interface HandoffIntent {
@@ -38,6 +38,7 @@ export interface HandoffLocalFocus {
 export interface HandoffArtifactMeta {
   generated_at: string;
   target: HandoffTarget;
+  target_label: string;
   source_consumer: string;
   session_key: string;
   runtime_mode: "mcp" | "offline_fixture";

@@ -185,6 +185,22 @@
           "default": "phase3_control_plane",
           "markdownDescription": "Operational profile selector. Use local_private to enable local Codex baseline commands."
         },
+        "wisContextSync.handoffTarget": {
+          "type": "string",
+          "enum": [
+            "codex",
+            "chatgpt",
+            "github_copilot",
+            "custom"
+          ],
+          "default": "codex",
+          "markdownDescription": "Target used by `WIS: Prepare Handoff`. Use `custom` to label the handoff for another agent without changing the artifact structure."
+        },
+        "wisContextSync.customHandoffTargetName": {
+          "type": "string",
+          "default": "Custom Agent",
+          "markdownDescription": "Display label used when `wisContextSync.handoffTarget=custom`."
+        },
         "wisContextSync.codexCliCommand": {
           "type": "string",
           "default": "codex",

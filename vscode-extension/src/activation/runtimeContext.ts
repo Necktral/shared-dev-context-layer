@@ -1,5 +1,6 @@
 import type * as vscode from "vscode";
 import type { LoadContextConfig } from "../application/loadOperationalContextService";
+import type { ConfiguredHandoffTarget } from "../config";
 import { ContextCommandService } from "../application/contextCommandService";
 import { AuthManager } from "../auth/authManager";
 import { RuntimeAuthPolicy } from "../auth/runtimeAuthPolicy";
@@ -35,6 +36,7 @@ export interface ExtensionRuntimeContext {
   localOutputRenderer: LocalRuntimeOutputRenderer;
   localCommandService: LocalCommandService;
   doctorService: LocalDoctorService;
+  getConfiguredHandoffTarget: () => ConfiguredHandoffTarget;
   getCurrentConfig: () => LoadContextConfig;
   isDiagnosticMode: () => boolean;
   buildDiagnosticsSnapshot: (

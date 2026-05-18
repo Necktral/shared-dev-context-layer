@@ -121,7 +121,7 @@ Estados de carga soportados:
 - `partial`
 - `blocked`
 
-Artifact tipado: `HandoffArtifact` (Codex-first), sin export a archivo en v1.
+Artifact tipado: `HandoffArtifact` (estructura Codex-first, target configurable incluyendo label custom), sin export a archivo en v1.
 
 ## 6. Authority and precedence rules
 

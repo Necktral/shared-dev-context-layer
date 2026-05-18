@@ -18,6 +18,7 @@ const MAX_RISKS = 8;
 export interface BuildHandoffInput {
   intent: HandoffIntent;
   target?: HandoffTarget;
+  targetLabel?: string;
 }
 
 export interface HandoffRendererPort {
@@ -134,6 +135,24 @@ function uniqueAndTrim(values: string[], maxItems: number): string[] {
   return result;
 }
 
+function resolveTargetLabel(target: HandoffTarget, override?: string): string {
+  const trimmed = override?.trim();
+  if (trimmed) {
+    return trimmed;
+  }
+
+  switch (target) {
+    case "codex":
+      return "Codex";
+    case "chatgpt":
+      return "ChatGPT";
+    case "github_copilot":
+      return "GitHub Copilot";
+    case "custom":
+      return "Custom Agent";
+  }
+}
+
 function buildPrompts(artifact: HandoffArtifact): { ask: string; code: string } {
   const constraintsText = artifact.approved_constraints.length
     ? artifact.approved_constraints.map((entry) => `- ${entry}`).join("\n")
@@ -152,6 +171,7 @@ function buildPrompts(artifact: HandoffArtifact): { ask: string; code: string } 
     : "";
 
   const ask = [
+    `Agente objetivo: ${artifact.meta.target_label}`,
     `Objetivo actual: ${artifact.current_goal ?? "No definido"}`,
     `Task: ${artifact.task_summary.title ?? "No active task"} (${artifact.task_summary.status ?? "unknown"})`,
     `Validation: ${artifact.validation_state.status}`,
@@ -162,7 +182,7 @@ function buildPrompts(artifact: HandoffArtifact): { ask: string; code: string } 
   ].join("\n") + uncertainty;
 
   const code = [
-    "Implementa el siguiente cambio de manera incremental y verificable.",
+    `Implementa el siguiente cambio de manera incremental y verificable para ${artifact.meta.target_label}.`,
     `Objetivo: ${artifact.current_goal ?? "No definido"}`,
     "Archivos candidatos:",
     candidateFilesText,
@@ -219,6 +239,7 @@ export class HandoffBuilder {
     }
 
     const target = input.target ?? "codex";
+    const targetLabel = resolveTargetLabel(target, input.targetLabel);
     const task = extractTask(envelope.wis_context.active_task);
     const decisions = extractDecisions(envelope.wis_context.approved_decisions);
     const errorsSummary = extractRecentErrors(envelope.wis_context.recent_errors);
@@ -279,6 +300,7 @@ export class HandoffBuilder {
       meta: {
         generated_at: new Date().toISOString(),
         target,
+        target_label: targetLabel,
         source_consumer: envelope.meta.consumer,
         session_key: envelope.meta.session_key,
         runtime_mode: envelope.meta.runtime_mode,

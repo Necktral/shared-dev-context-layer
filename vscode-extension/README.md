@@ -5,7 +5,7 @@ Control plane autenticado para consumo y mutación controlada de contexto operat
 ## Estado implementado
 
 - Slice 3A: WIS consumption baseline (envelope tipado + orchestrator).
-- Slice 4 baseline: `WIS: Prepare Handoff` (artifact tipado en memoria, Codex-first).
+- Slice 4 baseline: `WIS: Prepare Handoff` (artifact tipado en memoria, estructura Codex-first con target configurable).
 - v0.2.0: plano read/write MCP con `dry_run|commit`, idempotencia y auditoría.
 - Paquete 1 local-private: panel base + comandos locales supervisados para baseline Codex.
 
@@ -65,6 +65,8 @@ Los playbooks resueltos para post-review se exponen de forma aditiva en `result.
 - `wisContextSync.authHeaderName` (default: `x-api-key`)
 - `wisContextSync.requireAuthentication` (default: `false`)
 - `wisContextSync.operationProfile` (default: `phase3_control_plane`; enum: `phase3_control_plane | local_private`)
+- `wisContextSync.handoffTarget` (default: `codex`; enum: `codex | chatgpt | github_copilot | custom`)
+- `wisContextSync.customHandoffTargetName` (default: `Custom Agent`; usado cuando `handoffTarget=custom`)
 - `wisContextSync.codexCliCommand` (default: `codex`)
 - `wisContextSync.localDb.enabled` (default: `true`, efectivo solo en `local_private`)
 - `wisContextSync.localDb.host` (default: `localhost`)

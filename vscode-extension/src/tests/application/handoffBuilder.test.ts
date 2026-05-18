@@ -178,10 +178,12 @@ test("HandoffBuilder genera artifact ready para load_state loaded", () => {
   assert.equal(result.artifact?.task_summary.title, "Implement handoff baseline");
   assert.equal(result.artifact?.current_goal, "Generate structured handoff for Codex");
   assert.equal(result.artifact?.meta.target, "codex");
+  assert.equal(result.artifact?.meta.target_label, "Codex");
   assert.equal(result.artifact?.approved_constraints.length, 10);
   assert.equal(result.artifact?.recent_errors_summary.highlights.length, 10);
   assert.ok((result.artifact?.candidate_files.length ?? 0) <= 5);
   assert.ok((result.artifact?.open_risks.length ?? 0) <= 8);
+  assert.ok(result.artifact?.codex_ask_prompt.includes("Agente objetivo: Codex"));
 });
 
 test("HandoffBuilder genera status partial con nota de incertidumbre", () => {
@@ -236,4 +238,20 @@ test("HandoffBuilder preserva autoridad canónica sobre hints locales", () => {
   assert.equal(result.artifact?.task_summary.id, "task-001");
   assert.equal(result.artifact?.task_summary.title, "Implement handoff baseline");
   assert.equal(result.artifact?.local_focus.branch, "local-only-branch");
+});
+
+test("HandoffBuilder soporta target custom con label explícito", () => {
+  const { builder } = createBuilderWithEnvelope(createEnvelope("loaded"));
+
+  const result = builder.build({
+    intent: { user_intent: "Preparar handoff custom" },
+    target: "custom",
+    targetLabel: "Necktral Agent",
+  });
+
+  assert.equal(result.status, "ready");
+  assert.equal(result.artifact?.meta.target, "custom");
+  assert.equal(result.artifact?.meta.target_label, "Necktral Agent");
+  assert.ok(result.artifact?.codex_ask_prompt.includes("Agente objetivo: Necktral Agent"));
+  assert.ok(result.artifact?.codex_code_prompt.includes("para Necktral Agent."));
 });

@@ -20,7 +20,7 @@ export class HandoffOutputChannelRenderer implements HandoffRendererPort {
     }
 
     const artifact = result.artifact;
-    this.output.appendLine(`target: ${artifact.meta.target}`);
+    this.output.appendLine(`target: ${artifact.meta.target_label} (${artifact.meta.target})`);
     this.output.appendLine(`load_state: ${artifact.meta.load_state}`);
     this.output.appendLine(`transport_status: ${artifact.meta.transport_status}`);
     this.output.appendLine(`task: ${artifact.task_summary.title ?? "null"}`);

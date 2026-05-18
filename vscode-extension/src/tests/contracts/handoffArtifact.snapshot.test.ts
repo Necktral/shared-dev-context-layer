@@ -41,11 +41,12 @@ const SNAPSHOT_ARTIFACT = `{
   ],
   "open_risks": [],
   "recommended_next_action": "Implement handoff baseline",
-  "codex_ask_prompt": "Objetivo actual: Ship stable handoff\\nTask: Snapshot Task (in_progress)\\nValidation: passed\\nRestricciones aprobadas:\\n- read_only: Read only -> No writes\\n- authority: WIS first -> Canonical fields win\\nRiesgos abiertos:\\n- Sin riesgos abiertos explícitos.",
-  "codex_code_prompt": "Implementa el siguiente cambio de manera incremental y verificable.\\nObjetivo: Ship stable handoff\\nArchivos candidatos:\\n- /workspace/repo/src/handoff.ts\\nRestricciones aprobadas:\\n- read_only: Read only -> No writes\\n- authority: WIS first -> Canonical fields win\\nRiesgos abiertos:\\n- Sin riesgos abiertos explícitos.\\nIncluye pruebas y explica cualquier incertidumbre operativa detectada.",
+  "codex_ask_prompt": "Agente objetivo: Codex\\nObjetivo actual: Ship stable handoff\\nTask: Snapshot Task (in_progress)\\nValidation: passed\\nRestricciones aprobadas:\\n- read_only: Read only -> No writes\\n- authority: WIS first -> Canonical fields win\\nRiesgos abiertos:\\n- Sin riesgos abiertos explícitos.",
+  "codex_code_prompt": "Implementa el siguiente cambio de manera incremental y verificable para Codex.\\nObjetivo: Ship stable handoff\\nArchivos candidatos:\\n- /workspace/repo/src/handoff.ts\\nRestricciones aprobadas:\\n- read_only: Read only -> No writes\\n- authority: WIS first -> Canonical fields win\\nRiesgos abiertos:\\n- Sin riesgos abiertos explícitos.\\nIncluye pruebas y explica cualquier incertidumbre operativa detectada.",
   "meta": {
     "generated_at": "<timestamp>",
     "target": "codex",
+    "target_label": "Codex",
     "source_consumer": "vscode_extension",
     "session_key": "snapshot-session",
     "runtime_mode": "offline_fixture",
@@ -55,7 +56,8 @@ const SNAPSHOT_ARTIFACT = `{
   }
 }`;
 
-const SNAPSHOT_PROMPTS = `ASK\nObjetivo actual: Ship stable handoff
+const SNAPSHOT_PROMPTS = `ASK\nAgente objetivo: Codex
+Objetivo actual: Ship stable handoff
 Task: Snapshot Task (in_progress)
 Validation: passed
 Restricciones aprobadas:
@@ -64,7 +66,7 @@ Restricciones aprobadas:
 Riesgos abiertos:
 - Sin riesgos abiertos explícitos.
 ---
-CODE\nImplementa el siguiente cambio de manera incremental y verificable.
+CODE\nImplementa el siguiente cambio de manera incremental y verificable para Codex.
 Objetivo: Ship stable handoff
 Archivos candidatos:
 - /workspace/repo/src/handoff.ts
