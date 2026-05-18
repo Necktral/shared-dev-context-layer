@@ -1,7 +1,7 @@
 """
 Tests for upsert_context_item label sync behaviour.
 
-These tests verify that upsert_context_item keeps the normalised
+These tests verify that upsert_context_item keeps the normalized
 context_item_labels table in sync with context_items.labels_json for both
 the create and update paths.  They use unittest.mock to avoid a real DB.
 """
@@ -57,23 +57,6 @@ def _db_stub(existing_item=None) -> MagicMock:
 def test_upsert_create_syncs_label_table() -> None:
     """Creating a new item must populate context_item_labels."""
     db = _db_stub(existing_item=None)
-    created_item = _make_item(uuid.uuid4(), labels=["alpha", "beta"])
-
-    # After db.flush() the ORM object must have its .id assigned; simulate this
-    # by setting item.id on the first flush call.
-    flushed_item_holder: list[MagicMock] = []
-
-    def _flush_side_effect():
-        # The created ContextItem was passed to db.add() just before flush.
-        # Capture it from the add call.
-        add_calls = db.add.call_args_list
-        if add_calls:
-            last_added = add_calls[-1].args[0]
-            if hasattr(last_added, "id"):
-                last_added.id = created_item.id
-                flushed_item_holder.append(last_added)
-
-    db.flush.side_effect = _flush_side_effect
 
     with patch(
         "app.services.context_item_service._sync_labels_table"
