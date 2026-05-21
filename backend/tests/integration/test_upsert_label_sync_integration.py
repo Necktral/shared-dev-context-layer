@@ -1,7 +1,7 @@
 """
 Integration tests for ContextItemLabel synchronization in upsert_context_item.
 
-These tests validate the atomic transactional behaviour of the _sync_labels_table
+These tests validate the atomic transactional behavior of the _sync_labels_table
 helper when called from upsert_context_item and append_context_labels.
 
 Test scenarios (per reviewer requirements):
@@ -506,12 +506,12 @@ class TestAtomicTransactionSemantics:
         are committed together in one transaction.
 
         The implementation uses:
-        - db.add(created) → adds item to session
-        - db.flush() → assigns item.id without committing
+        - Pre-generate item_id = uuid4() in Python
+        - db.add(created) → adds item to session (with pre-assigned id)
         - _sync_labels_table() → adds label rows to same session
         - db.commit() → single commit for both item + labels
 
-        This test verifies the flush() + commit() pattern works correctly.
+        This test verifies the pre-generated UUID + single commit pattern works correctly.
         """
         result = upsert_context_item(
             db_session,
