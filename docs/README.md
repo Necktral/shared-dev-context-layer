@@ -14,6 +14,7 @@ Este directorio concentra la fuente de verdad documental para el control plane (
 
 - Active canon:
   - `docs/context/README.md`
+  - `docs/context/SYSTEM_CODE_ANALYSIS.md`
   - `docs/context/WIS_PHASE_1_LOCAL_FIRST_ACCEPTANCE_GATE.md`
   - `docs/context/WIS_PHASE_3_ACCEPTANCE_GATE.md`
   - `docs/context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
