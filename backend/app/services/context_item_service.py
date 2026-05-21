@@ -206,6 +206,7 @@ def _sync_labels_table(
     for label in labels:
         db.add(
             ContextItemLabel(
+                id=uuid.uuid4(),
                 workspace_id=workspace_id,
                 item_id=item_id,
                 label=label,
@@ -250,7 +251,9 @@ def upsert_context_item(
         if dry_run:
             return {"result": "dry_run", "before": None, "after": preview}
 
+        item_id = uuid.uuid4()
         created = ContextItem(
+            id=item_id,
             workspace_id=workspace_id,
             project_id=project_id,
             task_id=task_id,
@@ -265,8 +268,7 @@ def upsert_context_item(
             updated_by=actor,
         )
         db.add(created)
-        db.flush()
-        _sync_labels_table(db, workspace_id=workspace_id, item_id=created.id, labels=normalized_labels, actor=actor)
+        _sync_labels_table(db, workspace_id=workspace_id, item_id=item_id, labels=normalized_labels, actor=actor)
         db.commit()
         db.refresh(created)
         return {"result": "created", "before": None, "after": context_item_to_dict(created)}

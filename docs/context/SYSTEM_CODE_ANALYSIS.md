@@ -86,6 +86,39 @@ The `_sync_labels_table` helper ensures both representations stay consistent dur
 - No silent fallback between modes
 - Communicates with backend via MCP protocol over HTTP
 
+## Transaction & Concurrency Design
+
+### Atomic Label Synchronization
+
+The `_sync_labels_table` helper is called **within the same transaction** as the item mutation:
+
+- **Create path**: pre-generate `item_id = uuid4()` → `db.add(item)` → `_sync_labels_table()` → `db.commit()`
+- **Update path**: modify item fields → `db.add(item)` → `_sync_labels_table()` → `db.commit()`
+
+Pre-generating the UUID avoids the need for `db.flush()` to obtain the item ID, making the transaction simpler and eliminating a potential partial-state window. A single `db.commit()` persists both the `ContextItem` and all `ContextItemLabel` rows. If any step fails before `commit()`, SQLAlchemy's session rolls back entirely — no orphan items or stale labels.
+
+### Delete + Insert Strategy (Design Decision)
+
+`_sync_labels_table` uses a **delete-all / re-insert** pattern rather than diff-based upsert:
+
+**Rationale:**
+- Simpler correctness guarantee: the table always mirrors `labels_json` exactly
+- No edge cases around partial diffs or duplicate detection
+- Matches the existing pattern from `append_context_labels`
+
+**Known trade-offs (documented per review):**
+- Write amplification: every label mutation rewrites all label rows for that item
+- No per-label metadata preservation (e.g., `created_at` resets on each sync)
+- Concurrent updates to the same item: protected by `expected_version` optimistic locking on the item itself; the unique constraint `(workspace_id, item_id, label)` prevents duplicates if two transactions somehow overlap
+
+### Model Constraints (`context_item_labels`)
+
+| Constraint | Type | Purpose |
+|-----------|------|---------|
+| `uq_context_item_labels_item_label` | UNIQUE(workspace_id, item_id, label) | Prevents duplicate labels per item |
+| FK → `workspaces.id` | CASCADE DELETE | Labels removed when workspace deleted |
+| FK → `context_items.id` | CASCADE DELETE | Labels removed when item deleted/archived hard-delete |
+
 ## Operational Notes
 
 - All write operations support `dry_run` for preview without side effects
