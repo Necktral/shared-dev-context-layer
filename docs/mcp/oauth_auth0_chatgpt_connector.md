@@ -17,10 +17,10 @@ Estado objetivo de esta fase:
 
 Valores operativos actuales del proyecto:
 - tenant: `https://necktral.us.auth0.com`
-- audience read: `https://wis-context-sync-read-api`
+- audience / resource ID canónico: `https://mcp.wiscontext-sync.org/mcp`
 - endpoint MCP estable: `https://mcp.wiscontext-sync.org/mcp`
 - public base URL MCP (resource metadata): `https://mcp.wiscontext-sync.org`
-- resource id MCP (canónico OAuth): `MCP_RESOURCE_ID` (fallback legacy a `MCP_AUTH0_AUDIENCE`)
+- resource id MCP (canónico OAuth): `MCP_RESOURCE_ID=https://mcp.wiscontext-sync.org/mcp`
 
 ## 2. Configuración en ChatGPT Connector (OAuth Avanzado)
 
@@ -42,7 +42,7 @@ Valores operativos actuales del proyecto:
 - `URL de token`: `https://necktral.us.auth0.com/oauth/token`
 - `URL de registro`: dejar vacío (si no se usa DCR)
 - `Base del servidor de autorización`: `https://necktral.us.auth0.com/`
-- `Recurso` (audience): `https://wis-context-sync-read-api`
+- `Recurso` (audience): `https://mcp.wiscontext-sync.org/mcp`
 
 Importante:
 - `MCP_RESOURCE_ID` es el identificador OAuth canónico del recurso MCP (`resource=`).
@@ -106,9 +106,9 @@ En runtime MCP (backend):
 - Definir `MCP_PUBLIC_BASE_URL=https://mcp.wiscontext-sync.org`
 - No usar path operativo (`/mcp`) en esta variable.
 - Este valor controla el `resource_metadata` que el servidor anuncia en `WWW-Authenticate`.
-- Definir `MCP_RESOURCE_ID=https://wis-context-sync-read-api` (recomendado para conservar compatibilidad actual).
-- `MCP_AUTH0_AUDIENCE` se mantiene para validación JWT.
-- Opcional hardening DNS-rebinding: `MCP_ALLOWED_ORIGINS=https://chatgpt.com,https://chat.openai.com`
+- Definir `MCP_RESOURCE_ID=https://mcp.wiscontext-sync.org/mcp` (identificador canónico OAuth).
+- Definir `MCP_AUTH0_AUDIENCE=https://mcp.wiscontext-sync.org/mcp` (debe coincidir con el API identifier en Auth0).
+- Hardening DNS-rebinding obligatorio en producción: `MCP_ALLOWED_ORIGINS=https://chatgpt.com,https://chat.openai.com`
 
 ## 4. Validación mínima obligatoria
 
@@ -133,7 +133,7 @@ Puedes usar:
 ./scripts/validate_oauth_token_claims.sh \
   --token "<ACCESS_TOKEN>" \
   --expected-iss "https://necktral.us.auth0.com/" \
-  --expected-aud "https://wis-context-sync-read-api" \
+  --expected-aud "https://mcp.wiscontext-sync.org/mcp" \
   --require-scopes "wis.context.read,wis.context.sync.read"
 ```
 

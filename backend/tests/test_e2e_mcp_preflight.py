@@ -37,7 +37,7 @@ _BASE_URL = os.environ.get("MCP_E2E_BASE_URL", "http://localhost:8002").rstrip("
 _E2E_TOKEN = os.environ.get("MCP_E2E_TOKEN", "")
 
 # Estas constantes deben coincidir con la configuración del servidor
-_EXPECTED_RESOURCE = "https://wis-context-sync-read-api"
+_EXPECTED_RESOURCE = "https://mcp.wiscontext-sync.org/mcp"
 _EXPECTED_ISSUER = "https://necktral.us.auth0.com/"
 _EXPECTED_SCOPES = {"wis.context.read", "wis.context.sync.read", "wis.context.write", "wis.context.sync.write"}
 _EXPECTED_PUBLIC_BASE = "https://mcp.wiscontext-sync.org"

@@ -29,7 +29,7 @@ class _AcceptWithScopesVerifier:
             client_id="test-chatgpt-client",
             scopes=self.scopes,
             expires_at=None,
-            resource="https://wis-context-sync-read-api",
+            resource="https://mcp.wiscontext-sync.org/mcp",
         )
 
 
@@ -38,10 +38,10 @@ def _build_app_with_verifier(monkeypatch, verifier):
     monkeypatch.setattr(mcp_server.settings, "mcp_auth_enabled", True)
     monkeypatch.setattr(mcp_server.settings, "mcp_auth_bypass_local", False)
     monkeypatch.setattr(mcp_server.settings, "mcp_auth0_issuer", "https://necktral.us.auth0.com/")
-    monkeypatch.setattr(mcp_server.settings, "mcp_auth0_audience", "https://wis-context-sync-read-api")
+    monkeypatch.setattr(mcp_server.settings, "mcp_auth0_audience", "https://mcp.wiscontext-sync.org/mcp")
     monkeypatch.setattr(mcp_server.settings, "mcp_auth0_jwks_url", "https://necktral.us.auth0.com/.well-known/jwks.json")
     monkeypatch.setattr(mcp_server.settings, "mcp_public_base_url", "https://mcp.wiscontext-sync.org")
-    monkeypatch.setattr(mcp_server.settings, "mcp_resource_id", "https://wis-context-sync-read-api")
+    monkeypatch.setattr(mcp_server.settings, "mcp_resource_id", "https://mcp.wiscontext-sync.org/mcp")
     monkeypatch.setattr(mcp_server.settings, "mcp_allowed_origins", "")
     monkeypatch.setattr(mcp_server, "Auth0JWTTokenVerifier", lambda **kw: verifier)
     runtime_mcp = mcp_server._build_mcp_server()
@@ -52,10 +52,10 @@ def _build_auth_runtime_app(monkeypatch):
     monkeypatch.setattr(mcp_server.settings, "mcp_auth_enabled", True)
     monkeypatch.setattr(mcp_server.settings, "mcp_auth_bypass_local", False)
     monkeypatch.setattr(mcp_server.settings, "mcp_auth0_issuer", "https://necktral.us.auth0.com/")
-    monkeypatch.setattr(mcp_server.settings, "mcp_auth0_audience", "https://wis-context-sync-read-api")
+    monkeypatch.setattr(mcp_server.settings, "mcp_auth0_audience", "https://mcp.wiscontext-sync.org/mcp")
     monkeypatch.setattr(mcp_server.settings, "mcp_auth0_jwks_url", "https://necktral.us.auth0.com/.well-known/jwks.json")
     monkeypatch.setattr(mcp_server.settings, "mcp_public_base_url", "https://mcp.wiscontext-sync.org")
-    monkeypatch.setattr(mcp_server.settings, "mcp_resource_id", "https://wis-context-sync-read-api")
+    monkeypatch.setattr(mcp_server.settings, "mcp_resource_id", "https://mcp.wiscontext-sync.org/mcp")
     monkeypatch.setattr(mcp_server.settings, "mcp_allowed_origins", "")
     runtime_mcp = mcp_server._build_mcp_server()
     return mcp_server.build_observed_streamable_http_app(runtime_mcp)
@@ -69,7 +69,7 @@ def test_protected_resource_metadata_contract(monkeypatch) -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["resource"] == "https://wis-context-sync-read-api"
+    assert payload["resource"] == "https://mcp.wiscontext-sync.org/mcp"
     assert payload["authorization_servers"] == ["https://necktral.us.auth0.com/"]
     assert payload["scopes_supported"] == [
         "wis.context.read",
@@ -187,10 +187,10 @@ def _build_app_with_origin(monkeypatch, allowed_origins: str) -> object:
     monkeypatch.setattr(mcp_server.settings, "mcp_auth_enabled", True)
     monkeypatch.setattr(mcp_server.settings, "mcp_auth_bypass_local", False)
     monkeypatch.setattr(mcp_server.settings, "mcp_auth0_issuer", "https://necktral.us.auth0.com/")
-    monkeypatch.setattr(mcp_server.settings, "mcp_auth0_audience", "https://wis-context-sync-read-api")
+    monkeypatch.setattr(mcp_server.settings, "mcp_auth0_audience", "https://mcp.wiscontext-sync.org/mcp")
     monkeypatch.setattr(mcp_server.settings, "mcp_auth0_jwks_url", "https://necktral.us.auth0.com/.well-known/jwks.json")
     monkeypatch.setattr(mcp_server.settings, "mcp_public_base_url", "https://mcp.wiscontext-sync.org")
-    monkeypatch.setattr(mcp_server.settings, "mcp_resource_id", "https://wis-context-sync-read-api")
+    monkeypatch.setattr(mcp_server.settings, "mcp_resource_id", "https://mcp.wiscontext-sync.org/mcp")
     # Set the normalized origin list that the MCPTransportObservabilityASGI will read
     monkeypatch.setattr(mcp_server.settings, "mcp_allowed_origins", allowed_origins)
     monkeypatch.setattr(mcp_server, "Auth0JWTTokenVerifier", lambda **kw: _AlwaysRejectVerifier())
@@ -309,10 +309,10 @@ def test_build_app_emits_origin_guard_permissive_warning_when_origins_not_set(mo
     monkeypatch.setattr(mcp_server.settings, "mcp_auth_enabled", True)
     monkeypatch.setattr(mcp_server.settings, "mcp_auth_bypass_local", False)
     monkeypatch.setattr(mcp_server.settings, "mcp_auth0_issuer", "https://necktral.us.auth0.com/")
-    monkeypatch.setattr(mcp_server.settings, "mcp_auth0_audience", "https://wis-context-sync-read-api")
+    monkeypatch.setattr(mcp_server.settings, "mcp_auth0_audience", "https://mcp.wiscontext-sync.org/mcp")
     monkeypatch.setattr(mcp_server.settings, "mcp_auth0_jwks_url", "https://necktral.us.auth0.com/.well-known/jwks.json")
     monkeypatch.setattr(mcp_server.settings, "mcp_public_base_url", "https://mcp.wiscontext-sync.org")
-    monkeypatch.setattr(mcp_server.settings, "mcp_resource_id", "https://wis-context-sync-read-api")
+    monkeypatch.setattr(mcp_server.settings, "mcp_resource_id", "https://mcp.wiscontext-sync.org/mcp")
     monkeypatch.setattr(mcp_server.settings, "mcp_allowed_origins", "")
     monkeypatch.setattr(mcp_server, "Auth0JWTTokenVerifier", lambda **kw: _AlwaysRejectVerifier())
     monkeypatch.setattr(mcp_server, "mcp_logger", capturing_logger)
@@ -340,10 +340,10 @@ def test_build_app_no_permissive_warning_when_origins_configured(monkeypatch) ->
     monkeypatch.setattr(mcp_server.settings, "mcp_auth_enabled", True)
     monkeypatch.setattr(mcp_server.settings, "mcp_auth_bypass_local", False)
     monkeypatch.setattr(mcp_server.settings, "mcp_auth0_issuer", "https://necktral.us.auth0.com/")
-    monkeypatch.setattr(mcp_server.settings, "mcp_auth0_audience", "https://wis-context-sync-read-api")
+    monkeypatch.setattr(mcp_server.settings, "mcp_auth0_audience", "https://mcp.wiscontext-sync.org/mcp")
     monkeypatch.setattr(mcp_server.settings, "mcp_auth0_jwks_url", "https://necktral.us.auth0.com/.well-known/jwks.json")
     monkeypatch.setattr(mcp_server.settings, "mcp_public_base_url", "https://mcp.wiscontext-sync.org")
-    monkeypatch.setattr(mcp_server.settings, "mcp_resource_id", "https://wis-context-sync-read-api")
+    monkeypatch.setattr(mcp_server.settings, "mcp_resource_id", "https://mcp.wiscontext-sync.org/mcp")
     monkeypatch.setattr(mcp_server.settings, "mcp_allowed_origins", "https://chatgpt.com")
     monkeypatch.setattr(mcp_server, "Auth0JWTTokenVerifier", lambda **kw: _AlwaysRejectVerifier())
     monkeypatch.setattr(mcp_server, "mcp_logger", capturing_logger)
