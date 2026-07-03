@@ -10,3 +10,11 @@ htmlcov/
 .idea/
 .vscode/
 *:Zone.Identifier
+
+# Variables de entorno (secretos) — no subir
+.env
+.env.*
+!.env.example
+
+# Postgres embebido para dev nativo (scripts/dev_native.py)
+.pg-dev/

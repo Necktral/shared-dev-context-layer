@@ -74,6 +74,10 @@ TOOL_SCOPES: dict[str, list[str]] = {
     "set_context_labels": ["wis.context.write"],
     "archive_context_item": ["wis.context.write"],
     "apply_sync_batch": ["wis.context.sync.write"],
+    "propose_change": ["wis.context.write"],
+    "list_proposals": ["wis.context.read"],
+    "ratify_proposal": ["wis.context.ratify"],
+    "reject_proposal": ["wis.context.ratify"],
 }
 
 RESOURCE_SCOPES_SUPPORTED = [
@@ -81,6 +85,7 @@ RESOURCE_SCOPES_SUPPORTED = [
     "wis.context.sync.read",
     "wis.context.write",
     "wis.context.sync.write",
+    "wis.context.ratify",
 ]
 
 
@@ -1230,6 +1235,12 @@ def upsert_context_item(
         if replay:
             return replay
         actor = _extract_actor_context()
+        gate = _require_ratification(
+            db, resolved, tool_name="upsert_context_item",
+            target_kind="context_item", target_key=item_key, category=item_type, dry_run=dry_run,
+        )
+        if gate:
+            return gate
         result = upsert_context_item_service(
             db,
             workspace_id=resolved.workspace.id,
@@ -1318,6 +1329,12 @@ def append_context_event(
         )
         if replay:
             return replay
+        gate = _require_ratification(
+            db, resolved, tool_name="append_context_event",
+            target_kind="context_item", target_key=f"event:{event_type}", category=None, dry_run=dry_run,
+        )
+        if gate:
+            return gate
         before_payload = {"event": None}
         if dry_run:
             after_payload = {
@@ -1433,6 +1450,12 @@ def link_context_entities(
         )
         if replay:
             return replay
+        gate = _require_ratification(
+            db, resolved, tool_name="link_context_entities",
+            target_kind="context_item", target_key=source_item_id, category=None, dry_run=dry_run,
+        )
+        if gate:
+            return gate
         try:
             source_uuid = uuid.UUID(source_item_id)
             target_uuid = uuid.UUID(target_item_id)
@@ -1531,6 +1554,12 @@ def set_context_labels(
                 resolved.scope_payload(),
                 resolved.resolution_metadata,
             )
+        gate = _require_ratification(
+            db, resolved, tool_name="set_context_labels",
+            target_kind="context_item", target_key=context_item_id, category=None, dry_run=dry_run,
+        )
+        if gate:
+            return gate
         result = append_context_labels_service(
             db,
             workspace_id=resolved.workspace.id,
@@ -1617,6 +1646,12 @@ def archive_context_item(
                 resolved.scope_payload(),
                 resolved.resolution_metadata,
             )
+        gate = _require_ratification(
+            db, resolved, tool_name="archive_context_item",
+            target_kind="context_item", target_key=context_item_id, category=None, dry_run=dry_run,
+        )
+        if gate:
+            return gate
         result = archive_context_item_service(
             db,
             workspace_id=resolved.workspace.id,
@@ -1694,6 +1729,12 @@ def apply_sync_batch(
         )
         if replay:
             return replay
+        gate = _require_ratification(
+            db, resolved, tool_name="apply_sync_batch",
+            target_kind="context_item", target_key="sync_batch", category=None, dry_run=dry_run,
+        )
+        if gate:
+            return gate
         summary = {
             "operations": len(operations),
             "dry_run": dry_run,
@@ -2028,6 +2069,352 @@ def build_observed_streamable_http_app(target_mcp: FastMCP | None = None) -> MCP
         )
 
     return app
+
+
+# ---------------------------------------------------------------------------
+# Plano deliberativo de ratificación (ADR: deliberative-context-ratification)
+# ---------------------------------------------------------------------------
+from app.models.approved_decision import ApprovedDecision as _ApprovedDecision
+from app.services import approval_policy_service as _approval_policy
+from app.services import deliberation_service as _deliberation
+from app.services import proposal_service as _proposals
+from app.services import staleness_service as _staleness
+
+
+def _proposal_to_dict(proposal: Any) -> dict[str, Any]:
+    return {
+        "id": str(proposal.id),
+        "workspace_id": str(proposal.workspace_id),
+        "project_id": str(proposal.project_id) if proposal.project_id else None,
+        "task_id": str(proposal.task_id) if proposal.task_id else None,
+        "target_kind": proposal.target_kind,
+        "target_key": proposal.target_key,
+        "status": proposal.status,
+        "rationale": proposal.rationale,
+        "proposed_payload": proposal.proposed_payload,
+        "ratified_by": proposal.ratified_by,
+        "ratified_at": proposal.ratified_at.isoformat() if proposal.ratified_at else None,
+        "ratified_decision_id": str(proposal.ratified_decision_id) if proposal.ratified_decision_id else None,
+        "created_at": proposal.created_at.isoformat() if proposal.created_at else None,
+    }
+
+
+def _require_ratification(
+    db: Any,
+    resolved: Any,
+    *,
+    tool_name: str,
+    target_kind: str,
+    target_key: str,
+    category: str | None,
+    dry_run: bool,
+) -> dict[str, Any] | None:
+    """Gate de ratificación (I1). Default de política = auto (no gatea). dry_run es
+    siempre preview. Rechazo explícito si falta Proposal ratificada (sin fallback)."""
+    if dry_run:
+        return None
+    policy = _approval_policy.get_approval_policy(db)
+    if not _approval_policy.requires_ratification(policy, tool_name=tool_name, category=category):
+        return None
+    if _proposals.find_ratified_proposal(
+        db, workspace_id=resolved.workspace.id, target_kind=target_kind, target_key=target_key
+    ) is not None:
+        return None
+    return {
+        "status": "ratification_required",
+        "error": "no_ratified_proposal",
+        "message": "Este commit requiere una Proposal ratificada por un humano.",
+        "target": {"kind": target_kind, "key": target_key},
+        "tool": tool_name,
+        "scope": resolved.scope_payload(),
+        "resolution_metadata": resolved.resolution_metadata,
+    }
+
+
+@mcp.tool(description="Propose a change for human ratification. Creates a Proposal (in_review). Write plane.")
+def propose_change(
+    target_kind: str,
+    target_key: str,
+    rationale: str,
+    proposed_payload: dict[str, Any] | None = None,
+    dry_run: bool = False,
+    idempotency_key: str | None = None,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    task_id: str | None = None,
+    consumer: str | None = None,
+    session_key: str | None = None,
+) -> dict[str, Any]:
+    db = SessionLocal()
+    try:
+        resolved, error_payload = _resolve_scope_or_error(
+            db, workspace_id=workspace_id, project_id=project_id, task_id=task_id,
+            consumer=consumer, session_key=session_key,
+        )
+        if error_payload:
+            return error_payload
+        scope_issue = _scope_guard("propose_change")
+        if scope_issue:
+            scope_issue["scope"] = resolved.scope_payload()
+            scope_issue["resolution_metadata"] = resolved.resolution_metadata
+            return scope_issue
+        if dry_run:
+            if target_kind not in _proposals.PROPOSAL_TARGET_KINDS:
+                return _invalid_request(
+                    f"target_kind inválido: {target_kind!r}",
+                    resolved.scope_payload(),
+                    resolved.resolution_metadata,
+                )
+            return {
+                "status": "ok",
+                "dry_run": True,
+                "result": "dry_run",
+                "scope": resolved.scope_payload(),
+                "resolution_metadata": resolved.resolution_metadata,
+                "preview": {"target_kind": target_kind, "target_key": target_key},
+            }
+        try:
+            proposal = _proposals.create_proposal(
+                db,
+                workspace_id=resolved.workspace.id,
+                project_id=resolved.project.id if resolved.project else None,
+                task_id=resolved.task.id if resolved.task else None,
+                target_kind=target_kind,
+                target_key=target_key,
+                rationale=rationale,
+                proposed_payload=proposed_payload or {},
+                idempotency_key=idempotency_key,
+            )
+            if proposal.status == "proposed":
+                _proposals.transition_proposal(db, proposal, "in_review")
+            if proposal.task_id is not None and proposal.project_id is not None:
+                _deliberation.record_proposal_event(
+                    db, proposal=proposal, event_type="proposal.raised",
+                    summary=f"Propuesta para {target_kind}:{target_key}",
+                )
+            db.commit()
+        except _proposals.InvalidProposalInput as exc:
+            db.rollback()
+            return _invalid_request(str(exc), resolved.scope_payload(), resolved.resolution_metadata)
+        return {
+            "status": "ok",
+            "scope": resolved.scope_payload(),
+            "resolution_metadata": resolved.resolution_metadata,
+            "proposal": _proposal_to_dict(proposal),
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool(description="List proposals for a target or the resolved scope. Read plane.")
+def list_proposals(
+    target_kind: str | None = None,
+    target_key: str | None = None,
+    status: str | None = None,
+    limit: int = 50,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    task_id: str | None = None,
+    consumer: str | None = None,
+    session_key: str | None = None,
+) -> dict[str, Any]:
+    db = SessionLocal()
+    try:
+        resolved, error_payload = _resolve_scope_or_error(
+            db, workspace_id=workspace_id, project_id=project_id, task_id=task_id,
+            consumer=consumer, session_key=session_key,
+        )
+        if error_payload:
+            return error_payload
+        scope_issue = _scope_guard("list_proposals")
+        if scope_issue:
+            scope_issue["scope"] = resolved.scope_payload()
+            scope_issue["resolution_metadata"] = resolved.resolution_metadata
+            return scope_issue
+        if target_kind and target_key:
+            rows = _proposals.list_proposals_for_target(
+                db, workspace_id=resolved.workspace.id, target_kind=target_kind,
+                target_key=target_key, statuses=[status] if status else None,
+            )
+        else:
+            stmt = select(_proposals.Proposal).where(_proposals.Proposal.workspace_id == resolved.workspace.id)
+            if status:
+                stmt = stmt.where(_proposals.Proposal.status == status)
+            stmt = stmt.order_by(_proposals.Proposal.created_at.desc()).limit(limit)
+            rows = list(db.execute(stmt).scalars().all())
+        return {
+            "status": "ok",
+            "scope": resolved.scope_payload(),
+            "resolution_metadata": resolved.resolution_metadata,
+            "total": len(rows),
+            "proposals": [_proposal_to_dict(row) for row in rows],
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool(description="Ratify a Proposal (human decision -> canonical). Requires wis.context.ratify.")
+def ratify_proposal(
+    proposal_id: str,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    task_id: str | None = None,
+    consumer: str | None = None,
+    session_key: str | None = None,
+) -> dict[str, Any]:
+    db = SessionLocal()
+    try:
+        resolved, error_payload = _resolve_scope_or_error(
+            db, workspace_id=workspace_id, project_id=project_id, task_id=task_id,
+            consumer=consumer, session_key=session_key,
+        )
+        if error_payload:
+            return error_payload
+        scope_issue = _scope_guard("ratify_proposal")
+        if scope_issue:
+            scope_issue["scope"] = resolved.scope_payload()
+            scope_issue["resolution_metadata"] = resolved.resolution_metadata
+            return scope_issue
+        try:
+            pid = uuid.UUID(proposal_id)
+        except ValueError:
+            return _invalid_request("proposal_id debe ser UUID válido.", resolved.scope_payload(), resolved.resolution_metadata)
+        proposal = _proposals.get_proposal(db, pid)
+        if proposal is None or proposal.workspace_id != resolved.workspace.id:
+            return {"status": "not_found", "message": "Proposal no encontrada en este workspace.",
+                    "scope": resolved.scope_payload(), "resolution_metadata": resolved.resolution_metadata}
+        actor = str(_extract_actor_context()["actor_sub"])
+        decision_id = None
+        try:
+            if proposal.target_kind == "decision":
+                payload = proposal.proposed_payload or {}
+                dk = str(payload.get("decision_key") or proposal.target_key)
+                fields = dict(
+                    title=str(payload.get("title") or proposal.target_key),
+                    decision=str(payload.get("decision") or proposal.rationale),
+                    rationale=str(payload.get("rationale") or proposal.rationale),
+                    category=str(payload.get("category") or "general"),
+                    constraints_json=payload.get("constraints") or {},
+                    approved_by=actor,
+                    proposal_id=proposal.id,
+                    is_active=True,
+                )
+                # decision_key es único por scope: re-ratificar actualiza en sitio.
+                existing_decision = db.execute(
+                    select(_ApprovedDecision).where(
+                        _ApprovedDecision.workspace_id == proposal.workspace_id,
+                        _ApprovedDecision.decision_key == dk,
+                        _ApprovedDecision.task_id == proposal.task_id,
+                        _ApprovedDecision.project_id == proposal.project_id,
+                    )
+                ).scalars().first()
+                if existing_decision is not None:
+                    for _k, _v in fields.items():
+                        setattr(existing_decision, _k, _v)
+                    db.flush()
+                    decision_id = existing_decision.id
+                else:
+                    decision = _ApprovedDecision(
+                        workspace_id=proposal.workspace_id,
+                        project_id=proposal.project_id,
+                        task_id=proposal.task_id,
+                        decision_key=dk,
+                        **fields,
+                    )
+                    db.add(decision)
+                    db.flush()
+                    decision_id = decision.id
+            _proposals.transition_proposal(db, proposal, "ratified", ratified_by=actor, ratified_decision_id=decision_id)
+            if proposal.task_id is not None and proposal.project_id is not None:
+                _deliberation.record_proposal_event(
+                    db, proposal=proposal, event_type="proposal.ratified",
+                    summary=f"Ratificada por {actor}",
+                    payload={"decision_id": str(decision_id) if decision_id else None},
+                )
+            staleness = _staleness.invalidate_context_for_scope(
+                db, workspace_id=proposal.workspace_id, project_id=proposal.project_id, task_id=proposal.task_id
+            )
+            db.commit()
+        except _proposals.InvalidProposalTransition as exc:
+            db.rollback()
+            return {"status": "invalid_transition", "message": str(exc),
+                    "proposal": _proposal_to_dict(proposal), "scope": resolved.scope_payload()}
+        except _proposals.InvalidProposalInput as exc:
+            db.rollback()
+            return _invalid_request(str(exc), resolved.scope_payload(), resolved.resolution_metadata)
+        except Exception as exc:  # noqa: BLE001 - no propagar excepción cruda al transporte
+            db.rollback()
+            return {
+                "status": "error",
+                "error": "ratify_failed",
+                "message": str(exc),
+                "scope": resolved.scope_payload(),
+                "resolution_metadata": resolved.resolution_metadata,
+            }
+        return {
+            "status": "ok",
+            "scope": resolved.scope_payload(),
+            "resolution_metadata": resolved.resolution_metadata,
+            "proposal": _proposal_to_dict(proposal),
+            "ratified_decision_id": str(decision_id) if decision_id else None,
+            "staleness": staleness,
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool(description="Reject a Proposal (human decision). Requires wis.context.ratify.")
+def reject_proposal(
+    proposal_id: str,
+    reason: str | None = None,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    task_id: str | None = None,
+    consumer: str | None = None,
+    session_key: str | None = None,
+) -> dict[str, Any]:
+    db = SessionLocal()
+    try:
+        resolved, error_payload = _resolve_scope_or_error(
+            db, workspace_id=workspace_id, project_id=project_id, task_id=task_id,
+            consumer=consumer, session_key=session_key,
+        )
+        if error_payload:
+            return error_payload
+        scope_issue = _scope_guard("reject_proposal")
+        if scope_issue:
+            scope_issue["scope"] = resolved.scope_payload()
+            scope_issue["resolution_metadata"] = resolved.resolution_metadata
+            return scope_issue
+        try:
+            pid = uuid.UUID(proposal_id)
+        except ValueError:
+            return _invalid_request("proposal_id debe ser UUID válido.", resolved.scope_payload(), resolved.resolution_metadata)
+        proposal = _proposals.get_proposal(db, pid)
+        if proposal is None or proposal.workspace_id != resolved.workspace.id:
+            return {"status": "not_found", "message": "Proposal no encontrada en este workspace.",
+                    "scope": resolved.scope_payload(), "resolution_metadata": resolved.resolution_metadata}
+        actor = str(_extract_actor_context()["actor_sub"])
+        try:
+            _proposals.transition_proposal(db, proposal, "rejected")
+            if proposal.task_id is not None and proposal.project_id is not None:
+                _deliberation.record_proposal_event(
+                    db, proposal=proposal, event_type="proposal.rejected",
+                    summary=f"Rechazada por {actor}" + (f": {reason}" if reason else ""),
+                )
+            db.commit()
+        except _proposals.InvalidProposalTransition as exc:
+            db.rollback()
+            return {"status": "invalid_transition", "message": str(exc),
+                    "proposal": _proposal_to_dict(proposal), "scope": resolved.scope_payload()}
+        return {
+            "status": "ok",
+            "scope": resolved.scope_payload(),
+            "resolution_metadata": resolved.resolution_metadata,
+            "proposal": _proposal_to_dict(proposal),
+        }
+    finally:
+        db.close()
 
 
 _apply_tool_auth_metadata()

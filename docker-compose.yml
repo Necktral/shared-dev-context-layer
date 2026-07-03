@@ -11,6 +11,27 @@ services:
       - wis_context_postgres_data:/var/lib/postgresql/data
     ports:
       - "${POSTGRES_HOST_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - wis_context_net
+
+  # Servicio de un solo uso: aplica migraciones Alembic y siembra datos base.
+  # backend y mcp esperan a que termine OK antes de arrancar.
+  migrate:
+    build:
+      context: ./backend
+    container_name: wis_context_migrate
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["sh", "-c", "alembic upgrade head && python -m app.db.seed_v5"]
+    restart: "no"
     networks:
       - wis_context_net
 
@@ -22,7 +43,10 @@ services:
     env_file:
       - .env
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "${BACKEND_PORT}:8001"
     networks:
@@ -36,7 +60,10 @@ services:
     env_file:
       - .env
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     command: ["python", "-m", "app.mcp.server"]
     ports:
       - "${MCP_PORT}:8002"

@@ -41,6 +41,11 @@ class Event(Base):
         ForeignKey("execution_sessions.id", ondelete="SET NULL"),
         nullable=True,
     )
+    proposal_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("proposals.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     event_type: Mapped[str] = mapped_column(Text, nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[str] = mapped_column(Text, nullable=False)
