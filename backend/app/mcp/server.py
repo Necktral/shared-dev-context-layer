@@ -1107,62 +1107,38 @@ def upsert_context_item(
             scope_issue["scope"] = resolved.scope_payload()
             scope_issue["resolution_metadata"] = resolved.resolution_metadata
             return scope_issue
-        key_error = _ensure_idempotency_key(resolved=resolved, idempotency_key=idempotency_key, dry_run=dry_run)
-        if key_error:
-            return key_error
-        request_id = f"dryrun-{uuid.uuid4()}" if dry_run else idempotency_key
-        replay = _existing_replay_payload(
-            db,
-            resolved=resolved,
-            tool_name="upsert_context_item",
-            request_id=request_id,
-            dry_run=dry_run,
-        )
-        if replay:
-            return replay
-        actor = _extract_actor_context()
-        gate = _require_ratification(
-            db, resolved, tool_name="upsert_context_item",
-            target_kind="context_item", target_key=item_key, category=item_type, dry_run=dry_run,
-        )
-        if gate:
-            return gate
-        result = upsert_context_item_service(
-            db,
-            workspace_id=resolved.workspace.id,
-            project_id=resolved.project.id if resolved.project else None,
-            task_id=resolved.task.id if resolved.task else None,
-            item_key=item_key,
-            item_type=item_type,
-            title=title,
-            content=content,
-            labels=labels,
-            expected_version=expected_version,
-            actor=cast(str, actor["actor_sub"]),
-            dry_run=dry_run,
-        )
-        response = {
-            "status": "ok",
-            "scope": resolved.scope_payload(),
-            "resolution_metadata": resolved.resolution_metadata,
-            "dry_run": dry_run,
-            "request_id": request_id,
-            "result": result["result"],
-            "before": result.get("before"),
-            "after": result.get("after"),
-            "idempotent_replay": False,
-        }
-        return _write_audit_and_filter(
+        def _apply(db, request_id):
+            result = upsert_context_item_service(
+                db,
+                workspace_id=resolved.workspace.id,
+                project_id=resolved.project.id if resolved.project else None,
+                task_id=resolved.task.id if resolved.task else None,
+                item_key=item_key,
+                item_type=item_type,
+                title=title,
+                content=content,
+                labels=labels,
+                expected_version=expected_version,
+                actor=cast(str, _extract_actor_context()["actor_sub"]),
+                dry_run=dry_run,
+            )
+            after = result.get("after")
+            return WriteOutcome(
+                result=str(result["result"]),
+                subject_id=after.get("id") if isinstance(after, dict) else None,
+                before_payload=result.get("before"),
+                after_payload=after,
+                extra={"before": result.get("before"), "after": after},
+            )
+
+        return run_governed_write(
             db,
             tool_name="upsert_context_item",
             resolved=resolved,
-            request_id=request_id,
             dry_run=dry_run,
-            result=str(result["result"]),
-            subject_id=result.get("after", {}).get("id") if isinstance(result.get("after"), dict) else None,
-            before_payload=result.get("before"),
-            after_payload=result.get("after"),
-            response_payload=response,
+            idempotency_key=idempotency_key,
+            ratification=RatificationSpec("context_item", item_key, item_type),
+            apply_fn=_apply,
         )
     finally:
         db.close()
@@ -1202,89 +1178,50 @@ def append_context_event(
             scope_issue["scope"] = resolved.scope_payload()
             scope_issue["resolution_metadata"] = resolved.resolution_metadata
             return scope_issue
-        key_error = _ensure_idempotency_key(resolved=resolved, idempotency_key=idempotency_key, dry_run=dry_run)
-        if key_error:
-            return key_error
-        request_id = f"dryrun-{uuid.uuid4()}" if dry_run else idempotency_key
-        replay = _existing_replay_payload(
-            db,
-            resolved=resolved,
-            tool_name="append_context_event",
-            request_id=request_id,
-            dry_run=dry_run,
-        )
-        if replay:
-            return replay
-        gate = _require_ratification(
-            db, resolved, tool_name="append_context_event",
-            target_kind="context_item", target_key=f"event:{event_type}", category=None, dry_run=dry_run,
-        )
-        if gate:
-            return gate
-        before_payload = {"event": None}
-        if dry_run:
-            after_payload = {
-                "event_type": event_type,
-                "summary": summary,
-                "source": source,
-                "severity": severity,
-                "metadata": metadata_json or {},
-            }
-            response = {
-                "status": "ok",
-                "scope": resolved.scope_payload(),
-                "resolution_metadata": resolved.resolution_metadata,
-                "dry_run": True,
-                "request_id": request_id,
-                "result": "dry_run",
-                "event": after_payload,
-                "idempotent_replay": False,
-            }
-            return _write_audit_and_filter(
+        def _apply(db, request_id):
+            if dry_run:
+                after = {
+                    "event_type": event_type,
+                    "summary": summary,
+                    "source": source,
+                    "severity": severity,
+                    "metadata": metadata_json or {},
+                }
+                return WriteOutcome(
+                    result="dry_run",
+                    subject_id=None,
+                    before_payload={"event": None},
+                    after_payload=after,
+                    extra={"event": after},
+                )
+            created = create_event_for_task(
                 db,
-                tool_name="append_context_event",
-                resolved=resolved,
-                request_id=request_id,
-                dry_run=True,
-                result="dry_run",
-                subject_id=None,
-                before_payload=before_payload,
-                after_payload=after_payload,
-                response_payload=response,
+                resolved.task.id,
+                EventCreate(
+                    event_type=event_type,
+                    summary=summary,
+                    source=source,
+                    severity=severity,
+                    metadata_json=metadata_json or {},
+                ),
             )
-        created = create_event_for_task(
-            db,
-            resolved.task.id,
-            EventCreate(
-                event_type=event_type,
-                summary=summary,
-                source=source,
-                severity=severity,
-                metadata_json=metadata_json or {},
-            ),
-        )
-        after_payload = _event_to_dict(created)
-        response = {
-            "status": "ok",
-            "scope": resolved.scope_payload(),
-            "resolution_metadata": resolved.resolution_metadata,
-            "dry_run": False,
-            "request_id": request_id,
-            "result": "created",
-            "event": after_payload,
-            "idempotent_replay": False,
-        }
-        return _write_audit_and_filter(
+            after = _event_to_dict(created)
+            return WriteOutcome(
+                result="created",
+                subject_id=after["id"],
+                before_payload={"event": None},
+                after_payload=after,
+                extra={"event": after},
+            )
+
+        return run_governed_write(
             db,
             tool_name="append_context_event",
             resolved=resolved,
-            request_id=request_id,
-            dry_run=False,
-            result="created",
-            subject_id=after_payload["id"],
-            before_payload=before_payload,
-            after_payload=after_payload,
-            response_payload=response,
+            dry_run=dry_run,
+            idempotency_key=idempotency_key,
+            ratification=RatificationSpec("context_item", f"event:{event_type}", None),
+            apply_fn=_apply,
         )
     finally:
         db.close()
@@ -1323,66 +1260,42 @@ def link_context_entities(
             scope_issue["scope"] = resolved.scope_payload()
             scope_issue["resolution_metadata"] = resolved.resolution_metadata
             return scope_issue
-        key_error = _ensure_idempotency_key(resolved=resolved, idempotency_key=idempotency_key, dry_run=dry_run)
-        if key_error:
-            return key_error
-        request_id = f"dryrun-{uuid.uuid4()}" if dry_run else idempotency_key
-        replay = _existing_replay_payload(
-            db,
-            resolved=resolved,
-            tool_name="link_context_entities",
-            request_id=request_id,
-            dry_run=dry_run,
-        )
-        if replay:
-            return replay
-        gate = _require_ratification(
-            db, resolved, tool_name="link_context_entities",
-            target_kind="context_item", target_key=source_item_id, category=None, dry_run=dry_run,
-        )
-        if gate:
-            return gate
-        try:
-            source_uuid = uuid.UUID(source_item_id)
-            target_uuid = uuid.UUID(target_item_id)
-        except ValueError:
-            return _invalid_request(
-                "source_item_id y target_item_id deben ser UUID válidos.",
-                resolved.scope_payload(),
-                resolved.resolution_metadata,
+        def _apply(db, request_id):
+            try:
+                source_uuid = uuid.UUID(source_item_id)
+                target_uuid = uuid.UUID(target_item_id)
+            except ValueError:
+                return _invalid_request(
+                    "source_item_id y target_item_id deben ser UUID válidos.",
+                    resolved.scope_payload(),
+                    resolved.resolution_metadata,
+                )
+            result = link_context_entities_service(
+                db,
+                workspace_id=resolved.workspace.id,
+                source_item_id=source_uuid,
+                target_item_id=target_uuid,
+                relation=relation,
+                metadata=metadata,
+                actor=cast(str, _extract_actor_context()["actor_sub"]),
+                dry_run=dry_run,
             )
-        result = link_context_entities_service(
-            db,
-            workspace_id=resolved.workspace.id,
-            source_item_id=source_uuid,
-            target_item_id=target_uuid,
-            relation=relation,
-            metadata=metadata,
-            actor=cast(str, _extract_actor_context()["actor_sub"]),
-            dry_run=dry_run,
-        )
-        response = {
-            "status": "ok",
-            "scope": resolved.scope_payload(),
-            "resolution_metadata": resolved.resolution_metadata,
-            "dry_run": dry_run,
-            "request_id": request_id,
-            "result": result["result"],
-            "before": result.get("before"),
-            "after": result.get("after"),
-            "idempotent_replay": False,
-        }
-        return _write_audit_and_filter(
+            return WriteOutcome(
+                result=str(result["result"]),
+                subject_id=source_item_id,
+                before_payload=result.get("before"),
+                after_payload=result.get("after"),
+                extra={"before": result.get("before"), "after": result.get("after")},
+            )
+
+        return run_governed_write(
             db,
             tool_name="link_context_entities",
             resolved=resolved,
-            request_id=request_id,
             dry_run=dry_run,
-            result=str(result["result"]),
-            subject_id=source_item_id,
-            before_payload=result.get("before"),
-            after_payload=result.get("after"),
-            response_payload=response,
+            idempotency_key=idempotency_key,
+            ratification=RatificationSpec("context_item", source_item_id, None),
+            apply_fn=_apply,
         )
     finally:
         db.close()
@@ -1419,63 +1332,45 @@ def set_context_labels(
             scope_issue["scope"] = resolved.scope_payload()
             scope_issue["resolution_metadata"] = resolved.resolution_metadata
             return scope_issue
-        key_error = _ensure_idempotency_key(resolved=resolved, idempotency_key=idempotency_key, dry_run=dry_run)
-        if key_error:
-            return key_error
-        request_id = f"dryrun-{uuid.uuid4()}" if dry_run else idempotency_key
-        replay = _existing_replay_payload(
-            db,
-            resolved=resolved,
-            tool_name="set_context_labels",
-            request_id=request_id,
-            dry_run=dry_run,
-        )
-        if replay:
-            return replay
-        try:
-            item_uuid = uuid.UUID(context_item_id)
-        except ValueError:
-            return _invalid_request(
-                "context_item_id debe ser UUID válido.",
-                resolved.scope_payload(),
-                resolved.resolution_metadata,
+        parsed: dict[str, Any] = {}
+
+        def _pre():
+            try:
+                parsed["item_uuid"] = uuid.UUID(context_item_id)
+            except ValueError:
+                return _invalid_request(
+                    "context_item_id debe ser UUID válido.",
+                    resolved.scope_payload(),
+                    resolved.resolution_metadata,
+                )
+            return None
+
+        def _apply(db, request_id):
+            result = append_context_labels_service(
+                db,
+                workspace_id=resolved.workspace.id,
+                item_id=parsed["item_uuid"],
+                labels=labels,
+                actor=cast(str, _extract_actor_context()["actor_sub"]),
+                dry_run=dry_run,
             )
-        gate = _require_ratification(
-            db, resolved, tool_name="set_context_labels",
-            target_kind="context_item", target_key=context_item_id, category=None, dry_run=dry_run,
-        )
-        if gate:
-            return gate
-        result = append_context_labels_service(
-            db,
-            workspace_id=resolved.workspace.id,
-            item_id=item_uuid,
-            labels=labels,
-            actor=cast(str, _extract_actor_context()["actor_sub"]),
-            dry_run=dry_run,
-        )
-        response = {
-            "status": "ok",
-            "scope": resolved.scope_payload(),
-            "resolution_metadata": resolved.resolution_metadata,
-            "dry_run": dry_run,
-            "request_id": request_id,
-            "result": result["result"],
-            "before": result.get("before"),
-            "after": result.get("after"),
-            "idempotent_replay": False,
-        }
-        return _write_audit_and_filter(
+            return WriteOutcome(
+                result=str(result["result"]),
+                subject_id=context_item_id,
+                before_payload=result.get("before"),
+                after_payload=result.get("after"),
+                extra={"before": result.get("before"), "after": result.get("after")},
+            )
+
+        return run_governed_write(
             db,
             tool_name="set_context_labels",
             resolved=resolved,
-            request_id=request_id,
             dry_run=dry_run,
-            result=str(result["result"]),
-            subject_id=context_item_id,
-            before_payload=result.get("before"),
-            after_payload=result.get("after"),
-            response_payload=response,
+            idempotency_key=idempotency_key,
+            ratification=RatificationSpec("context_item", context_item_id, None),
+            apply_fn=_apply,
+            pre_ratification_fn=_pre,
         )
     finally:
         db.close()
@@ -1511,62 +1406,44 @@ def archive_context_item(
             scope_issue["scope"] = resolved.scope_payload()
             scope_issue["resolution_metadata"] = resolved.resolution_metadata
             return scope_issue
-        key_error = _ensure_idempotency_key(resolved=resolved, idempotency_key=idempotency_key, dry_run=dry_run)
-        if key_error:
-            return key_error
-        request_id = f"dryrun-{uuid.uuid4()}" if dry_run else idempotency_key
-        replay = _existing_replay_payload(
-            db,
-            resolved=resolved,
-            tool_name="archive_context_item",
-            request_id=request_id,
-            dry_run=dry_run,
-        )
-        if replay:
-            return replay
-        try:
-            item_uuid = uuid.UUID(context_item_id)
-        except ValueError:
-            return _invalid_request(
-                "context_item_id debe ser UUID válido.",
-                resolved.scope_payload(),
-                resolved.resolution_metadata,
+        parsed: dict[str, Any] = {}
+
+        def _pre():
+            try:
+                parsed["item_uuid"] = uuid.UUID(context_item_id)
+            except ValueError:
+                return _invalid_request(
+                    "context_item_id debe ser UUID válido.",
+                    resolved.scope_payload(),
+                    resolved.resolution_metadata,
+                )
+            return None
+
+        def _apply(db, request_id):
+            result = archive_context_item_service(
+                db,
+                workspace_id=resolved.workspace.id,
+                item_id=parsed["item_uuid"],
+                actor=cast(str, _extract_actor_context()["actor_sub"]),
+                dry_run=dry_run,
             )
-        gate = _require_ratification(
-            db, resolved, tool_name="archive_context_item",
-            target_kind="context_item", target_key=context_item_id, category=None, dry_run=dry_run,
-        )
-        if gate:
-            return gate
-        result = archive_context_item_service(
-            db,
-            workspace_id=resolved.workspace.id,
-            item_id=item_uuid,
-            actor=cast(str, _extract_actor_context()["actor_sub"]),
-            dry_run=dry_run,
-        )
-        response = {
-            "status": "ok",
-            "scope": resolved.scope_payload(),
-            "resolution_metadata": resolved.resolution_metadata,
-            "dry_run": dry_run,
-            "request_id": request_id,
-            "result": result["result"],
-            "before": result.get("before"),
-            "after": result.get("after"),
-            "idempotent_replay": False,
-        }
-        return _write_audit_and_filter(
+            return WriteOutcome(
+                result=str(result["result"]),
+                subject_id=context_item_id,
+                before_payload=result.get("before"),
+                after_payload=result.get("after"),
+                extra={"before": result.get("before"), "after": result.get("after")},
+            )
+
+        return run_governed_write(
             db,
             tool_name="archive_context_item",
             resolved=resolved,
-            request_id=request_id,
             dry_run=dry_run,
-            result=str(result["result"]),
-            subject_id=context_item_id,
-            before_payload=result.get("before"),
-            after_payload=result.get("after"),
-            response_payload=response,
+            idempotency_key=idempotency_key,
+            ratification=RatificationSpec("context_item", context_item_id, None),
+            apply_fn=_apply,
+            pre_ratification_fn=_pre,
         )
     finally:
         db.close()
@@ -1602,100 +1479,63 @@ def apply_sync_batch(
             scope_issue["scope"] = resolved.scope_payload()
             scope_issue["resolution_metadata"] = resolved.resolution_metadata
             return scope_issue
-        key_error = _ensure_idempotency_key(resolved=resolved, idempotency_key=idempotency_key, dry_run=dry_run)
-        if key_error:
-            return key_error
-        request_id = f"dryrun-{uuid.uuid4()}" if dry_run else idempotency_key
-        replay = _existing_replay_payload(
-            db,
-            resolved=resolved,
-            tool_name="apply_sync_batch",
-            request_id=request_id,
-            dry_run=dry_run,
-        )
-        if replay:
-            return replay
-        gate = _require_ratification(
-            db, resolved, tool_name="apply_sync_batch",
-            target_kind="context_item", target_key="sync_batch", category=None, dry_run=dry_run,
-        )
-        if gate:
-            return gate
-        summary = {
-            "operations": len(operations),
-            "dry_run": dry_run,
-            "operation_names": [str(item.get("operation", "unknown")) for item in operations],
-        }
-        # dry_run must be non-mutating for domain tables; avoid persisting sync batches.
-        if dry_run:
-            batch_payload = {
-                "id": None,
-                "status": "dry_run",
-                "operation_count": len(operations),
-                "idempotency_key": request_id,
+        def _apply(db, request_id):
+            summary = {
+                "operations": len(operations),
+                "dry_run": dry_run,
+                "operation_names": [str(item.get("operation", "unknown")) for item in operations],
             }
-            response = {
-                "status": "ok",
-                "scope": resolved.scope_payload(),
-                "resolution_metadata": resolved.resolution_metadata,
-                "dry_run": True,
-                "request_id": request_id,
-                "result": "dry_run",
-                "summary": summary,
-                "batch": batch_payload,
-                "idempotent_replay": False,
-            }
-            return _write_audit_and_filter(
+            # dry_run must be non-mutating for domain tables; avoid persisting sync batches.
+            if dry_run:
+                batch_payload = {
+                    "id": None,
+                    "status": "dry_run",
+                    "operation_count": len(operations),
+                    "idempotency_key": request_id,
+                }
+                return WriteOutcome(
+                    result="dry_run",
+                    subject_id=None,
+                    before_payload={"operations": []},
+                    after_payload=summary,
+                    extra={"summary": summary, "batch": batch_payload},
+                )
+            batch, replayed = create_or_reuse_sync_batch_service(
                 db,
-                tool_name="apply_sync_batch",
-                resolved=resolved,
-                request_id=request_id,
-                dry_run=True,
-                result="dry_run",
-                subject_id=None,
+                workspace_id=resolved.workspace.id,
+                project_id=resolved.project.id if resolved.project else None,
+                task_id=resolved.task.id if resolved.task else None,
+                idempotency_key=request_id,
+                operation_count=len(operations),
+                dry_run=False,
+                summary=summary,
+                actor=cast(str, _extract_actor_context()["actor_sub"]),
+            )
+            return WriteOutcome(
+                result="applied",
+                subject_id=str(batch.id),
                 before_payload={"operations": []},
                 after_payload=summary,
-                response_payload=response,
+                extra={
+                    "summary": summary,
+                    "batch": {
+                        "id": str(batch.id),
+                        "status": batch.status,
+                        "operation_count": batch.operation_count,
+                        "idempotency_key": batch.idempotency_key,
+                    },
+                },
+                idempotent_replay=replayed,
             )
 
-        batch, replayed = create_or_reuse_sync_batch_service(
-            db,
-            workspace_id=resolved.workspace.id,
-            project_id=resolved.project.id if resolved.project else None,
-            task_id=resolved.task.id if resolved.task else None,
-            idempotency_key=request_id,
-            operation_count=len(operations),
-            dry_run=False,
-            summary=summary,
-            actor=cast(str, _extract_actor_context()["actor_sub"]),
-        )
-        response = {
-            "status": "ok",
-            "scope": resolved.scope_payload(),
-            "resolution_metadata": resolved.resolution_metadata,
-            "dry_run": False,
-            "request_id": request_id,
-            "result": "applied",
-            "summary": summary,
-            "batch": {
-                "id": str(batch.id),
-                "status": batch.status,
-                "operation_count": batch.operation_count,
-                "idempotency_key": batch.idempotency_key,
-            },
-            "idempotent_replay": replayed,
-        }
-        return _write_audit_and_filter(
+        return run_governed_write(
             db,
             tool_name="apply_sync_batch",
             resolved=resolved,
-            request_id=request_id,
-            dry_run=False,
-            result=str(response["result"]),
-            subject_id=str(batch.id),
-            before_payload={"operations": []},
-            after_payload=summary,
-            response_payload=response,
+            dry_run=dry_run,
+            idempotency_key=idempotency_key,
+            ratification=RatificationSpec("context_item", "sync_batch", None),
+            apply_fn=_apply,
         )
     finally:
         db.close()
