@@ -2,6 +2,20 @@
 
 Runbook para operar el modo `mcp` de la extensión y validar conectividad local/remota con OAuth Auth0, read plane y write plane.
 
+> **Plano de ratificación deliberativa (pasos 1-6 del ADR).** El contrato pasa de
+> **17 a 21 tools**. Ver `docs/context/adr/ADR-deliberative-context-ratification.md`.
+>
+> - Nuevas tools: `propose_change` (`wis.context.write`), `list_proposals`
+>   (`wis.context.read`), `ratify_proposal` y `reject_proposal` (`wis.context.ratify`).
+> - Nuevo scope **`wis.context.ratify`** — solo para clientes operados por humanos;
+>   configúralo en Auth0 (los M2M de agentes NO lo tienen: proponen pero no ratifican).
+> - Gate (I1): un commit de una categoría/tool marcada `ratify` en
+>   `policy_state.approval_policy_json` se rechaza con `ratification_required` si no
+>   existe una `Proposal` ratificada para el target (sin fallback silencioso). El
+>   default de política es `auto` (no gatea → retrocompatible).
+> - Migraciones `0005` (tabla `proposals`) y `0006` (columnas aditivas). El registro
+>   `scripts/mcp_validation_payloads.json` cubre las 21 tools.
+
 ## 1. Scope and guardrails
 
 - Mantener policy mode `delegated_limited`.
@@ -125,6 +139,63 @@ MCP_AUTH_SCHEME="Bearer" \
 
 Debe confirmar mutación esperada + auditoría write.
 
+### 5.4 Preflight Auth0 real para ChatGPT Connector
+
+Antes de conectar ChatGPT, validar el runtime MCP con token real emitido por Auth0. Este gate no requiere secretos en CI: si `MCP_E2E_TOKEN` no está definido, P4 queda omitido.
+
+Variables seguras de ejemplo:
+
+```bash
+export MCP_E2E_BASE_URL="http://localhost:8002"
+export MCP_E2E_TOKEN="<ACCESS_TOKEN_AUTH0_REAL>"
+```
+
+Validación local:
+
+```bash
+cd backend
+MCP_E2E_BASE_URL="http://localhost:8002" \
+MCP_E2E_TOKEN="<ACCESS_TOKEN_AUTH0_REAL>" \
+python -m pytest tests/test_e2e_mcp_preflight.py -v
+```
+
+Validación remota HTTPS:
+
+```bash
+cd backend
+MCP_E2E_BASE_URL="https://<dominio-estable>" \
+MCP_E2E_TOKEN="<ACCESS_TOKEN_AUTH0_REAL>" \
+python -m pytest tests/test_e2e_mcp_preflight.py -v
+```
+
+Evidencia mínima esperada:
+
+- `GET /.well-known/oauth-protected-resource` → `200`
+- `GET /mcp` sin token → `401` + `WWW-Authenticate`
+- `POST /mcp` sin token → `401` + `WWW-Authenticate`
+- `POST /mcp` con token real → no `401` ni `403`
+- ChatGPT Custom Connector lista tools después de pasar local + remoto
+
+El token debe tener claims válidos:
+
+- `iss=https://necktral.us.auth0.com/`
+- `aud=https://wis-context-sync-read-api`
+- `scope` incluye `wis.context.read`
+- `exp` vigente
+- firma válida vía JWKS
+
+Para producción, definir `MCP_ALLOWED_ORIGINS` explícitamente. No dejar modo permisivo:
+
+```bash
+MCP_ALLOWED_ORIGINS="https://chatgpt.com"
+```
+
+Si se opera con túnel o dominio adicional autorizado:
+
+```bash
+MCP_ALLOWED_ORIGINS="https://chatgpt.com,https://<tu-tunnel>"
+```
+
 ## 6. VS Code usage checklist (runtimeMode=mcp)
 
 1. Setear:
@@ -180,7 +251,7 @@ Debe confirmar mutación esperada + auditoría write.
   - `MCP_PUBLIC_BASE_URL`: base pública del recurso MCP para construir `resource_metadata` en `WWW-Authenticate`.
   - `MCP_RESOURCE_ID`: identificador OAuth canónico del recurso MCP (`resource=`).
   - `MCP_AUTH0_AUDIENCE`: audience para validación JWT (compat legacy con fallback de `MCP_RESOURCE_ID` cuando no se define explícitamente).
-  - `MCP_ALLOWED_ORIGINS`: allowlist CSV opcional para validar header `Origin` en `/mcp` (vacío = modo permisivo).
+- `MCP_ALLOWED_ORIGINS`: allowlist CSV para validar header `Origin` en `/mcp`; obligatorio en producción, vacío solo para desarrollo controlado.
 - Compatibilidad legacy:
   - si `MCP_RESOURCE_ID` no está definido, el runtime usa `MCP_AUTH0_AUDIENCE`;
   - si ambos existen y divergen, el runtime no falla (modo compatibilidad legacy) y lo reporta en logs.

@@ -19,6 +19,7 @@ from app.models import (  # noqa: F401
     ExecutionSession,
     PolicyState,
     Project,
+    Proposal,
     PublishAudit,
     Task,
     ValidationRun,

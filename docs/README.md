@@ -9,6 +9,8 @@ Este directorio concentra la fuente de verdad documental para el control plane (
 - Operacion MCP (runbook): `docs/mcp/`
 - Contrato VS Code <-> MCP runtime: `docs/mcp/vscode_read_model_contract.md`
 - OAuth Auth0 para ChatGPT Connector: `docs/mcp/oauth_auth0_chatgpt_connector.md`
+- Orientacion contexto deliberativo: `docs/context/orientations/deliberative-context-layer.md`
+- ADR ratificacion humana (plan): `docs/context/adr/ADR-deliberative-context-ratification.md`
 
 ## Tiering documental
 

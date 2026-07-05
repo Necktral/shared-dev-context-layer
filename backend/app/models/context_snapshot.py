@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Text, func, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -45,4 +45,6 @@ class ContextSnapshot(Base):
     snapshot_content: Mapped[dict] = mapped_column(JSONB, nullable=False)
     policy_applied: Mapped[str] = mapped_column(Text, nullable=False)
     generated_from: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'unknown'"))
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

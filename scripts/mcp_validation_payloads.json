@@ -67,5 +67,20 @@
       }
     ],
     "dry_run": true
+  },
+  "propose_change": {
+    "target_kind": "context_item",
+    "target_key": "registry.validation.proposal",
+    "rationale": "registry validation",
+    "dry_run": true
+  },
+  "list_proposals": {
+    "limit": 5
+  },
+  "ratify_proposal": {
+    "proposal_id": "00000000-0000-4000-8000-000000000009"
+  },
+  "reject_proposal": {
+    "proposal_id": "00000000-0000-4000-8000-000000000009"
   }
 }

@@ -108,22 +108,48 @@ En runtime MCP (backend):
 - Este valor controla el `resource_metadata` que el servidor anuncia en `WWW-Authenticate`.
 - Definir `MCP_RESOURCE_ID=https://wis-context-sync-read-api` (recomendado para conservar compatibilidad actual).
 - `MCP_AUTH0_AUDIENCE` se mantiene para validación JWT.
-- Opcional hardening DNS-rebinding: `MCP_ALLOWED_ORIGINS=https://chatgpt.com,https://chat.openai.com`
+- Obligatorio en producción: `MCP_ALLOWED_ORIGINS=https://chatgpt.com`
+- Si hay dominio/túnel adicional autorizado: `MCP_ALLOWED_ORIGINS=https://chatgpt.com,https://<tu-tunnel>`
+- No dejar `MCP_ALLOWED_ORIGINS` vacío en producción. Vacío significa modo permisivo y debe limitarse a desarrollo controlado.
 
 ## 4. Validación mínima obligatoria
 
-1. Probar autenticación en la UI del conector (debe completar login sin error).
-2. Verificar claims del access token:
+1. Validar servidor local con token real Auth0 usando `tests/test_e2e_mcp_preflight.py`.
+2. Validar endpoint HTTPS remoto con el mismo preflight.
+3. Probar autenticación en la UI del conector (debe completar login sin error).
+4. Verificar claims del access token:
    - `iss`
    - `aud`
    - `scope` (o `scp`)
    - `exp`
-3. Ejecutar llamada MCP desde el conector y confirmar respuesta de tools.
-4. Registrar evidencia mínima:
+5. Ejecutar llamada MCP desde el conector y confirmar respuesta de tools.
+6. Registrar evidencia mínima:
    - endpoint MCP usado
    - scopes concedidos
    - resultado de autenticación
    - resultado de llamada MCP
+
+### Preflight P1-P4 con token real
+
+Local:
+
+```bash
+cd backend
+MCP_E2E_BASE_URL="http://localhost:8002" \
+MCP_E2E_TOKEN="<ACCESS_TOKEN_AUTH0_REAL>" \
+python -m pytest tests/test_e2e_mcp_preflight.py -v
+```
+
+Remoto HTTPS:
+
+```bash
+cd backend
+MCP_E2E_BASE_URL="https://mcp.wiscontext-sync.org" \
+MCP_E2E_TOKEN="<ACCESS_TOKEN_AUTH0_REAL>" \
+python -m pytest tests/test_e2e_mcp_preflight.py -v
+```
+
+El P4 no exige necesariamente `200`, pero sí debe descartar rechazo de autorización: no debe devolver `401` ni `403`. Si `MCP_E2E_TOKEN` no existe, P4 se omite para que CI no requiera secretos.
 
 ### Utilidad local para validar claims
 

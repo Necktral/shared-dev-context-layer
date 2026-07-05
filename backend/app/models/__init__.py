@@ -11,6 +11,7 @@ from app.models.event import Event
 from app.models.execution_session import ExecutionSession
 from app.models.policy_state import PolicyState
 from app.models.project import Project
+from app.models.proposal import Proposal
 from app.models.publish_audit import PublishAudit
 from app.models.task import Task
 from app.models.validation_run import ValidationRun
@@ -31,6 +32,7 @@ __all__ = [
     "ApprovedDecision",
     "Event",
     "ContextSnapshot",
+    "Proposal",
     "PublishAudit",
     "PolicyState",
     "ValidationRun",

@@ -76,6 +76,7 @@ def test_protected_resource_metadata_contract(monkeypatch) -> None:
         "wis.context.sync.read",
         "wis.context.write",
         "wis.context.sync.write",
+        "wis.context.ratify",
     ]
 
 
