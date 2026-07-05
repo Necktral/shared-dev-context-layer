@@ -36,7 +36,7 @@ def create_event_for_task(db: Session, task_id: UUID, payload: EventCreate) -> E
         payload_json=payload.metadata_json,
     )
     db.add(event)
-    db.commit()
+    db.flush()
     db.refresh(event)
     return event
 

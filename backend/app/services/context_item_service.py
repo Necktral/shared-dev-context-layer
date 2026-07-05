@@ -239,7 +239,7 @@ def upsert_context_item(
             updated_by=actor,
         )
         db.add(created)
-        db.commit()
+        db.flush()
         db.refresh(created)
         return {"result": "created", "before": None, "after": context_item_to_dict(created)}
 
@@ -276,7 +276,7 @@ def upsert_context_item(
     existing.status = "active"
     existing.updated_by = actor
     db.add(existing)
-    db.commit()
+    db.flush()
     db.refresh(existing)
     return {"result": "updated", "before": before, "after": context_item_to_dict(existing)}
 
@@ -321,7 +321,7 @@ def append_context_labels(
     item.updated_by = actor
     item.version = item.version + 1
     db.add(item)
-    db.commit()
+    db.flush()
     db.refresh(item)
     return {"result": "updated", "before": before, "after": context_item_to_dict(item)}
 
@@ -345,7 +345,7 @@ def archive_context_item(
     item.updated_by = actor
     item.version = item.version + 1
     db.add(item)
-    db.commit()
+    db.flush()
     db.refresh(item)
     return {"result": "archived", "before": before, "after": context_item_to_dict(item)}
 
@@ -402,7 +402,7 @@ def link_context_entities(
         existing.metadata_json = metadata or {}
         existing.created_by = actor
         db.add(existing)
-        db.commit()
+        db.flush()
         db.refresh(existing)
         return {
             "result": "updated",
@@ -422,7 +422,7 @@ def link_context_entities(
         created_by=actor,
     )
     db.add(created)
-    db.commit()
+    db.flush()
     db.refresh(created)
     return {
         "result": "created",
@@ -467,7 +467,7 @@ def create_or_reuse_sync_batch(
         requested_by=actor,
     )
     db.add(row)
-    db.commit()
+    db.flush()
     db.refresh(row)
     return row, False
 
