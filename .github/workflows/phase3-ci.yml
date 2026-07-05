@@ -116,7 +116,6 @@ jobs:
       DATABASE_URL: postgresql://wis_admin:wis_strong_password_change_this@localhost:5432/wis_context
       MCP_AUTH_ENABLED: "true"
       MCP_AUTH_BYPASS_LOCAL: "true"
-      MCP_PUBLIC_BASE_URL: "https://mcp.wiscontext-sync.org"
       MCP_AUTH0_ISSUER: "https://necktral.us.auth0.com/"
       MCP_AUTH0_AUDIENCE: "https://wis-context-sync-read-api"
       MCP_AUTH0_JWKS_URL: "https://necktral.us.auth0.com/.well-known/jwks.json"

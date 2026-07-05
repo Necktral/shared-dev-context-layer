@@ -29,6 +29,9 @@ Estado: activo (normativo operativo)
 
 | `CT-012` | `apply_sync_batch` — despacho real de operaciones (`operations[].operation`+`payload`) + campo `results` | `integration_contract` | maintainers backend/mcp | `additive` (cumple el contrato "atomically" antes incumplido); operaciones ahora requieren `payload`; ratificación por operación | `backend/tests/test_wp03_batch_dispatch.py` |
 
+| `CT-013` | Operator-token de ratificación (`OPERATOR_RATIFY_TOKEN`, param `operator_token` en ratify/reject) | `integration_contract` | maintainers backend/mcp | **non_additive** — ratify/reject exigen token verificado siempre; ADR-phase0-perimeter-closure | `backend/tests/test_wp02_operator_token.py` |
+| `CT-014` | Perímetro HTTP: `/internal/*` exige `X-Internal-Token` (fail-closed); `/mcp/info` sin `auth_enabled`; docs off fuera de dev; bind/publicación loopback | `integration_contract` | maintainers backend | **non_additive** — endpoints internos pasan a requerir token; ADR-phase0-perimeter-closure | `backend/tests/test_wp05_perimeter.py` |
+
 ## Criterio de actualización
 
 - Si se agrega o modifica contrato: actualizar fila existente o crear nueva (`CT-XXX`).

@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.schemas.decision import ApprovedDecisionOut
 from app.schemas.event import EventCreate, EventOut
@@ -13,7 +14,27 @@ from app.services.policy_service import get_active_policy
 from app.services.snapshot_service import create_manual_snapshot
 from app.services.task_service import require_active_task
 
-router = APIRouter(prefix="/internal", tags=["internal"])
+
+def require_internal_token(x_internal_token: str | None = Header(default=None)) -> None:
+    """WP-0.5: la API HTTP interna es un plano de escritura (POST /internal/events,
+    /internal/snapshots/manual) que no tenía identidad. Exige un token dedicado,
+    fail-closed: sin INTERNAL_API_TOKEN configurado se rechaza (no se abre por defecto)."""
+    configured = get_settings().internal_api_token
+    if not configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API interna no configurada (falta INTERNAL_API_TOKEN).",
+        )
+    if x_internal_token != configured:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="X-Internal-Token ausente o inválido.",
+        )
+
+
+router = APIRouter(
+    prefix="/internal", tags=["internal"], dependencies=[Depends(require_internal_token)]
+)
 
 
 @router.get("/tasks/active", response_model=TaskOut)

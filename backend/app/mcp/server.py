@@ -210,7 +210,7 @@ def _build_mcp_server() -> FastMCP:
     return FastMCP(
         name="WIS Context Sync MCP",
         instructions=instructions,
-        host="0.0.0.0",
+        host=settings.mcp_bind_host,
         port=settings.mcp_port,
         streamable_http_path="/mcp",
         auth=auth_settings,
@@ -2296,6 +2296,13 @@ _instrument_runtime_handlers()
 if __name__ == "__main__":
     import uvicorn
 
+    # WP-0.5: el bypass local no debe exponerse a una URL pública. Este guard vive en
+    # el arranque del transporte (no en Settings), para no afectar a pytest.
+    if settings.mcp_auth_bypass_local and settings.mcp_public_base_url:
+        raise RuntimeError(
+            "MCP_AUTH_BYPASS_LOCAL=true con MCP_PUBLIC_BASE_URL configurado: no expongas "
+            "el bypass a internet. Desactiva el bypass o quita MCP_PUBLIC_BASE_URL."
+        )
     uvicorn.run(
         build_observed_streamable_http_app(),
         host=mcp.settings.host,
