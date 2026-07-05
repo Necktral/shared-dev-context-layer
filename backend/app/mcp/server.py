@@ -2094,9 +2094,33 @@ def list_proposals(
         db.close()
 
 
+def _verify_operator_token(
+    operator_token: str | None, scope_payload: dict[str, Any], resolution_metadata: dict[str, Any]
+) -> dict[str, Any] | None:
+    """WP-0.2: verifica el operator-token de ratificación SIEMPRE (incluso bajo bypass).
+    La ratificación es la decisión humana; no debe ser auto-aprobable por máquina."""
+    configured = settings.operator_ratify_token
+    if not configured:
+        return {
+            "status": "ratification_not_configured",
+            "message": "La ratificación requiere OPERATOR_RATIFY_TOKEN configurado en el servidor.",
+            "scope": scope_payload,
+            "resolution_metadata": resolution_metadata,
+        }
+    if not operator_token or operator_token != configured:
+        return {
+            "status": "operator_token_invalid",
+            "message": "Operator-token ausente o inválido; la ratificación es una decisión humana verificada.",
+            "scope": scope_payload,
+            "resolution_metadata": resolution_metadata,
+        }
+    return None
+
+
 @mcp.tool(description="Ratify a Proposal (human decision -> canonical). Requires wis.context.ratify.")
 def ratify_proposal(
     proposal_id: str,
+    operator_token: str | None = None,
     workspace_id: str | None = None,
     project_id: str | None = None,
     task_id: str | None = None,
@@ -2116,6 +2140,9 @@ def ratify_proposal(
             scope_issue["scope"] = resolved.scope_payload()
             scope_issue["resolution_metadata"] = resolved.resolution_metadata
             return scope_issue
+        token_error = _verify_operator_token(operator_token, resolved.scope_payload(), resolved.resolution_metadata)
+        if token_error is not None:
+            return token_error
         try:
             pid = uuid.UUID(proposal_id)
         except ValueError:
@@ -2208,6 +2235,7 @@ def ratify_proposal(
 def reject_proposal(
     proposal_id: str,
     reason: str | None = None,
+    operator_token: str | None = None,
     workspace_id: str | None = None,
     project_id: str | None = None,
     task_id: str | None = None,
@@ -2227,6 +2255,9 @@ def reject_proposal(
             scope_issue["scope"] = resolved.scope_payload()
             scope_issue["resolution_metadata"] = resolved.resolution_metadata
             return scope_issue
+        token_error = _verify_operator_token(operator_token, resolved.scope_payload(), resolved.resolution_metadata)
+        if token_error is not None:
+            return token_error
         try:
             pid = uuid.UUID(proposal_id)
         except ValueError:

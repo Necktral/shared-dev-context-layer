@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     mcp_resource_id: str | None = None
     mcp_allowed_origins: str = ""
     mcp_auth_clock_skew_seconds: int = 60
+    # WP-0.2: token dedicado del operador humano para ratify/reject. Verificado SIEMPRE,
+    # incluso bajo MCP_AUTH_BYPASS_LOCAL=true (el bypass NO lo satisface). Si es None,
+    # ratify/reject responden que la ratificación no está configurada (fail-closed).
+    operator_ratify_token: str | None = None
     mcp_log_level: str = "INFO"
     mcp_log_json: bool = True
     mcp_log_payloads: bool = False
