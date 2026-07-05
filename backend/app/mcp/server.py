@@ -91,6 +91,21 @@ TOOL_SCOPES: dict[str, list[str]] = {
     "reject_proposal": ["wis.context.ratify"],
 }
 
+# WP-0.2: clasificación read/write por NOMBRE de tool, no por sufijo de scope.
+# ratify_proposal/reject_proposal usan scope .ratify pero MUTAN canon (son writes);
+# preview_write_impact usa scope .write pero es de solo lectura.
+WRITE_TOOL_NAMES: set[str] = {
+    "upsert_context_item",
+    "append_context_event",
+    "link_context_entities",
+    "set_context_labels",
+    "archive_context_item",
+    "apply_sync_batch",
+    "propose_change",
+    "ratify_proposal",
+    "reject_proposal",
+}
+
 RESOURCE_SCOPES_SUPPORTED = [
     "wis.context.read",
     "wis.context.sync.read",
@@ -104,8 +119,8 @@ def _auth_runtime_enabled() -> bool:
     return settings.mcp_auth_enabled and not settings.mcp_auth_bypass_local
 
 
-def _is_write_tool(scopes: list[str]) -> bool:
-    return any(scope.endswith(".write") for scope in scopes)
+def _is_write_tool(tool_name: str) -> bool:
+    return tool_name in WRITE_TOOL_NAMES
 
 
 def _tool_security_schemes(scopes: list[str]) -> list[dict[str, Any]]:
@@ -1694,7 +1709,7 @@ def _apply_tool_auth_metadata() -> None:
 
         if tool.annotations is None:
             tool.annotations = ToolAnnotations()
-        tool.annotations.readOnlyHint = not _is_write_tool(scopes)
+        tool.annotations.readOnlyHint = not _is_write_tool(tool_name)
 
 
 def _instrument_runtime_handlers() -> None:
@@ -1746,10 +1761,10 @@ def _instrument_runtime_handlers() -> None:
             unknown_published_tools = sorted(published_set - known_tools)
             missing_from_published = sorted(known_tools - published_set)
             read_tools_total = sum(
-                1 for tool_name in published_tools if tool_name in TOOL_SCOPES and not _is_write_tool(TOOL_SCOPES[tool_name])
+                1 for tool_name in published_tools if tool_name in TOOL_SCOPES and not _is_write_tool(tool_name)
             )
             write_tools_total = sum(
-                1 for tool_name in published_tools if tool_name in TOOL_SCOPES and _is_write_tool(TOOL_SCOPES[tool_name])
+                1 for tool_name in published_tools if tool_name in TOOL_SCOPES and _is_write_tool(tool_name)
             )
 
             mcp_logger.emit(

@@ -1,10 +1,6 @@
 import anyio
 
-from app.mcp.server import TOOL_SCOPES, mcp
-
-
-def _is_write_tool(scopes: list[str]) -> bool:
-    return any(scope.endswith(".write") for scope in scopes)
+from app.mcp.server import TOOL_SCOPES, WRITE_TOOL_NAMES, mcp
 
 
 def test_list_tools_exposes_auth_metadata_per_tool() -> None:
@@ -21,6 +17,12 @@ def test_list_tools_exposes_auth_metadata_per_tool() -> None:
             assert tool.meta.get("securitySchemes") == [{"type": "oauth2", "scopes": scopes}]
 
             assert tool.annotations is not None
-            assert tool.annotations.readOnlyHint is (not _is_write_tool(scopes))
+            # WP-0.2: readOnlyHint por NOMBRE de tool, no por sufijo de scope.
+            assert tool.annotations.readOnlyHint is (tool_name not in WRITE_TOOL_NAMES)
+
+        # Fijar explícitamente el fix (antes clasificados mal por el sufijo de scope):
+        assert tools_by_name["ratify_proposal"].annotations.readOnlyHint is False
+        assert tools_by_name["reject_proposal"].annotations.readOnlyHint is False
+        assert tools_by_name["preview_write_impact"].annotations.readOnlyHint is True
 
     anyio.run(_assertions)
