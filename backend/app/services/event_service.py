@@ -19,7 +19,9 @@ def list_recent_events_for_task(db: Session, task_id: UUID, limit: int = 20) -> 
     return list(db.execute(statement).scalars().all())
 
 
-def create_event_for_task(db: Session, task_id: UUID, payload: EventCreate) -> Event:
+def create_event_for_task(
+    db: Session, task_id: UUID, payload: EventCreate, consumer_id: UUID | None = None
+) -> Event:
     task = db.execute(select(Task).where(Task.id == task_id)).scalars().first()
     if task is None:
         raise LookupError("Task not found.")
@@ -28,6 +30,7 @@ def create_event_for_task(db: Session, task_id: UUID, payload: EventCreate) -> E
         task_id=task_id,
         workspace_id=task.workspace_id,
         project_id=task.project_id,
+        consumer_id=consumer_id,
         event_type=payload.event_type,
         summary=payload.summary,
         source=payload.source,

@@ -1204,6 +1204,7 @@ def append_context_event(
                     severity=severity,
                     metadata_json=metadata_json or {},
                 ),
+                consumer_id=resolved.consumer.id if resolved.consumer else None,
             )
             after = _event_to_dict(created)
             return WriteOutcome(
@@ -1491,6 +1492,7 @@ def _dispatch_batch_op(
                 severity=payload.get("severity", "info"),
                 metadata_json=payload.get("metadata_json") or {},
             ),
+            consumer_id=resolved.consumer.id if resolved.consumer else None,
         )
         return {"result": "created", "after": _event_to_dict(created)}
     if operation == "link_context_entities":
@@ -2006,6 +2008,7 @@ def propose_change(
                 target_key=target_key,
                 rationale=rationale,
                 proposed_payload=proposed_payload or {},
+                proposer_consumer_id=resolved.consumer.id if resolved.consumer else None,
                 idempotency_key=idempotency_key,
             )
             if proposal.status == "proposed":
