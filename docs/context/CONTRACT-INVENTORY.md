@@ -27,6 +27,8 @@ Estado: activo (normativo operativo)
 | `CT-010` | Commit único del camino de escritura (dominio+auditoría atómicos vía `record_publish_audit(commit=...)`) | `persisted_contract` | maintainers backend/mcp | `additive` — un fallo de auditoría revierte también el dominio (antes no) | `backend/tests/test_wp04_atomicity.py` |
 | `CT-011` | `publish_audit.task_id` nullable + `workspace_id`/`project_id`; `policy_state.approval_mode` nullable | `persisted_contract` | maintainers backend | `additive` — columnas relajadas, sin pérdida de datos; migración `0007_write_plane_fixes` | `backend/tests/test_wp04_atomicity.py::test_read_tool_still_records_publish_audit` |
 
+| `CT-012` | `apply_sync_batch` — despacho real de operaciones (`operations[].operation`+`payload`) + campo `results` | `integration_contract` | maintainers backend/mcp | `additive` (cumple el contrato "atomically" antes incumplido); operaciones ahora requieren `payload`; ratificación por operación | `backend/tests/test_wp03_batch_dispatch.py` |
+
 ## Criterio de actualización
 
 - Si se agrega o modifica contrato: actualizar fila existente o crear nueva (`CT-XXX`).

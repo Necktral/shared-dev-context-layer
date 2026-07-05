@@ -132,6 +132,7 @@ TOOL_ALLOWLISTS: dict[str, set[str]] = {
         "request_id",
         "result",
         "summary",
+        "results",
         "batch",
         "idempotent_replay",
         "audit_ref",

@@ -1449,6 +1449,79 @@ def archive_context_item(
         db.close()
 
 
+_BATCH_OP_NAMES = {
+    "upsert_context_item",
+    "append_context_event",
+    "link_context_entities",
+    "set_context_labels",
+    "archive_context_item",
+}
+
+
+def _dispatch_batch_op(
+    db: Any, resolved: ResolvedScope, actor: str, operation: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Ejecuta una operación del batch contra su servicio (flush-only; el commit único
+    del pipeline la persiste). Lanza KeyError si falta un campo obligatorio del payload,
+    ValueError si un UUID es inválido."""
+    ws = resolved.workspace.id
+    if operation == "upsert_context_item":
+        return upsert_context_item_service(
+            db,
+            workspace_id=ws,
+            project_id=resolved.project.id if resolved.project else None,
+            task_id=resolved.task.id if resolved.task else None,
+            item_key=payload["item_key"],
+            item_type=payload.get("item_type", "note"),
+            title=payload.get("title", ""),
+            content=payload.get("content"),
+            labels=payload.get("labels"),
+            expected_version=payload.get("expected_version"),
+            actor=actor,
+            dry_run=False,
+        )
+    if operation == "append_context_event":
+        created = create_event_for_task(
+            db,
+            resolved.task.id,
+            EventCreate(
+                event_type=payload["event_type"],
+                summary=payload.get("summary", ""),
+                source=payload.get("source", "mcp"),
+                severity=payload.get("severity", "info"),
+                metadata_json=payload.get("metadata_json") or {},
+            ),
+        )
+        return {"result": "created", "after": _event_to_dict(created)}
+    if operation == "link_context_entities":
+        return link_context_entities_service(
+            db,
+            workspace_id=ws,
+            source_item_id=uuid.UUID(payload["source_item_id"]),
+            target_item_id=uuid.UUID(payload["target_item_id"]),
+            relation=payload["relation"],
+            metadata=payload.get("metadata"),
+            actor=actor,
+            dry_run=False,
+        )
+    if operation == "set_context_labels":
+        return append_context_labels_service(
+            db,
+            workspace_id=ws,
+            item_id=uuid.UUID(payload["context_item_id"]),
+            labels=payload.get("labels", []),
+            actor=actor,
+            dry_run=False,
+        )
+    return archive_context_item_service(
+        db,
+        workspace_id=ws,
+        item_id=uuid.UUID(payload["context_item_id"]),
+        actor=actor,
+        dry_run=False,
+    )
+
+
 @mcp.tool(
     description="Apply context sync batch atomically in dry_run/commit mode. Write plane."
 )
@@ -1500,6 +1573,61 @@ def apply_sync_batch(
                     after_payload=summary,
                     extra={"summary": summary, "batch": batch_payload},
                 )
+            actor = cast(str, _extract_actor_context()["actor_sub"])
+            op_results: list[dict[str, Any]] = []
+            for idx, op in enumerate(operations):
+                operation = str(op.get("operation", ""))
+                op_payload = op.get("payload") or {}
+                if operation not in _BATCH_OP_NAMES:
+                    return _invalid_request(
+                        f"operación no soportada en batch: {operation!r} (índice {idx}).",
+                        resolved.scope_payload(),
+                        resolved.resolution_metadata,
+                    )
+                # Ratificación POR OPERACIÓN (item_type como categoría en upsert): cierra el
+                # bypass de gobernanza donde el canon se colaba vía batch (F03).
+                category = op_payload.get("item_type") if operation == "upsert_context_item" else None
+                target_key = (
+                    op_payload.get("item_key")
+                    or op_payload.get("context_item_id")
+                    or op_payload.get("source_item_id")
+                    or f"batch:{operation}"
+                )
+                gate = _require_ratification(
+                    db,
+                    resolved,
+                    tool_name=operation,
+                    target_kind="context_item",
+                    target_key=str(target_key),
+                    category=category,
+                    dry_run=False,
+                )
+                if gate is not None:
+                    # rollback total: run_governed_write no comitea ante un dict de error.
+                    return gate
+                try:
+                    op_result = _dispatch_batch_op(db, resolved, actor, operation, op_payload)
+                except KeyError as exc:
+                    return _invalid_request(
+                        f"payload incompleto para {operation} (índice {idx}): falta {exc}.",
+                        resolved.scope_payload(),
+                        resolved.resolution_metadata,
+                    )
+                except ValueError as exc:
+                    return _invalid_request(
+                        f"payload inválido para {operation} (índice {idx}): {exc}.",
+                        resolved.scope_payload(),
+                        resolved.resolution_metadata,
+                    )
+                after = op_result.get("after")
+                op_results.append(
+                    {
+                        "index": idx,
+                        "operation": operation,
+                        "result": op_result.get("result"),
+                        "subject_id": after.get("id") if isinstance(after, dict) else None,
+                    }
+                )
             batch, replayed = create_or_reuse_sync_batch_service(
                 db,
                 workspace_id=resolved.workspace.id,
@@ -1509,15 +1637,16 @@ def apply_sync_batch(
                 operation_count=len(operations),
                 dry_run=False,
                 summary=summary,
-                actor=cast(str, _extract_actor_context()["actor_sub"]),
+                actor=actor,
             )
             return WriteOutcome(
                 result="applied",
                 subject_id=str(batch.id),
                 before_payload={"operations": []},
-                after_payload=summary,
+                after_payload={"summary": summary, "results": op_results},
                 extra={
                     "summary": summary,
+                    "results": op_results,
                     "batch": {
                         "id": str(batch.id),
                         "status": batch.status,
