@@ -247,3 +247,7 @@ Pasos 1–2 son **aditivos y no cambian comportamiento** (mergeables sin riesgo)
 - **Positivas:** *"yo decido"* pasa de convención a invariante enforced; disenso visible; trail completo (qué + porqué + quién objetó); granularidad evita fricción innecesaria.
 - **Costos:** una migración, +4 tools, cambio versionado de contrato, y trabajo de configuración en Auth0 (scope `ratify`).
 - **Reversibilidad:** Pasos 1–2 y 4 son aditivos; el Paso 3 (gate) es el único con corte de comportamiento y va detrás de la granularidad para no bloquear flujos de bajo riesgo.
+
+---
+
+**Addendum (2026-07-04, blueprint v2):** `semantic_search` es descubrimiento read-only. La resolución canónica — `get_approved_decisions`, `_require_ratification`, el ensamblado de `get_project_brief` — es determinista y NUNCA consume resultados semánticos. El anti-patrón '❌ RAG en el camino canónico' sigue vigente; `semantic_search` no lo viola porque no participa en ninguna decisión de gobernanza.
