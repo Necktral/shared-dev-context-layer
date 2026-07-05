@@ -51,7 +51,9 @@ def write_event(payload: EventCreate, db: Session = Depends(get_db)) -> EventOut
         task = require_active_task(db)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return create_event_for_task(db, task.id, payload)
+    event = create_event_for_task(db, task.id, payload)
+    db.commit()
+    return event
 
 
 @router.get("/policy/active", response_model=PolicyStateOut)
@@ -73,4 +75,6 @@ def write_manual_snapshot(payload: ManualSnapshotCreate, db: Session = Depends(g
     if not policy:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No policy state configured.")
 
-    return create_manual_snapshot(db, task.id, payload, policy.mode)
+    snapshot = create_manual_snapshot(db, task.id, payload, policy.mode)
+    db.commit()
+    return snapshot

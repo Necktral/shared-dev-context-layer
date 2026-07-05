@@ -28,6 +28,10 @@ def get_existing_request_audit(
             ContextWriteAudit.workspace_id == workspace_id,
             ContextWriteAudit.tool_name == tool_name,
             ContextWriteAudit.request_id == request_id,
+            # WP-0.1: el replay solo considera commits reales. Las filas dry_run
+            # (histórico) quedan excluidas — casa con el índice parcial
+            # ix_context_write_audit_replay (WHERE NOT dry_run).
+            ContextWriteAudit.dry_run.is_(False),
         )
     ).scalars().first()
 
@@ -65,7 +69,9 @@ def record_write_audit(
         metadata_json=metadata or {},
     )
     db.add(row)
-    db.commit()
+    # WP-0.4: sin commit propio; el commit único del pipeline de escritura
+    # (hoy en _write_audit_and_filter) persiste dominio + auditoría atómicamente.
+    db.flush()
     db.refresh(row)
     return row
 

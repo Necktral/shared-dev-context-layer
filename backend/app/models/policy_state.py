@@ -20,7 +20,7 @@ class PolicyState(Base):
     mode: Mapped[str] = mapped_column(Text, nullable=False)
     scope: Mapped[str] = mapped_column(Text, nullable=False)
     redaction_level: Mapped[str] = mapped_column(Text, nullable=False)
-    approval_mode: Mapped[str] = mapped_column(Text, nullable=False)
+    approval_mode: Mapped[str | None] = mapped_column(Text, nullable=True)
     approval_policy_json: Mapped[dict] = mapped_column(
         JSONB,
         nullable=False,

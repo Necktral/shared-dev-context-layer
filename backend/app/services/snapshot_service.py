@@ -28,7 +28,7 @@ def create_manual_snapshot(
         generated_from="manual_api",
     )
     db.add(snapshot)
-    db.commit()
+    db.flush()
     db.refresh(snapshot)
     return snapshot
 

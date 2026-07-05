@@ -13,6 +13,7 @@ def record_publish_audit(
     fields_included: list[str],
     fields_redacted: list[str],
     result: str = "delivered",
+    commit: bool = True,
 ) -> PublishAudit:
     row = PublishAudit(
         task_id=task_id,
@@ -23,6 +24,12 @@ def record_publish_audit(
         result=result,
     )
     db.add(row)
-    db.commit()
-    db.refresh(row)
+    if commit:
+        # Camino de lectura: la auditoría de publicación se persiste por sí misma.
+        db.commit()
+        db.refresh(row)
+    else:
+        # Camino de escritura (WP-0.4): sin commit propio; el commit único del
+        # pipeline persiste dominio + write_audit + publish_audit atómicamente.
+        db.flush()
     return row
