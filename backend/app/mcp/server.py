@@ -1927,6 +1927,7 @@ def build_observed_streamable_http_app(target_mcp: FastMCP | None = None) -> MCP
         logger=mcp_logger,
         streamable_path=resolved_mcp.settings.streamable_http_path,
         allowed_origins=settings.mcp_allowed_origins_list,
+        enforce_when_empty=_auth_runtime_enabled(),
     )
 
     if _auth_runtime_enabled() and not settings.mcp_allowed_origins_list:
@@ -1977,7 +1978,7 @@ def propose_change(
     target_key: str,
     rationale: str,
     proposed_payload: dict[str, Any] | None = None,
-    dry_run: bool = False,
+    dry_run: bool = True,
     idempotency_key: str | None = None,
     workspace_id: str | None = None,
     project_id: str | None = None,

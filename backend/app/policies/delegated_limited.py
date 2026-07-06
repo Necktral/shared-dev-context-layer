@@ -141,7 +141,9 @@ TOOL_ALLOWLISTS: dict[str, set[str]] = {
 
 
 def apply_delegated_limited_policy(tool_name: str, payload: dict[str, Any]) -> tuple[dict[str, Any], list[str], list[str]]:
-    allowlist = TOOL_ALLOWLISTS.get(tool_name, set(payload.keys()))
+    # WP-0.5(f): fail-CLOSED. Una tool sin allowlist registrada NO pasa todo el payload
+    # (antes fail-open con set(payload.keys())); se filtra a vacío por defecto.
+    allowlist = TOOL_ALLOWLISTS.get(tool_name, set())
     filtered_root = {key: payload[key] for key in payload if key in allowlist}
     redacted_paths: list[str] = []
 

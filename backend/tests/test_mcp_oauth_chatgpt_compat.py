@@ -265,27 +265,35 @@ def test_origin_guard_blocks_unexpected_origin(monkeypatch) -> None:
     assert body.get("error") == "invalid_origin"
 
 
-def test_origin_guard_disabled_when_no_origins_configured(monkeypatch) -> None:
-    """When allowed_origins is empty, all origins (including unknown) are allowed through."""
+def test_origin_guard_default_deny_when_no_origins_and_auth_active(monkeypatch) -> None:
+    """WP-0.5(d): con auth runtime activo y MCP_ALLOWED_ORIGINS vacío, un Origin de
+    navegador se rechaza (default-deny); una request SIN Origin (no-navegador) pasa."""
     app = _build_app_with_origin(monkeypatch, "")
+    body = {
+        "jsonrpc": "2.0",
+        "id": "1",
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "pytest", "version": "1.0"},
+        },
+    }
 
     with TestClient(app, raise_server_exceptions=False) as client:
-        response = client.post(
+        # Navegador cross-origin con allowlist vacía → denegado (default-deny).
+        denied = client.post(
             "/mcp",
-            headers={
-                "Origin": "https://any-origin.example.com",
-                "Authorization": "Bearer some.token",
-            },
-            json={"jsonrpc": "2.0", "id": "1", "method": "initialize", "params": {
-                "protocolVersion": "2025-06-18",
-                "capabilities": {},
-                "clientInfo": {"name": "pytest", "version": "1.0"},
-            }},
+            headers={"Origin": "https://any-origin.example.com", "Authorization": "Bearer some.token"},
+            json=body,
         )
+        assert denied.status_code == 403
+        assert "invalid_origin" in denied.text
 
-    # Guard disabled → origin passes, token rejected → 401 (not 403 invalid_origin)
-    assert response.status_code == 401
-    assert "invalid_origin" not in response.text
+        # Sin cabecera Origin (cliente no-navegador) → pasa el guard; token rechazado → 401.
+        passed = client.post("/mcp", headers={"Authorization": "Bearer some.token"}, json=body)
+        assert passed.status_code == 401
+        assert "invalid_origin" not in passed.text
 
 
 # ---------------------------------------------------------------------------
