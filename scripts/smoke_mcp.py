@@ -35,6 +35,8 @@ EXPECTED_TOOLS = {
     "preview_write_impact", "upsert_context_item", "append_context_event",
     "link_context_entities", "set_context_labels", "archive_context_item",
     "apply_sync_batch",
+    # plano deliberativo
+    "propose_change", "list_proposals", "ratify_proposal", "reject_proposal",
 }
 
 
@@ -63,9 +65,14 @@ async def main() -> int:
 
             tools = {t.name for t in (await session.list_tools()).tools}
             print(f"[ok]   tools publicadas: {len(tools)}")
+            # WP-0.7: igualdad exacta (antes solo subconjunto) — detecta drift de contrato.
             missing = EXPECTED_TOOLS - tools
+            extra = tools - EXPECTED_TOOLS
             if missing:
                 print(f"[FAIL] faltan tools esperadas: {sorted(missing)}")
+                ok = False
+            if extra:
+                print(f"[FAIL] tools no esperadas (drift de contrato): {sorted(extra)}")
                 ok = False
 
             at = (await session.call_tool("get_active_task", {})).structuredContent
