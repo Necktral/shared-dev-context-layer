@@ -53,7 +53,6 @@ export const DEFAULT_LOCAL_INDEX_INCLUDE_EXTENSIONS = [
   ".toml",
   ".ini",
   ".cfg",
-  ".env",
   ".css",
   ".scss",
   ".html",

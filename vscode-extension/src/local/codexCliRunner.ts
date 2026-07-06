@@ -71,7 +71,10 @@ export class CodexCliRunner implements CodexRunnerPort {
     const prompt = buildCodexExecutionPrompt(request);
     const promptHash = sha256Hex(prompt);
     const workingRoot = request.repo_root ?? request.workspace_root ?? process.cwd();
-    const outputFile = path.join(os.tmpdir(), `wis-codex-last-${randomUUID()}.txt`);
+    // WP-0.5(f): dir privado 0700 (mkdtemp) en vez de /tmp world-readable; el
+    // final_message de Codex puede ser sensible.
+    const runTmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "wis-codex-"));
+    const outputFile = path.join(runTmpDir, `last-${randomUUID()}.txt`);
     const args = ["exec", "--json", "--ephemeral", "--sandbox", "workspace-write", "-C", workingRoot, "-o", outputFile, prompt];
     const executed = await this.execute({
       mode: "run",
@@ -84,6 +87,7 @@ export class CodexCliRunner implements CodexRunnerPort {
     const stderrSummary = classifyCodexStderr(executed.stderr);
     const lastMessage = await this.readLastMessageFile(outputFile);
     await this.deleteFileQuietly(outputFile);
+    await fs.rm(runTmpDir, { recursive: true, force: true }).catch(() => {});
 
     return {
       ...executed,

@@ -276,7 +276,6 @@
             ".toml",
             ".ini",
             ".cfg",
-            ".env",
             ".css",
             ".scss",
             ".html",
