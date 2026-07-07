@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { NoopPersistence } from "../../../local/noopServices";
+import { createInitialCouncilRoomState } from "../../../local/types";
 import { HybridContextRetriever } from "../../../local/retrieval/hybridContextRetriever";
 import { applyRetrievalBudget } from "../../../local/retrieval/retrievalBudget";
 import { parseRetrievalQuery, parseRetrievalQueryWithRoots } from "../../../local/retrieval/retrievalQueryParser";
@@ -245,6 +246,7 @@ test("HybridContextRetriever usa fallback con active_file normalizado", async ()
       last_action: null,
       task_draft: null,
       last_result: null,
+      council: createInitialCouncilRoomState(),
       errors: [],
       updated_at: new Date().toISOString(),
     },
@@ -309,6 +311,7 @@ test("HybridContextRetriever determinista y robusto con corpus grande", async ()
       last_action: null,
       task_draft: null,
       last_result: null,
+      council: createInitialCouncilRoomState(),
       errors: [],
       updated_at: new Date().toISOString(),
     },

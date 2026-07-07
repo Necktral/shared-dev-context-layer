@@ -44,6 +44,37 @@
   "orchestrator": {
     "session_key_prefix": "agent-council",
     "default_target_kind": "task",
+    "room": {
+      "ui_surface": "vscode_extension_local_runtime_panel",
+      "default_tab": "runtime",
+      "council_tab": "Council Room",
+      "flow": [
+        "open_session",
+        "build_sanitized_brief",
+        "run_role_rounds",
+        "synthesize_packet",
+        "persist_events"
+      ],
+      "turn_controller": "reg",
+      "base_roles": [
+        "architect",
+        "implementer",
+        "critic",
+        "operator_advocate",
+        "risk_auditor",
+        "historian",
+        "wildcard"
+      ],
+      "optional_roles": ["external_reviewer"],
+      "persisted_event_types": [
+        "council.session_started",
+        "council.position_submitted",
+        "council.packet_synthesized"
+      ],
+      "persist_raw_transcript": false,
+      "persist_sanitized_summaries": true,
+      "persist_final_packet": true
+    },
     "evidence_budget": {
       "max_files_to_inspect": 24,
       "max_external_sources": 1,

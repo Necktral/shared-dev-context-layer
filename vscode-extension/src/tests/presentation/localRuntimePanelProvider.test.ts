@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type * as vscode from "vscode";
-import { LocalRuntimePanelProvider } from "../../presentation/local/localRuntimePanelProvider";
+import { LocalRuntimePanelProvider, type LocalRuntimePanelActions } from "../../presentation/local/localRuntimePanelProvider";
 import {
   createInitialProjectRuntimeSnapshot,
   type LocalCommandResult,
@@ -36,15 +36,22 @@ function makeSnapshot(details: Record<string, unknown> | null): ProjectRuntimeSn
   };
 }
 
-function createFakeView(): { view: vscode.WebviewView; html: () => string } {
+function createFakeView(): { view: vscode.WebviewView; html: () => string; emit: (message: unknown) => void; options: () => Record<string, unknown> } {
+  let listener: ((message: unknown) => void) | null = null;
   const webview = {
     options: {},
     html: "",
+    onDidReceiveMessage: (nextListener: (message: unknown) => void) => {
+      listener = nextListener;
+      return { dispose: () => undefined };
+    },
   };
   const view = { webview } as unknown as vscode.WebviewView;
   return {
     view,
     html: () => webview.html,
+    emit: (message: unknown) => listener?.(message),
+    options: () => webview.options,
   };
 }
 
@@ -85,4 +92,48 @@ test("LocalRuntimePanelProvider usa defaults cuando no hay detalles de review", 
   assert.ok(html.includes("Changed Focus: Sin foco de archivos."));
   assert.ok(html.includes("Next Action: Sin acción sugerida."));
   assert.ok(html.includes("Sin riesgos reportados."));
+});
+
+test("LocalRuntimePanelProvider renderiza Council Room con scripts habilitados y CSP", () => {
+  const provider = new LocalRuntimePanelProvider(createInitialProjectRuntimeSnapshot("local_private"));
+  const fakeView = createFakeView();
+  provider.resolveWebviewView(fakeView.view);
+
+  const html = fakeView.html();
+  assert.equal(fakeView.options().enableScripts, true);
+  assert.ok(html.includes("Content-Security-Policy"));
+  assert.ok(html.includes("Council Room"));
+  assert.ok(html.includes("Open Council"));
+  assert.ok(html.includes("Reg Synthesis"));
+});
+
+test("LocalRuntimePanelProvider acepta acciones conocidas y rechaza payloads invalidos", async () => {
+  const calls: string[] = [];
+  const actions: LocalRuntimePanelActions = {
+    openCouncil: async (input) => {
+      calls.push(`open:${input.sensitivityLabel}:${input.question}`);
+    },
+    runCouncilRound: async () => {
+      calls.push("round");
+    },
+    synthesizeCouncilPacket: async () => {
+      calls.push("synthesize");
+    },
+    switchTab: (tab) => {
+      calls.push(`tab:${tab}`);
+    },
+  };
+  const provider = new LocalRuntimePanelProvider(createInitialProjectRuntimeSnapshot("local_private"), actions);
+  const fakeView = createFakeView();
+  provider.resolveWebviewView(fakeView.view);
+
+  fakeView.emit({ type: "unknown.message" });
+  fakeView.emit({ type: "council.open", question: "sin sensibilidad" });
+  fakeView.emit({ type: "tab.switch", tab: "council" });
+  fakeView.emit({ type: "council.open", question: "problema", sensitivityLabel: "non_sensitive" });
+  fakeView.emit({ type: "council.runRound" });
+  fakeView.emit({ type: "council.synthesize" });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(calls, ["tab:council", "open:non_sensitive:problema", "round", "synthesize"]);
 });

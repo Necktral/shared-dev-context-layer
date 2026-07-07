@@ -2,6 +2,7 @@ import * as path from "node:path";
 import type * as vscode from "vscode";
 import {
   getCodexCliCommand,
+  getCouncilConfig,
   getFixtureScenario,
   getLocalIndexConfig,
   getMcpEndpoint,
@@ -18,6 +19,7 @@ import { LoadOperationalContextService, type LoadContextConfig } from "../applic
 import { InMemoryOperationalContextStore } from "../application/operationalContextStore";
 import { AuthManager } from "../auth/authManager";
 import { RuntimeAuthPolicy } from "../auth/runtimeAuthPolicy";
+import { CouncilRoomService } from "../council/councilRoomService";
 import type { DiagnosticsSnapshot } from "../diagnostics";
 import { DiagnosticsReporter } from "../diagnostics";
 import { EnvironmentInspector, type EnvironmentSnapshot } from "../environment/environmentInspector";
@@ -34,7 +36,7 @@ import { PostRunReviewer } from "../local/postRunReviewer";
 import { PostgresPersistenceAdapter } from "../local/persistence/postgresPersistenceAdapter";
 import { HybridContextRetriever } from "../local/retrieval/hybridContextRetriever";
 import { ContextAwareTaskBuilder } from "../local/taskBuilder/contextAwareTaskBuilder";
-import { createInitialProjectRuntimeSnapshot } from "../local/types";
+import { createInitialProjectRuntimeSnapshot, type LocalCommandResult } from "../local/types";
 import { WorkspaceSnapshotter } from "../local/workspaceSnapshotter";
 import { PlaybookRegistry } from "../platform/playbooks/playbookRegistry";
 import { WorkspaceBoundaryGuard } from "../platform/security/workspaceBoundaryGuard";
@@ -182,9 +184,28 @@ export async function bootstrapExtension(
       : null,
   });
   const localStore = new InMemoryLocalRuntimeStore(createInitialProjectRuntimeSnapshot(getOperationProfile()));
-  const localPanelProvider = new LocalRuntimePanelProvider(localStore.getSnapshot());
   const localOutputRenderer = new LocalRuntimeOutputRenderer(outputChannel);
   const localPersistence = await createLocalPersistence(context, outputChannel);
+  const councilRoomService = new CouncilRoomService({
+    store: localStore,
+    inspector: environmentInspector,
+    persistence: localPersistence,
+    secretStorage: context.secrets,
+    outputChannel,
+    getOperationProfile,
+    getCouncilConfig,
+  });
+  const renderCouncilResult = async (runner: () => Promise<LocalCommandResult>) => {
+    const result = await runner();
+    localOutputRenderer.render(result, localStore.getSnapshot());
+    outputChannel.show(true);
+  };
+  const localPanelProvider = new LocalRuntimePanelProvider(localStore.getSnapshot(), {
+    openCouncil: async (input) => renderCouncilResult(() => councilRoomService.openSession(input)),
+    runCouncilRound: async () => renderCouncilResult(() => councilRoomService.runRound()),
+    synthesizeCouncilPacket: async () => renderCouncilResult(() => councilRoomService.synthesizePacket()),
+    switchTab: (tab) => councilRoomService.switchTab(tab),
+  });
   const localIndexer = new IncrementalWorkspaceIndexer({
     persistence: localPersistence,
     getIndexConfig: getLocalIndexConfig,
@@ -273,6 +294,7 @@ export async function bootstrapExtension(
     localStore,
     localOutputRenderer,
     localCommandService,
+    councilRoomService,
     doctorService,
     getCurrentConfig,
     isDiagnosticMode: isDiagnosticModeEnabled,

@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { EXTENSION_OUTPUT_CHANNEL, LOCAL_RUNTIME_VIEW_ID } from "./constants";
 import { bootstrapExtension } from "./activation/bootstrap";
+import { registerCouncilRoomCommands } from "./activation/registrars/councilRoomRegistrar";
 import { registerContextToolCommands } from "./activation/registrars/contextToolsRegistrar";
 import { registerControlPlaneCommands } from "./activation/registrars/controlPlaneRegistrar";
 import { registerLocalRuntimeCommands } from "./activation/registrars/localRuntimeRegistrar";
@@ -19,6 +20,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     ...registerControlPlaneCommands(runtime),
     ...registerContextToolCommands(runtime),
+    ...registerCouncilRoomCommands(context, runtime),
     ...registerLocalRuntimeCommands(context, runtime),
   );
 }

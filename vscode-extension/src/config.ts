@@ -3,6 +3,10 @@ import {
   DEFAULT_AUTH_HEADER_NAME,
   DEFAULT_AUTH_MODE,
   DEFAULT_CODEX_CLI_COMMAND,
+  DEFAULT_COUNCIL_ENABLED,
+  DEFAULT_COUNCIL_EXTERNAL_REVIEW_ENABLED,
+  DEFAULT_COUNCIL_EXTERNAL_REVIEW_MAX_CHARS,
+  DEFAULT_COUNCIL_EXTERNAL_REVIEW_MODEL,
   DEFAULT_DIAGNOSTIC_MODE,
   DEFAULT_FIXTURE_SCENARIO,
   DEFAULT_LOCAL_DB_DATABASE,
@@ -55,6 +59,15 @@ export interface LocalIndexConfig {
   maxFileBytes: number;
   chunkSizeChars: number;
   chunkOverlapChars: number;
+}
+
+export interface CouncilConfig {
+  enabled: boolean;
+  externalReview: {
+    enabled: boolean;
+    model: string;
+    maxChars: number;
+  };
 }
 
 function normalizeRuntimeMode(value: string | undefined): RuntimeMode {
@@ -275,6 +288,43 @@ export function getLocalIndexConfig(): LocalIndexConfig {
     maxFileBytes,
     chunkSizeChars,
     chunkOverlapChars,
+  };
+}
+
+function getBooleanFromEnv(name: string): boolean | null {
+  const raw = process.env[name]?.trim().toLowerCase();
+  if (!raw) {
+    return null;
+  }
+  if (raw === "1" || raw === "true" || raw === "yes") {
+    return true;
+  }
+  if (raw === "0" || raw === "false" || raw === "no") {
+    return false;
+  }
+  return null;
+}
+
+export function getCouncilConfig(): CouncilConfig {
+  const config = vscode.workspace.getConfiguration();
+  const model = config.get<string>("wisContextSync.council.externalReview.model")?.trim();
+  const envModel = process.env.GEMINI_REVIEW_MODEL?.trim();
+  const maxChars = normalizePositiveNumber(
+    config.get<number>("wisContextSync.council.externalReview.maxChars") ??
+      Number(process.env.GEMINI_REVIEW_MAX_CHARS),
+    DEFAULT_COUNCIL_EXTERNAL_REVIEW_MAX_CHARS,
+  );
+
+  return {
+    enabled: config.get<boolean>("wisContextSync.council.enabled") ?? DEFAULT_COUNCIL_ENABLED,
+    externalReview: {
+      enabled:
+        getBooleanFromEnv("GEMINI_EXTERNAL_REVIEW_ENABLED") ??
+        config.get<boolean>("wisContextSync.council.externalReview.enabled") ??
+        DEFAULT_COUNCIL_EXTERNAL_REVIEW_ENABLED,
+      model: model || envModel || DEFAULT_COUNCIL_EXTERNAL_REVIEW_MODEL,
+      maxChars,
+    },
   };
 }
 

@@ -1,6 +1,6 @@
 # Agent Council Orchestrator
 
-Status: design v0, intended canon
+Status: design v0 + VS Code Council Room v1
 Scope: deliberative orchestration for AI council input
 Principle: many intelligences deliberate; WIS decides.
 Default config: `AGENT-COUNCIL-DEFAULT-CONFIG.json`
@@ -17,6 +17,12 @@ ratification, write audit, and staleness invalidation.
 
 The orchestrator should maximize freedom in the deliberative plane and minimize
 freedom in the canonical plane.
+
+The first implemented surface is the VS Code extension panel `WIS Local
+Runtime`, now split into `Runtime` and `Council Room`. The room is not a free
+write surface: the operator posts a problem, Reg opens a governed session,
+roles submit positions in ordered rounds, and Reg synthesizes an
+`agent_council_packet_v1`.
 
 ## 2. Freedom Model
 
@@ -100,6 +106,28 @@ Free-tier note:
 - Gemini free-tier/API Studio usage is treated as external processing. Because
   free-tier content may be used to improve provider products, this provider is
   suitable only for explicitly non-sensitive review.
+
+## 3.2 VS Code Council Room v1
+
+The local app surface implements the council as a governed room:
+
+- `Open Council` captures the operator problem and sensitivity label.
+- `Run Round` asks the ordered local roles for positions.
+- `Reg Synthesis` emits `agent_council_packet_v1`.
+- Gemini appears as `external_reviewer` only when external review is enabled
+  and the brief is explicitly `non_sensitive`.
+- If Gemini is enabled but the key is missing, the external reviewer is shown as
+  `unavailable`; local roles still deliberate.
+
+The room persists only summarized/sanitized events and the final packet:
+
+- `council.session_started`
+- `council.position_submitted`
+- `council.packet_synthesized`
+
+It does not persist the raw transcript. It also blocks raw diffs, `.env`,
+tokens, API keys, passwords, Auth0/MCP payloads, and content without the
+required external-review sensitivity label.
 
 ## 4. Orchestration Loop
 
@@ -206,20 +234,20 @@ For v1 this packet can live inside `Proposal.proposed_payload` and
 
 ## 7. Implementation Plan
 
-Phase A: document and dogfood
+Phase A: VS Code room + dogfood
 
 - Use this document as the source of truth for council behavior.
 - Use `AGENT-COUNCIL-DEFAULT-CONFIG.json` as the default role/LLM roster.
-- Keep Gemini as config/docs only until a runner is explicitly introduced.
-- Manually create a council packet for the next design-heavy task.
-- Store it as a `Proposal` candidate without adding new tables.
+- Implement the first room in the VS Code `WIS Local Runtime` panel.
+- Store `council.*` events plus the final packet without adding new tables.
+- Keep any canonical promotion as operator-controlled proposal work.
 
-Phase B: stateless orchestrator service
+Phase B: stronger role adapters
 
-- Add a pure service that accepts agent submissions and returns an
-  `agent_council_packet_v1`.
-- Add unit tests for dissent preservation, weak-evidence labeling, and proposal
-  candidate generation.
+- Replace deterministic local role stubs with governed LLM-backed role adapters.
+- Keep the same sensitivity gate and packet contract.
+- Add tests for adapter failures, dissent preservation, weak-evidence labeling,
+  and proposal candidate generation.
 
 Phase C: MCP tools
 

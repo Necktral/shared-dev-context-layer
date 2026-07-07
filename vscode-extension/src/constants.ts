@@ -61,11 +61,16 @@ export const DEFAULT_LOCAL_INDEX_INCLUDE_EXTENSIONS = [
 export const DEFAULT_LOCAL_INDEX_MAX_FILE_BYTES = 2_097_152;
 export const DEFAULT_LOCAL_INDEX_CHUNK_SIZE_CHARS = 1200;
 export const DEFAULT_LOCAL_INDEX_CHUNK_OVERLAP_CHARS = 120;
+export const DEFAULT_COUNCIL_ENABLED = true;
+export const DEFAULT_COUNCIL_EXTERNAL_REVIEW_ENABLED = false;
+export const DEFAULT_COUNCIL_EXTERNAL_REVIEW_MODEL = "gemini-3.1-flash-lite";
+export const DEFAULT_COUNCIL_EXTERNAL_REVIEW_MAX_CHARS = 12000;
 
 export const SESSION_KEY_STORAGE_KEY = "wisContextSync.sessionKey";
 export const SESSION_CREATED_AT_STORAGE_KEY = "wisContextSync.sessionCreatedAt";
 export const AUTH_TOKEN_STORAGE_KEY = "wisContextSync.authToken";
 export const LOCAL_DB_PASSWORD_STORAGE_KEY = "wisContextSync.localDbPassword";
+export const GEMINI_API_KEY_STORAGE_KEY = "wisContextSync.geminiApiKey";
 
 export const COMMAND_LOAD_CONTEXT = "wisContextSync.loadOperationalContext";
 export const COMMAND_RESET_SESSION = "wisContextSync.resetSession";
@@ -85,5 +90,9 @@ export const COMMAND_LOCAL_RUN_CODEX = "wisContextSync.localRunCodex";
 export const COMMAND_LOCAL_REFRESH = "wisContextSync.localRefresh";
 export const COMMAND_LOCAL_DOCTOR = "wisContextSync.localDoctor";
 export const COMMAND_LOCAL_CONFIGURE_DB_PASSWORD = "wisContextSync.localConfigureDbPassword";
+export const COMMAND_COUNCIL_OPEN_ROOM = "wisContextSync.councilOpenRoom";
+export const COMMAND_COUNCIL_RUN_ROUND = "wisContextSync.councilRunRound";
+export const COMMAND_COUNCIL_SYNTHESIZE_PACKET = "wisContextSync.councilSynthesizePacket";
+export const COMMAND_COUNCIL_CONFIGURE_GEMINI_KEY = "wisContextSync.councilConfigureGeminiKey";
 
 export const LOCAL_RUNTIME_VIEW_ID = "wisContextSync.localRuntimePanel";

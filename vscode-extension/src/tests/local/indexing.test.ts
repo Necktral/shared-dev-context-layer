@@ -52,7 +52,7 @@ import type {
   TransitionTaskStateInput,
   UpsertIndexedFileInput,
 } from "../../local/ports";
-import type { LocalTaskDraft } from "../../local/types";
+import { createInitialCouncilRoomState, type LocalTaskDraft } from "../../local/types";
 import type { LocalIndexConfig } from "../../config";
 
 const defaultIndexConfig: LocalIndexConfig = {
@@ -330,6 +330,7 @@ test("IncrementalWorkspaceIndexer detecta new/modified/deleted y actualiza chunk
         last_action: null,
         task_draft: null,
         last_result: null,
+        council: createInitialCouncilRoomState(),
         errors: [],
         updated_at: new Date().toISOString(),
       },
@@ -358,6 +359,7 @@ test("IncrementalWorkspaceIndexer detecta new/modified/deleted y actualiza chunk
         last_action: null,
         task_draft: taskStub(),
         last_result: null,
+        council: createInitialCouncilRoomState(),
         errors: [],
         updated_at: new Date().toISOString(),
       },
@@ -380,6 +382,7 @@ test("IncrementalWorkspaceIndexer detecta new/modified/deleted y actualiza chunk
         last_action: null,
         task_draft: null,
         last_result: null,
+        council: createInitialCouncilRoomState(),
         errors: [],
         updated_at: new Date().toISOString(),
       },
@@ -422,6 +425,7 @@ test("IncrementalWorkspaceIndexer runIndexByPaths reindexa scope afectado sin fu
         last_action: null,
         task_draft: null,
         last_result: null,
+        council: createInitialCouncilRoomState(),
         errors: [],
         updated_at: new Date().toISOString(),
       },
@@ -444,6 +448,7 @@ test("IncrementalWorkspaceIndexer runIndexByPaths reindexa scope afectado sin fu
         last_action: null,
         task_draft: null,
         last_result: null,
+        council: createInitialCouncilRoomState(),
         errors: [],
         updated_at: new Date().toISOString(),
       },
