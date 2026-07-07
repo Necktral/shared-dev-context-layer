@@ -1,6 +1,6 @@
 # WIS VS Code Extension Architecture
-_Status: active architecture (Slice 3A + Slice 4 baseline)_
-_Scope: control plane read-only, project-first_
+_Status: active architecture (Slice 3A + Slice 4 baseline + v0.2.0 write plane + local-private)_
+_Scope: control plane read/write + local-private profile_
 
 ## 1. Objetivo
 
@@ -92,6 +92,26 @@ Regla:
 - construccion de `HandoffArtifact` tipado
 - render de resumen y prompts en Output Channel
 
+### 4.3 Write tools (v0.2.0)
+
+Comandos write (`WIS: Upsert Context Item`, `WIS: Append Context Event`, `WIS: Link Context Entities`, `WIS: Set Context Labels`, `WIS: Archive Context Item`, `WIS: Apply Sync Batch`) ejecutan:
+
+- resolucion de auth via `AuthManager`
+- invocacion de `ContextCommandService` con `dry_run|commit`
+- `idempotency_key` obligatoria en commit
+- auditoria write + publish_audit por operacion
+- resultado renderizado en Output Channel
+
+### 4.4 Local runtime (local-private profile)
+
+Comandos locales (`WIS: Local Index`, `WIS: Local Prepare Task`, `WIS: Local Run Codex`, `WIS: Local Refresh`, `WIS: Local Doctor`) ejecutan via `LocalCommandService`:
+
+- indexacion incremental del workspace (`IncrementalWorkspaceIndexer`)
+- preparacion de task con playbooks por tiers (`system`, `workspace`, `project`)
+- ejecucion supervisada de Codex CLI con `AbortController`
+- reconciliacion before/after (`PostRunReconciler`)
+- panel lateral `WIS Local Runtime` (WebviewViewProvider)
+
 ## 5. Authority model
 
 - WIS es canonico para `active_task`, `context_snapshot`, `validation_status`, `approved_decisions`, `recent_errors`, `scope`, `resolution_metadata`.
@@ -106,13 +126,17 @@ Regla:
 - contrato tipado de envelope
 - gateway dual (`fixture` + `mcp`)
 - handoff baseline codex-first en memoria
+- write plane: `upsert_context_item`, `append_context_event`, `link_context_entities`, `set_context_labels`, `archive_context_item`, `apply_sync_batch` con `dry_run|commit`, `idempotency_key` y auditoría
+- autenticación: `bearer` / `api_key` / `none` con `SecretStorage`
+- perfil `local_private`: panel lateral + comandos locales supervisados (`Local Index`, `Local Prepare Task`, `Local Run Codex`, `Local Refresh`, `Local Doctor`, `Local Configure DB Password`)
+- indexador incremental con configuración `localIndex.*`
+- persistencia PostgreSQL para perfil `local_private`
 
 ### Roadmap posterior (no abierto en este slice)
 
 - panel/tree/webview avanzada
 - export de artifacts
-- write flows
-- sync bidireccional
+- sync bidireccional automatico
 - automatizacion de resolucion de conflictos
 
 ## 7. Cross-links

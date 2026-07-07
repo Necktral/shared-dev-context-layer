@@ -57,6 +57,8 @@ Para `mcp`:
 - `WIS: Load Operational Context`
 - `WIS: Reset Session`
 - `WIS: Prepare Handoff`
+- `WIS: Configure Authentication`
+- `WIS: Clear Authentication`
 - `WIS: Search Context`
 - `WIS: Upsert Context Item`
 - `WIS: Append Context Event`
@@ -64,14 +66,38 @@ Para `mcp`:
 - `WIS: Set Context Labels`
 - `WIS: Archive Context Item`
 - `WIS: Apply Sync Batch`
+- `WIS: Local Index`
+- `WIS: Local Prepare Task`
+- `WIS: Local Run Codex`
+- `WIS: Local Refresh`
+- `WIS: Local Doctor`
+- `WIS: Local Configure DB Password`
 
 ### 4.2 Settings
 
-- `wisContextSync.mcpEndpoint`
+- `wisContextSync.mcpEndpoint` (default: `http://localhost:8002/mcp`)
 - `wisContextSync.runtimeMode` (`offline_fixture | mcp`)
-- `wisContextSync.requestTimeoutMs`
-- `wisContextSync.fixtureScenario`
-- `wisContextSync.diagnosticMode`
+- `wisContextSync.requestTimeoutMs` (default: `5000`)
+- `wisContextSync.fixtureScenario` (default: `success_full`)
+- `wisContextSync.diagnosticMode` (default: `true`)
+- `wisContextSync.authMode` (default: `none`; enum: `none | bearer | api_key`)
+- `wisContextSync.authHeaderName` (default: `x-api-key`)
+- `wisContextSync.requireAuthentication` (default: `false`)
+- `wisContextSync.operationProfile` (default: `phase3_control_plane`; enum: `phase3_control_plane | local_private`)
+- `wisContextSync.codexCliCommand` (default: `codex`)
+- `wisContextSync.localDb.enabled` (default: `true`)
+- `wisContextSync.localDb.host` (default: `localhost`)
+- `wisContextSync.localDb.port` (default: `5432`)
+- `wisContextSync.localDb.database` (default: `wis_context`)
+- `wisContextSync.localDb.user` (default: `wis_admin`)
+- `wisContextSync.localDb.password` (default: `""`)
+- `wisContextSync.localDb.schema` (default: `local_private`)
+- `wisContextSync.localDb.ssl` (default: `false`)
+- `wisContextSync.localIndex.excludeDirs`
+- `wisContextSync.localIndex.includeExtensions`
+- `wisContextSync.localIndex.maxFileBytes` (default: `2097152`)
+- `wisContextSync.localIndex.chunkSizeChars` (default: `1200`)
+- `wisContextSync.localIndex.chunkOverlapChars` (default: `120`)
 
 ## 5. Core contracts
 
