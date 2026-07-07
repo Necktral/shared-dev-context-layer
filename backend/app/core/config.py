@@ -1,8 +1,14 @@
 from functools import lru_cache
+from pathlib import Path
 from urllib.parse import urlparse
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# __file__ = backend/app/core/config.py → .parent.parent.parent = backend/
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_PROJECT_ROOT_ENV = _BACKEND_DIR.parent / ".env"
+_BACKEND_ENV = _BACKEND_DIR / ".env"
 
 
 class Settings(BaseSettings):
@@ -28,7 +34,11 @@ class Settings(BaseSettings):
         "mcp-protocol-version,accept,content-type"
     )
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(_BACKEND_ENV, _PROJECT_ROOT_ENV, ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     @field_validator("database_url", mode="before")
     @classmethod
