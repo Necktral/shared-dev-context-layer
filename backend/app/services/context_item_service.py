@@ -188,6 +188,32 @@ def get_sync_status(
     ]
 
 
+def _sync_labels_table(
+    db: Session,
+    *,
+    workspace_id: UUID,
+    item_id: UUID,
+    labels: list[str],
+    actor: str,
+) -> None:
+    """Rebuild the normalized ContextItemLabel rows to match labels_json."""
+    db.execute(
+        delete(ContextItemLabel).where(
+            ContextItemLabel.workspace_id == workspace_id,
+            ContextItemLabel.item_id == item_id,
+        )
+    )
+    for label in labels:
+        db.add(
+            ContextItemLabel(
+                workspace_id=workspace_id,
+                item_id=item_id,
+                label=label,
+                created_by=actor,
+            )
+        )
+
+
 def upsert_context_item(
     db: Session,
     *,
@@ -225,6 +251,7 @@ def upsert_context_item(
             return {"result": "dry_run", "before": None, "after": preview}
 
         created = ContextItem(
+            id=uuid.uuid4(),
             workspace_id=workspace_id,
             project_id=project_id,
             task_id=task_id,
@@ -239,6 +266,7 @@ def upsert_context_item(
             updated_by=actor,
         )
         db.add(created)
+        _sync_labels_table(db, workspace_id=workspace_id, item_id=created.id, labels=normalized_labels, actor=actor)
         db.commit()
         db.refresh(created)
         return {"result": "created", "before": None, "after": context_item_to_dict(created)}
@@ -276,6 +304,7 @@ def upsert_context_item(
     existing.status = "active"
     existing.updated_by = actor
     db.add(existing)
+    _sync_labels_table(db, workspace_id=workspace_id, item_id=existing.id, labels=normalized_labels, actor=actor)
     db.commit()
     db.refresh(existing)
     return {"result": "updated", "before": before, "after": context_item_to_dict(existing)}
