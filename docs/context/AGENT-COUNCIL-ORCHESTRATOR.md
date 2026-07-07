@@ -57,6 +57,7 @@ output into these roles:
 | `risk_auditor` | classifies safety, auth, data, and governance risks |
 | `historian` | checks canon, prior decisions, and branch context |
 | `wildcard` | proposes non-obvious alternatives and creative reframes |
+| `external_reviewer` | independent non-sensitive review through an optional external provider |
 
 A council session does not need every role. Missing roles should be explicit in
 the output so the operator knows which perspective was not represented.
@@ -65,6 +66,40 @@ The default machine-readable roster lives in
 `AGENT-COUNCIL-DEFAULT-CONFIG.json`. It binds each role to an LLM profile,
 deliberative freedoms, and non-negotiable governance limits. The file is a seed
 configuration, not a new canonical write authority.
+
+## 3.1 External Reviewer: Gemini AI Studio/API
+
+Gemini can be configured as an optional external reviewer for non-sensitive
+material only. It is not part of the canonical authority model and does not
+receive any ratification, write, or proposal-promotion permission.
+
+Default posture:
+
+- provider id: `gemini_ai_studio`
+- role id: `external_reviewer`
+- enabled by default: `false`
+- API key env var: `GEMINI_API_KEY`
+- model env var: `GEMINI_REVIEW_MODEL`
+- default model: `gemini-3.1-flash-lite`
+- max prompt chars env var: `GEMINI_REVIEW_MAX_CHARS`
+- default max prompt chars: `12000`
+
+Sensitivity gate:
+
+- Gemini receives content only when `sensitivity_label` is exactly
+  `non_sensitive`.
+- The orchestrator must send only sanitized briefs, not raw diffs.
+- Missing sensitivity labels block external review.
+- Secret material, `.env` contents, tokens, passwords, API keys, personal data,
+  operational Auth0/MCP payloads, and unredacted private code are blocked.
+- Allowed content is limited to public summaries, non-sensitive docs, general
+  architecture questions, and summarized/redacted diffs.
+
+Free-tier note:
+
+- Gemini free-tier/API Studio usage is treated as external processing. Because
+  free-tier content may be used to improve provider products, this provider is
+  suitable only for explicitly non-sensitive review.
 
 ## 4. Orchestration Loop
 
@@ -175,6 +210,7 @@ Phase A: document and dogfood
 
 - Use this document as the source of truth for council behavior.
 - Use `AGENT-COUNCIL-DEFAULT-CONFIG.json` as the default role/LLM roster.
+- Keep Gemini as config/docs only until a runner is explicitly introduced.
 - Manually create a council packet for the next design-heavy task.
 - Store it as a `Proposal` candidate without adding new tables.
 
@@ -220,3 +256,5 @@ Phase D: persistence, if needed
 - Weak evidence produces a probe request, not a confident recommendation.
 - Stale context after ratification remains invalidated by the existing
   deliberative write path.
+- External review is blocked unless the brief is sanitized and explicitly
+  labeled `non_sensitive`.

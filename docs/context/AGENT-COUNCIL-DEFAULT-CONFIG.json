@@ -12,19 +12,53 @@
     "provider": "codex_cli",
     "command": "codex",
     "model_selection": "runtime_default",
+    "external_review_provider": "gemini_ai_studio",
     "secret_material_allowed_in_config": false,
     "default_reasoning_effort": "high",
     "fallback_reasoning_effort": "medium",
     "temperature_policy": "role_default",
     "output_contract": "agent_council_packet_v1"
   },
+  "providers": {
+    "codex_cli": {
+      "enabled": true,
+      "command": "codex",
+      "model_selection": "runtime_default",
+      "secret_material_allowed_in_config": false
+    },
+    "gemini_ai_studio": {
+      "enabled": false,
+      "role": "external_reviewer",
+      "api_key_env": "GEMINI_API_KEY",
+      "model_env": "GEMINI_REVIEW_MODEL",
+      "default_model": "gemini-3.1-flash-lite",
+      "max_chars_env": "GEMINI_REVIEW_MAX_CHARS",
+      "default_max_chars": 12000,
+      "allowed_use": "non_sensitive_review_only",
+      "sensitivity_gate": "explicit_allowlist",
+      "required_sensitivity_label": "non_sensitive",
+      "secret_material_allowed_in_config": false,
+      "free_tier_content_policy": "may_be_used_to_improve_provider_products"
+    }
+  },
   "orchestrator": {
     "session_key_prefix": "agent-council",
     "default_target_kind": "task",
     "evidence_budget": {
       "max_files_to_inspect": 24,
-      "max_external_sources": 0,
+      "max_external_sources": 1,
       "require_source_refs_for_canonical_claims": true
+    },
+    "external_review": {
+      "enabled_by_default": false,
+      "provider": "gemini_ai_studio",
+      "requires_api_key_env": "GEMINI_API_KEY",
+      "requires_operator_enable_env": "GEMINI_EXTERNAL_REVIEW_ENABLED",
+      "requires_sensitivity_label": "non_sensitive",
+      "blocked_without_explicit_label": true,
+      "send_only_sanitized_briefs": true,
+      "send_raw_diffs": false,
+      "send_secret_material": false
     },
     "synthesis_rules": [
       "show_recommended_path_first",
@@ -83,6 +117,20 @@
       "stance_bias": "non_obvious_alternatives",
       "freedoms": ["speculate_with_label", "propose_experiment", "challenge_premise"],
       "limits": ["must_label_speculation", "no_ratification"]
+    },
+    {
+      "id": "external_reviewer",
+      "llm_profile": "gemini_external_review",
+      "stance_bias": "independent_non_sensitive_review",
+      "freedoms": ["object", "counterexample", "request_evidence", "compare_public_assumptions"],
+      "limits": [
+        "non_sensitive_review_only",
+        "requires_sanitized_brief",
+        "no_raw_diff_review",
+        "no_secret_exposure",
+        "no_canonical_write",
+        "no_ratification"
+      ]
     }
   ],
   "llm_profiles": {
@@ -110,6 +158,14 @@
       "provider": "codex_cli",
       "model": "runtime_default",
       "reasoning_effort": "medium"
+    },
+    "gemini_external_review": {
+      "provider": "gemini_ai_studio",
+      "model": "gemini-3.1-flash-lite",
+      "model_env": "GEMINI_REVIEW_MODEL",
+      "reasoning_effort": "medium",
+      "sensitivity_gate": "explicit_allowlist",
+      "required_sensitivity_label": "non_sensitive"
     }
   }
 }
