@@ -78,6 +78,38 @@ Los playbooks resueltos para post-review se exponen de forma aditiva en `result.
 Token de autenticación se guarda en `SecretStorage` (no en settings de texto plano) usando `WIS: Configure Authentication`.
 Password de PostgreSQL para `local_private` puede guardarse con `WIS: Local Configure DB Password` (`wisContextSync.localDbPassword`).
 
+## Local install and profile
+
+Paquete interno:
+
+```bash
+code --install-extension vscode-extension/wis-context-sync-control-plane-0.2.0-internal.vsix --force
+code --list-extensions --show-versions | grep wis-context-sync
+```
+
+Perfil local recomendado para Docker Compose:
+
+```json
+{
+  "wisContextSync.runtimeMode": "mcp",
+  "wisContextSync.mcpEndpoint": "http://localhost:8002/mcp",
+  "wisContextSync.requestTimeoutMs": 10000,
+  "wisContextSync.authMode": "none",
+  "wisContextSync.requireAuthentication": false,
+  "wisContextSync.operationProfile": "local_private",
+  "wisContextSync.codexCliCommand": "codex",
+  "wisContextSync.localDb.enabled": true,
+  "wisContextSync.localDb.host": "localhost",
+  "wisContextSync.localDb.port": 5432,
+  "wisContextSync.localDb.database": "wis_context",
+  "wisContextSync.localDb.user": "wis_admin",
+  "wisContextSync.localDb.schema": "local_private",
+  "wisContextSync.localDb.ssl": false
+}
+```
+
+No guardar `wisContextSync.localDb.password` en settings planos. Con password vacio, la extension consulta `SecretStorage`; configurar con `WIS: Local Configure DB Password`.
+
 ## Operational load states
 
 - `loaded`

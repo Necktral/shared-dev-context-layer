@@ -44,6 +44,20 @@ Setting de habilitacion:
 
 - `wisContextSync.operationProfile = local_private`
 
+Settings locales recomendados para Docker Compose:
+
+- `wisContextSync.runtimeMode = mcp`
+- `wisContextSync.mcpEndpoint = http://localhost:8002/mcp`
+- `wisContextSync.codexCliCommand = codex`
+- `wisContextSync.localDb.host = localhost`
+- `wisContextSync.localDb.port = 5432`
+- `wisContextSync.localDb.database = wis_context`
+- `wisContextSync.localDb.user = wis_admin`
+- `wisContextSync.localDb.schema = local_private`
+- `wisContextSync.localDb.ssl = false`
+
+El password de PostgreSQL no debe vivir en settings planos; usar `WIS: Local Configure DB Password` para SecretStorage.
+
 Playbooks operativos (tiers):
 
 - `system`: `${extensionPath}/playbooks`
@@ -56,6 +70,8 @@ Playbooks operativos (tiers):
 - Regla de ramas: un bloque = una rama objetivo + una PR.
 - Regla anti-stack: no encadenar trabajo nuevo sobre ramas ya mergeadas.
 - Cierre de bloque exige CI verde + evidencia publicada en fase 4.
+- El consejo de IAs puede producir propuestas, objeciones y paquetes de decision, pero no ratifica ni escribe canon.
+- La configuracion default de roles/LLM vive en `../AGENT-COUNCIL-DEFAULT-CONFIG.json`.
 
 ## Calidad y gates
 
@@ -67,6 +83,13 @@ Gates minimos de Package 8:
 - `npm run test:local-db` (vscode-extension, PostgreSQL)
 - `pytest -q backend/tests` con `DATABASE_URL` resoluble desde runner
 
+Checkpoint 2026-07-07:
+
+- Docker local (`postgres`, `backend`, `mcp`) arriba y saludable.
+- Extension VS Code `necktral.wis-context-sync-control-plane@0.2.0-internal` instalada.
+- Backend completo: `90 passed, 7 skipped` con `MCP_AUTH_BYPASS_LOCAL=true`.
+- Evidencia: `../phase4/evidence/local-dev-checkpoint-20260707.md`.
+
 ## Referencias
 
 - Blueprint reliability V2: `../ARCHITECTURE_V2_RELIABILITY.md`
@@ -75,3 +98,4 @@ Gates minimos de Package 8:
 - Evidence package 2: `../phase4/evidence/package-2-smoke.md`
 - Evidence package 3: `../phase4/evidence/package-3-smoke.md`
 - Evidence package 8: `../phase4/evidence/package-8-hardening.md`
+- Local checkpoint 2026-07-07: `../phase4/evidence/local-dev-checkpoint-20260707.md`

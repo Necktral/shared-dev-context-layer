@@ -31,6 +31,7 @@ Estado: activo (normativo operativo)
 
 | `CT-013` | Operator-token de ratificación (`OPERATOR_RATIFY_TOKEN`, param `operator_token` en ratify/reject) | `integration_contract` | maintainers backend/mcp | **non_additive** — ratify/reject exigen token verificado siempre; ADR-phase0-perimeter-closure | `backend/tests/test_wp02_operator_token.py` |
 | `CT-014` | Perímetro HTTP: `/internal/*` exige `X-Internal-Token` (fail-closed); `/mcp/info` sin `auth_enabled`; docs off fuera de dev; bind/publicación loopback | `integration_contract` | maintainers backend | **non_additive** — endpoints internos pasan a requerir token; ADR-phase0-perimeter-closure | `backend/tests/test_wp05_perimeter.py` |
+| `CT-015` | `agent_council_packet_v1` + config seed `AGENT-COUNCIL-DEFAULT-CONFIG.json` | `integration_contract` | maintainers deliberative/governance | `additive_seed` — define paquete/roster deliberativo; no otorga autoridad de ratificación ni escritura canónica | `python -m json.tool docs/context/AGENT-COUNCIL-DEFAULT-CONFIG.json`, `docs/context/AGENT-COUNCIL-ORCHESTRATOR.md` |
 
 ## Criterio de actualización
 

@@ -47,9 +47,11 @@ Siempre debe terminar en `/mcp`.
 ## 4. Preflight local
 
 ```bash
-docker compose up --build -d
+cp .env.example .env
+docker compose up --build -d postgres migrate backend mcp
 docker compose ps
 curl -s http://localhost:8001/health
+curl -s http://localhost:8001/mcp/info
 docker compose logs mcp --tail=60
 ```
 
@@ -57,7 +59,21 @@ Esperado:
 
 - `postgres`, `backend`, `mcp` en estado `Up`
 - health con DB operativa
-- MCP levantado en `streamable-http`
+- `/mcp/info` con `status=ready`
+- MCP levantado en `streamable-http` sobre `http://localhost:8002/mcp`
+
+### 4.0.1 Checkpoint local 2026-07-07
+
+Estado verificado en Windows + Docker Desktop:
+
+- `docker compose up --build -d postgres migrate backend mcp` -> OK.
+- `docker compose ps` -> `wis_context_postgres` healthy, `wis_context_backend` Up, `wis_context_mcp` Up.
+- `GET http://127.0.0.1:8001/mcp/info` -> `{"name":"WIS Context Sync MCP","mode":"read-write-v2","status":"ready"}`.
+- Extension VS Code instalada: `necktral.wis-context-sync-control-plane@0.2.0-internal`.
+- Settings VS Code locales: `runtimeMode=mcp`, `mcpEndpoint=http://localhost:8002/mcp`, `operationProfile=local_private`, `codexCliCommand=codex`.
+- No guardar `wisContextSync.localDb.password` en settings; usar `WIS: Local Configure DB Password`.
+
+Evidencia: `../context/phase4/evidence/local-dev-checkpoint-20260707.md`.
 
 ### 4.1 Preflight read (pasos 2-4)
 
@@ -201,6 +217,30 @@ MCP_ALLOWED_ORIGINS="https://chatgpt.com,https://<tu-tunnel>"
 1. Setear:
 - `wisContextSync.runtimeMode = mcp`
 - `wisContextSync.mcpEndpoint = <url>/mcp`
+- `wisContextSync.operationProfile = local_private` si se usaran comandos `WIS: Local *`
+- `wisContextSync.codexCliCommand = codex` para ejecucion supervisada local
+
+Para el stack local default:
+
+```json
+{
+  "wisContextSync.runtimeMode": "mcp",
+  "wisContextSync.mcpEndpoint": "http://localhost:8002/mcp",
+  "wisContextSync.authMode": "none",
+  "wisContextSync.requireAuthentication": false,
+  "wisContextSync.operationProfile": "local_private",
+  "wisContextSync.codexCliCommand": "codex",
+  "wisContextSync.localDb.enabled": true,
+  "wisContextSync.localDb.host": "localhost",
+  "wisContextSync.localDb.port": 5432,
+  "wisContextSync.localDb.database": "wis_context",
+  "wisContextSync.localDb.user": "wis_admin",
+  "wisContextSync.localDb.schema": "local_private",
+  "wisContextSync.localDb.ssl": false
+}
+```
+
+Mantener el password fuera del JSON; usar SecretStorage.
 
 2. Ejecutar comandos:
 - `WIS: Load Operational Context`
