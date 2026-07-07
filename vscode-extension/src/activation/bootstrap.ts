@@ -2,6 +2,7 @@ import * as path from "node:path";
 import type * as vscode from "vscode";
 import {
   getCodexCliCommand,
+  getConfiguredHandoffTarget,
   getFixtureScenario,
   getLocalIndexConfig,
   getMcpEndpoint,
@@ -266,6 +267,7 @@ export async function bootstrapExtension(
     contextStore,
     loadService,
     handoffBuilder,
+    getConfiguredHandoffTarget,
     authManager,
     authPolicy,
     contextCommandService,

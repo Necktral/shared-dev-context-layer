@@ -41,16 +41,18 @@ export function registerControlPlaneCommands(runtime: ExtensionRuntimeContext): 
   });
 
   const prepareHandoffDisposable = vscode.commands.registerCommand(COMMAND_PREPARE_HANDOFF, async () => {
+    const handoffTarget = runtime.getConfiguredHandoffTarget();
     const lastEnvelope = runtime.contextStore.getLast();
     const intent = {
-      user_intent: "Preparar handoff estructurado para siguiente ejecución Codex.",
+      user_intent: `Preparar handoff estructurado para siguiente ejecución ${handoffTarget.label}.`,
       local_focus: lastEnvelope?.local_environment.active_file ? [lastEnvelope.local_environment.active_file] : [],
       detail_level: "standard" as const,
     };
 
     const result = runtime.handoffBuilder.build({
       intent,
-      target: "codex",
+      target: handoffTarget.target,
+      targetLabel: handoffTarget.label,
     });
 
     runtime.outputChannel.show(true);
@@ -59,7 +61,9 @@ export function registerControlPlaneCommands(runtime: ExtensionRuntimeContext): 
       return;
     }
 
-    await vscode.window.showInformationMessage(`Handoff ${result.status} generado para ${result.artifact?.meta.target ?? "codex"}.`);
+    await vscode.window.showInformationMessage(
+      `Handoff ${result.status} generado para ${result.artifact?.meta.target_label ?? handoffTarget.label}.`,
+    );
   });
 
   const configureAuthDisposable = vscode.commands.registerCommand(COMMAND_CONFIGURE_AUTH, async () => {

@@ -3,8 +3,10 @@ import {
   DEFAULT_AUTH_HEADER_NAME,
   DEFAULT_AUTH_MODE,
   DEFAULT_CODEX_CLI_COMMAND,
+  DEFAULT_CUSTOM_HANDOFF_TARGET_NAME,
   DEFAULT_DIAGNOSTIC_MODE,
   DEFAULT_FIXTURE_SCENARIO,
+  DEFAULT_HANDOFF_TARGET,
   DEFAULT_LOCAL_DB_DATABASE,
   DEFAULT_LOCAL_DB_HOST,
   DEFAULT_LOCAL_INDEX_CHUNK_OVERLAP_CHARS,
@@ -24,6 +26,7 @@ import {
   DEFAULT_RUNTIME_MODE,
   LOCAL_DB_PASSWORD_STORAGE_KEY,
 } from "./constants";
+import { getDefaultHandoffTargetLabel, type HandoffTarget } from "./domain/handoff";
 import type { RuntimeMode } from "./domain/operationalContext";
 import type { FixtureScenario } from "./infrastructure/wis/fixtureWISGateway";
 import type { AuthMode, ResolvedAuthConfig } from "./infrastructure/wis/wisGateway";
@@ -57,6 +60,11 @@ export interface LocalIndexConfig {
   chunkOverlapChars: number;
 }
 
+export interface ConfiguredHandoffTarget {
+  target: HandoffTarget;
+  label: string;
+}
+
 function normalizeRuntimeMode(value: string | undefined): RuntimeMode {
   if (value === "mcp" || value === "offline_fixture") {
     return value;
@@ -83,6 +91,13 @@ function normalizeOperationProfile(value: string | undefined): OperationProfile 
     return value;
   }
   return DEFAULT_OPERATION_PROFILE as OperationProfile;
+}
+
+function normalizeHandoffTarget(value: string | undefined): HandoffTarget {
+  if (value === "codex" || value === "chatgpt" || value === "github_copilot" || value === "custom") {
+    return value;
+  }
+  return DEFAULT_HANDOFF_TARGET as HandoffTarget;
 }
 
 export function getMcpEndpoint(): string {
@@ -158,6 +173,24 @@ export function getCodexCliCommand(): string {
     return DEFAULT_CODEX_CLI_COMMAND;
   }
   return command;
+}
+
+export function getConfiguredHandoffTarget(): ConfiguredHandoffTarget {
+  const configured = vscode.workspace.getConfiguration();
+  const target = normalizeHandoffTarget(configured.get<string>("wisContextSync.handoffTarget"));
+  const customName = configured.get<string>("wisContextSync.customHandoffTargetName")?.trim();
+
+  if (target === "custom") {
+    return {
+      target,
+      label: customName || DEFAULT_CUSTOM_HANDOFF_TARGET_NAME,
+    };
+  }
+
+  return {
+    target,
+    label: getDefaultHandoffTargetLabel(target),
+  };
 }
 
 function getLocalDbEnabled(profile: OperationProfile): boolean {
