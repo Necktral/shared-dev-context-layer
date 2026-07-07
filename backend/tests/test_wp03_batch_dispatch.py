@@ -40,6 +40,14 @@ def _count_item(item_key: str) -> int:
         db.close()
 
 
+def _get_item(item_key: str) -> ContextItem | None:
+    db = SessionLocal()
+    try:
+        return db.execute(select(ContextItem).where(ContextItem.item_key == item_key)).scalars().first()
+    finally:
+        db.close()
+
+
 def test_batch_applies_all_operations(active_task):
     k1 = f"wp03.a.{uuid4().hex}"
     k2 = f"wp03.b.{uuid4().hex}"
@@ -119,3 +127,83 @@ def test_batch_canon_under_ratify_policy_is_blocked(active_task):
             db.commit()
         finally:
             db.close()
+
+
+def test_batch_default_note_type_uses_note_ratification(active_task):
+    db = SessionLocal()
+    try:
+        ps = get_policy_state(db)
+        original = dict(ps.approval_policy_json or {})
+        ps.approval_policy_json = {"by_tool": {}, "by_category": {"note": "ratify"}, "default": "auto"}
+        db.add(ps)
+        db.commit()
+    finally:
+        db.close()
+    try:
+        k = f"wp03.default-note.{uuid4().hex}"
+        resp = _batch(
+            active_task,
+            [{"operation": "upsert_context_item", "payload": {"item_key": k, "title": "default note"}}],
+        )
+        assert resp["status"] == "ratification_required"
+        assert _count_item(k) == 0
+    finally:
+        db = SessionLocal()
+        try:
+            ps = get_policy_state(db)
+            ps.approval_policy_json = original
+            db.add(ps)
+            db.commit()
+        finally:
+            db.close()
+
+
+def test_batch_conflict_result_aborts_and_rolls_back(active_task):
+    existing_key = f"wp03.conflict.existing.{uuid4().hex}"
+    before_key = f"wp03.conflict.before.{uuid4().hex}"
+    after_key = f"wp03.conflict.after.{uuid4().hex}"
+
+    created = _batch(
+        active_task,
+        [{"operation": "upsert_context_item", "payload": {"item_key": existing_key, "item_type": "note", "title": "v1"}}],
+    )
+    assert created["status"] == "ok"
+    existing = _get_item(existing_key)
+    assert existing is not None
+
+    resp = _batch(
+        active_task,
+        [
+            {"operation": "upsert_context_item", "payload": {"item_key": before_key, "item_type": "note", "title": "before"}},
+            {
+                "operation": "upsert_context_item",
+                "payload": {
+                    "item_key": existing_key,
+                    "item_type": "note",
+                    "title": "stale",
+                    "expected_version": int(existing.version) + 1,
+                },
+            },
+            {"operation": "upsert_context_item", "payload": {"item_key": after_key, "item_type": "note", "title": "after"}},
+        ],
+    )
+    assert resp["status"] == "invalid_request"
+    assert _count_item(before_key) == 0
+    assert _count_item(after_key) == 0
+
+
+def test_batch_not_found_result_aborts_and_rolls_back(active_task):
+    before_key = f"wp03.not-found.before.{uuid4().hex}"
+    after_key = f"wp03.not-found.after.{uuid4().hex}"
+
+    resp = _batch(
+        active_task,
+        [
+            {"operation": "upsert_context_item", "payload": {"item_key": before_key, "item_type": "note", "title": "before"}},
+            {"operation": "set_context_labels", "payload": {"context_item_id": str(uuid4()), "labels": ["missing"]}},
+            {"operation": "upsert_context_item", "payload": {"item_key": after_key, "item_type": "note", "title": "after"}},
+        ],
+    )
+    assert resp["status"] == "invalid_request"
+    assert _count_item(before_key) == 0
+    assert _count_item(after_key) == 0

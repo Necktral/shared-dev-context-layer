@@ -1472,6 +1472,7 @@ _BATCH_OP_NAMES = {
     "set_context_labels",
     "archive_context_item",
 }
+_BATCH_FATAL_RESULTS = {"conflict", "not_found"}
 
 
 def _dispatch_batch_op(
@@ -1601,6 +1602,8 @@ def apply_sync_batch(
                         resolved.scope_payload(),
                         resolved.resolution_metadata,
                     )
+                if operation == "upsert_context_item":
+                    op_payload = {**op_payload, "item_type": op_payload.get("item_type", "note")}
                 # Ratificación POR OPERACIÓN (item_type como categoría en upsert): cierra el
                 # bypass de gobernanza donde el canon se colaba vía batch (F03).
                 category = op_payload.get("item_type") if operation == "upsert_context_item" else None
@@ -1636,12 +1639,19 @@ def apply_sync_batch(
                         resolved.scope_payload(),
                         resolved.resolution_metadata,
                     )
+                op_result_name = str(op_result.get("result"))
+                if op_result_name in _BATCH_FATAL_RESULTS:
+                    return _invalid_request(
+                        f"operación {operation!r} falló en batch (índice {idx}): resultado {op_result_name!r}.",
+                        resolved.scope_payload(),
+                        resolved.resolution_metadata,
+                    )
                 after = op_result.get("after")
                 op_results.append(
                     {
                         "index": idx,
                         "operation": operation,
-                        "result": op_result.get("result"),
+                        "result": op_result_name,
                         "subject_id": after.get("id") if isinstance(after, dict) else None,
                     }
                 )
