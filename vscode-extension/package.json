@@ -353,8 +353,8 @@
     "watch": "tsc -w -p .",
     "manual:load-context-output": "npm run compile && node dist/tools/loadContextOutputCli.js",
     "manual:a1": "npm run manual:load-context-output -- --runtime-mode offline_fixture --scenario success_full",
-    "test": "node node_modules/typescript/bin/tsc -p . && node --test $(find dist/tests -type f -name \"*.test.js\" | sort)",
-    "test:local-db": "LOCAL_DB_TESTS=1 npm run compile && LOCAL_DB_TESTS=1 node --test $(find dist/tests/local-db -type f -name \"*.test.js\" | sort)"
+    "test": "node node_modules/typescript/bin/tsc -p . && node tools/run-node-tests.mjs",
+    "test:local-db": "node node_modules/typescript/bin/tsc -p . && node tools/run-node-tests.mjs --local-db"
   },
   "devDependencies": {
     "@types/node": "^20.16.5",

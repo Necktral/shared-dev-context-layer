@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import * as path from "node:path";
 import {
   WorkspaceBoundaryError,
   WorkspaceBoundaryGuard,
@@ -49,5 +50,8 @@ test("WorkspaceBoundaryGuard filtra candidate_files fuera de boundary y deduplic
     ],
     "/workspace/repo",
   );
-  assert.deepEqual(files.sort(), ["/workspace/repo/src/app.ts", "/workspace/repo/src/index.ts"]);
+  assert.deepEqual(files.sort(), [
+    path.resolve("/workspace/repo/src/app.ts"),
+    path.resolve("/workspace/repo/src/index.ts"),
+  ].sort());
 });

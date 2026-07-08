@@ -6,7 +6,7 @@ export interface ProjectPathRoots {
 }
 
 function isAbsoluteCrossPlatform(value: string): boolean {
-  return path.isAbsolute(value) || path.win32.isAbsolute(value);
+  return path.isAbsolute(value) || path.posix.isAbsolute(value) || path.win32.isAbsolute(value);
 }
 
 function normalizeSlashes(value: string): string {
@@ -15,6 +15,25 @@ function normalizeSlashes(value: string): string {
 
 function collapsePosixSeparators(value: string): string {
   return value.replace(/\/{2,}/g, "/");
+}
+
+function normalizeComparableAbsolute(rawPath: string): string {
+  const trimmed = normalizeSlashes(rawPath.trim());
+  if (!trimmed) {
+    return "";
+  }
+
+  let normalized: string;
+  if (path.win32.isAbsolute(trimmed) && /^[A-Za-z]:/.test(trimmed)) {
+    normalized = normalizeSlashes(path.win32.normalize(trimmed));
+  } else if (path.posix.isAbsolute(trimmed)) {
+    normalized = path.posix.normalize(trimmed);
+  } else {
+    normalized = normalizeSlashes(path.resolve(trimmed));
+  }
+
+  const collapsed = collapsePosixSeparators(normalized).replace(/\/+$/, "");
+  return collapsed.replace(/^[A-Za-z]:/, (drive) => drive.toLowerCase());
 }
 
 export function normalizeProjectPath(rawPath: string): string {
@@ -40,15 +59,15 @@ export function toComparableFilename(rawPath: string): string {
 }
 
 export function normalizeRelativePathFromRoot(rootPath: string, absolutePath: string): string {
-  const resolvedRoot = path.resolve(rootPath);
-  const resolvedAbsolute = path.resolve(absolutePath);
-  const relative = path.relative(resolvedRoot, resolvedAbsolute);
+  const resolvedRoot = normalizeComparableAbsolute(rootPath);
+  const resolvedAbsolute = normalizeComparableAbsolute(absolutePath);
+  const relative = path.posix.relative(resolvedRoot, resolvedAbsolute);
 
   if (!relative || relative === ".") {
-    return normalizeProjectPath(path.posix.basename(normalizeSlashes(resolvedAbsolute)));
+    return normalizeProjectPath(path.posix.basename(resolvedAbsolute));
   }
 
-  if (relative.startsWith("..") || path.isAbsolute(relative) || path.win32.isAbsolute(relative)) {
+  if (relative.startsWith("..") || path.posix.isAbsolute(relative) || path.win32.isAbsolute(relative)) {
     throw new Error(`Path fuera de root de indexación: ${absolutePath}`);
   }
 
@@ -73,25 +92,26 @@ export function toProjectRelativePath(rawPath: string, roots: ProjectPathRoots):
     return normalized;
   }
 
-  const normalizedRawInput = normalizeSlashes(trimmed);
-  const resolvedRaw = path.win32.isAbsolute(trimmed) && !path.isAbsolute(trimmed)
-    ? normalizedRawInput.replace(/^[A-Za-z]:/, "")
-    : normalizeSlashes(path.resolve(trimmed));
-  const comparableRaw = collapsePosixSeparators(
-    resolvedRaw.startsWith("/") ? resolvedRaw : `/${resolvedRaw}`,
-  );
+  const comparableRaw = normalizeComparableAbsolute(trimmed);
+  const comparableRawCandidates = [comparableRaw];
+  const driveStrippedRaw = comparableRaw.replace(/^[a-z]:/i, "");
+  if (driveStrippedRaw !== comparableRaw && driveStrippedRaw.startsWith("/")) {
+    comparableRawCandidates.push(driveStrippedRaw);
+  }
   const candidates = [roots.repo_root, roots.workspace_root].filter((entry): entry is string => Boolean(entry));
 
   for (const root of candidates) {
-    const comparableRoot = collapsePosixSeparators(normalizeSlashes(path.resolve(root)));
-    const relative = path.posix.relative(comparableRoot, comparableRaw);
-    if (!relative || relative === ".") {
-      return normalizeProjectPath(path.posix.basename(comparableRaw));
+    const comparableRoot = normalizeComparableAbsolute(root);
+    for (const rawCandidate of comparableRawCandidates) {
+      const relative = path.posix.relative(comparableRoot, rawCandidate);
+      if (!relative || relative === ".") {
+        return normalizeProjectPath(path.posix.basename(rawCandidate));
+      }
+      if (relative.startsWith("..") || path.posix.isAbsolute(relative)) {
+        continue;
+      }
+      return normalizeProjectPath(relative);
     }
-    if (relative.startsWith("..") || path.posix.isAbsolute(relative)) {
-      continue;
-    }
-    return normalizeProjectPath(relative);
   }
 
   return null;
