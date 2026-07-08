@@ -38,6 +38,15 @@ python scripts/smoke_mcp.py
 
 El smoke debe pasar sin `MCP_BEARER`.
 
+Preflight completo en Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\check_chatgpt_dev_noauth.ps1
+```
+
+Este preflight valida postura no-auth, ausencia de metadata OAuth, `list_tools`
+con `securitySchemes: noauth` y un proxy local de `tunnel-client` sin usar secretos.
+
 ## Secure MCP Tunnel
 
 En OpenAI Platform:
@@ -66,6 +75,13 @@ $env:CONTROL_PLANE_API_KEY="<runtime_api_key>"
 ```
 
 Mantener `tunnel-client run` activo durante discovery y pruebas.
+
+Si ya existen `CONTROL_PLANE_API_KEY` y `CONTROL_PLANE_TUNNEL_ID` en el entorno,
+se puede validar el perfil hospedado antes de abrir ChatGPT:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\check_chatgpt_dev_noauth.ps1 -RunHostedDoctor
+```
 
 ## Crear conector en ChatGPT
 
