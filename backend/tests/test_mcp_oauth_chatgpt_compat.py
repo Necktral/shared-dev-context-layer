@@ -61,6 +61,15 @@ def _build_auth_runtime_app(monkeypatch):
     return mcp_server.build_observed_streamable_http_app(runtime_mcp)
 
 
+def _build_noauth_runtime_app(monkeypatch):
+    monkeypatch.setattr(mcp_server.settings, "mcp_auth_enabled", False)
+    monkeypatch.setattr(mcp_server.settings, "mcp_auth_bypass_local", True)
+    monkeypatch.setattr(mcp_server.settings, "mcp_public_base_url", None)
+    monkeypatch.setattr(mcp_server.settings, "mcp_allowed_origins", "")
+    runtime_mcp = mcp_server._build_mcp_server()
+    return mcp_server.build_observed_streamable_http_app(runtime_mcp)
+
+
 def test_protected_resource_metadata_contract(monkeypatch) -> None:
     app = _build_auth_runtime_app(monkeypatch)
 
@@ -78,6 +87,15 @@ def test_protected_resource_metadata_contract(monkeypatch) -> None:
         "wis.context.sync.write",
         "wis.context.ratify",
     ]
+
+
+def test_noauth_runtime_does_not_publish_oauth_protected_resource_metadata(monkeypatch) -> None:
+    app = _build_noauth_runtime_app(monkeypatch)
+
+    with TestClient(app) as client:
+        response = client.get("/.well-known/oauth-protected-resource")
+
+    assert response.status_code == 404
 
 
 def test_mcp_get_without_token_returns_401_www_authenticate(monkeypatch) -> None:

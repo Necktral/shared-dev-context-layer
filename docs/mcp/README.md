@@ -1,6 +1,6 @@
 # MCP Runtime Runbook (VS Code Control Plane)
 
-Runbook para operar el modo `mcp` de la extensión y validar conectividad local/remota con OAuth Auth0, read plane y write plane.
+Runbook para operar el modo `mcp` de la extensión y validar conectividad local/remota con OAuth Auth0, read plane y write plane. Para una primera prueba en ChatGPT sin Auth0, usar `chatgpt_dev_noauth_connector.md`.
 
 > **Plano de ratificación deliberativa (pasos 1-6 del ADR).** El contrato pasa de
 > **17 a 21 tools**. Ver `docs/context/adr/ADR-deliberative-context-ratification.md`.
@@ -281,6 +281,7 @@ Mantener el password fuera del JSON; usar SecretStorage.
 - Canon contract: `../context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
 - Evidence 3A: `../context/phase3/evidence/slice-3a/README.md`
 - Evidence 3B: `../context/phase3/evidence/slice-3b/README.md`
+- ChatGPT Developer Mode sin Auth0: `chatgpt_dev_noauth_connector.md`
 - OAuth Auth0 (ChatGPT Connector): `oauth_auth0_chatgpt_connector.md`
 
 ## 9. OAuth connector (Auth0) status

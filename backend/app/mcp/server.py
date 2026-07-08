@@ -124,6 +124,8 @@ def _is_write_tool(tool_name: str) -> bool:
 
 
 def _tool_security_schemes(scopes: list[str]) -> list[dict[str, Any]]:
+    if not _auth_runtime_enabled():
+        return [{"type": "noauth"}]
     return [{"type": "oauth2", "scopes": scopes}]
 
 
@@ -1920,17 +1922,18 @@ def build_observed_streamable_http_app(target_mcp: FastMCP | None = None) -> MCP
     resolved_mcp = target_mcp or mcp
     base_app = resolved_mcp.streamable_http_app()
     protected_resource_path = "/.well-known/oauth-protected-resource"
-    route_endpoint = cors_middleware(_protected_resource_metadata_endpoint, ["GET", "OPTIONS"])
-    custom_route = Route(
-        protected_resource_path,
-        endpoint=route_endpoint,
-        methods=["GET", "OPTIONS"],
-    )
     existing_routes = getattr(base_app.router, "routes", [])
     base_app.router.routes = [
         route for route in existing_routes if getattr(route, "path", None) != protected_resource_path
     ]
-    base_app.router.routes.insert(0, custom_route)
+    if _auth_runtime_enabled():
+        route_endpoint = cors_middleware(_protected_resource_metadata_endpoint, ["GET", "OPTIONS"])
+        custom_route = Route(
+            protected_resource_path,
+            endpoint=route_endpoint,
+            methods=["GET", "OPTIONS"],
+        )
+        base_app.router.routes.insert(0, custom_route)
 
     app = MCPTransportObservabilityASGI(
         base_app,
