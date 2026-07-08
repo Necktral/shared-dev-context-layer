@@ -19,7 +19,7 @@ function Write-Info([string]$Message) {
 }
 
 function Fail([string]$Message) {
-    Write-Error "[FAIL] $Message"
+    Write-Host "[FAIL] $Message" -ForegroundColor Red
     exit 1
 }
 
@@ -83,10 +83,11 @@ Write-Ok "oauth protected-resource metadata is not published in no-auth mode"
 $clientProbe = @'
 import anyio
 import json
+import os
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
-URL = "http://127.0.0.1:8002/mcp"
+URL = os.environ["WIS_CHATGPT_DEV_MCP_URL"]
 
 async def main():
     async with streamablehttp_client(URL) as (read, write, _):
@@ -106,7 +107,7 @@ async def main():
             }, sort_keys=True))
 
 anyio.run(main)
-'@ | docker compose exec -T mcp python -
+'@ | docker compose exec -T -e WIS_CHATGPT_DEV_MCP_URL=$McpUrl mcp python -
 
 $clientResult = $clientProbe | ConvertFrom-Json
 if ($clientResult.tools -ne 21) {

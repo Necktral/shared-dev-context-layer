@@ -66,12 +66,8 @@ Iniciar `tunnel-client` apuntando al MCP privado:
 
 ```powershell
 $env:CONTROL_PLANE_API_KEY="<runtime_api_key>"
-& $TunnelClient init `
-  --profile wis-local-mcp `
-  --tunnel-id <tunnel_id> `
-  --mcp-server-url http://localhost:8002/mcp
-& $TunnelClient doctor --profile wis-local-mcp --explain
-& $TunnelClient run --profile wis-local-mcp
+$env:CONTROL_PLANE_TUNNEL_ID="<tunnel_id>"
+powershell -ExecutionPolicy Bypass -File .\scripts\start_chatgpt_dev_noauth_tunnel.ps1
 ```
 
 Mantener `tunnel-client run` activo durante discovery y pruebas.
