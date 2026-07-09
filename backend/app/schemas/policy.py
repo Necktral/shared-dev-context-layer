@@ -12,5 +12,5 @@ class PolicyStateOut(BaseModel):
     mode: str
     scope: str
     redaction_level: str
-    approval_mode: str
+    approval_mode: str | None = None
     updated_at: datetime

@@ -88,6 +88,11 @@ Pass:
 - `vscode-extension`: `npm run compile && npm test && npm run test:local-db`
 - matriz de cumplimiento AC1-AC8 publicada en `phase4/evidence/phase1-local-first-matrix.md`
 
+Checkpoint local adicional:
+
+- `phase4/evidence/local-dev-checkpoint-20260707.md`
+- confirma Docker local, MCP ready, extension VS Code instalada/configurada, `codex` como CLI local y backend suite en verde
+
 ## 5. No-go local
 
 NO-GO local si ocurre cualquiera:
@@ -104,3 +109,4 @@ NO-GO local si ocurre cualquiera:
 - `WIS_VSCODE_EXTENSION_ARCHITECTURE.md`
 - `WIS_PHASE_3_ACCEPTANCE_GATE.md` (GO global)
 - `phase4/evidence/README.md` (cierre remoto/global)
+- `phase4/evidence/local-dev-checkpoint-20260707.md` (checkpoint local)

@@ -84,6 +84,10 @@ async def main() -> int:
                         "target_key": MONEY_PATH_PAYLOAD["decision_key"],
                         "rationale": "Primera corrida real del loop de ratificación (dogfood).",
                         "proposed_payload": MONEY_PATH_PAYLOAD,
+                        # WP-0.2: propose_change es dry_run=True por defecto; para crear
+                        # la Proposal real hay que pedirlo explícitamente.
+                        "dry_run": False,
+                        "idempotency_key": "dogfood-propose-money-path",
                     },
                 )
             ).structuredContent
@@ -95,7 +99,14 @@ async def main() -> int:
 
             print("[2] Ratificando (yo decido)…")
             ratified = (
-                await session.call_tool("ratify_proposal", {"proposal_id": proposal["id"]})
+                await session.call_tool(
+                    "ratify_proposal",
+                    {
+                        "proposal_id": proposal["id"],
+                        # WP-0.2: la ratificación exige el operator-token (verificado siempre).
+                        "operator_token": os.environ.get("OPERATOR_RATIFY_TOKEN", ""),
+                    },
+                )
             ).structuredContent
             if not isinstance(ratified, dict) or ratified.get("status") != "ok":
                 print("[FAIL] ratify_proposal:", ratified)

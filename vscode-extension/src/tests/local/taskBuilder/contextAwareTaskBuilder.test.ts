@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ContextAwareTaskBuilder } from "../../../local/taskBuilder/contextAwareTaskBuilder";
+import { createInitialCouncilRoomState } from "../../../local/types";
 
 test("ContextAwareTaskBuilder compone summary con evidencia de chunks", async () => {
   const builder = new ContextAwareTaskBuilder();
@@ -70,6 +71,7 @@ test("ContextAwareTaskBuilder compone summary con evidencia de chunks", async ()
       last_action: null,
       task_draft: null,
       last_result: null,
+      council: createInitialCouncilRoomState(),
       errors: [],
       updated_at: new Date().toISOString(),
     },

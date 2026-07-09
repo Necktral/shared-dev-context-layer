@@ -1,6 +1,13 @@
 export type OperationProfile = "phase3_control_plane" | "local_private";
 
-export type LocalCommandName = "local_index" | "local_prepare_task" | "local_run_codex" | "local_refresh";
+export type LocalCommandName =
+  | "local_index"
+  | "local_prepare_task"
+  | "local_run_codex"
+  | "local_refresh"
+  | "council_open_room"
+  | "council_run_round"
+  | "council_synthesize_packet";
 
 export type LocalCommandStatus = "ok" | "blocked" | "error";
 
@@ -212,6 +219,91 @@ export interface OperatorReviewResult {
   reason_codes: string[];
 }
 
+export type CouncilSensitivityLabel = "unknown" | "sensitive" | "non_sensitive";
+
+export type CouncilRoomTab = "runtime" | "council";
+
+export type CouncilRoomStatus = "idle" | "open" | "round_complete" | "synthesized" | "blocked" | "error";
+
+export type CouncilRole =
+  | "reg"
+  | "architect"
+  | "implementer"
+  | "critic"
+  | "operator_advocate"
+  | "risk_auditor"
+  | "historian"
+  | "wildcard"
+  | "external_reviewer";
+
+export type CouncilPositionStatus = "submitted" | "blocked" | "unavailable" | "skipped";
+
+export interface CouncilPosition {
+  id: string;
+  session_id: string;
+  role: CouncilRole;
+  provider: "local_role" | "gemini_ai_studio" | "reg";
+  status: CouncilPositionStatus;
+  stance: "support" | "object" | "refine" | "observe";
+  claim: string;
+  rationale: string;
+  evidence: string[];
+  risks: string[];
+  confidence: "low" | "medium" | "high";
+  created_at: string;
+}
+
+export interface CouncilPacketV1 {
+  version: "agent_council_packet_v1";
+  session_id: string;
+  sensitivity_label: CouncilSensitivityLabel;
+  question_summary: string;
+  reg_synthesis: string;
+  recommendation: string;
+  objections: string[];
+  dissent: Array<{
+    role: CouncilRole;
+    claim: string;
+    rationale: string;
+  }>;
+  next_actions: string[];
+  proposal_candidates: Array<{
+    target_kind: string;
+    target_key: string;
+    rationale: string;
+    proposed_payload: Record<string, unknown>;
+  }>;
+  positions: CouncilPosition[];
+  created_at: string;
+}
+
+export interface CouncilExternalReviewerState {
+  provider: "gemini_ai_studio";
+  enabled: boolean;
+  status: "disabled" | "available" | "unavailable" | "blocked";
+  model: string;
+  reason: string | null;
+}
+
+export interface CouncilRoomState {
+  active_tab: CouncilRoomTab;
+  session_id: string | null;
+  status: CouncilRoomStatus;
+  operator_question: string;
+  sensitivity_label: CouncilSensitivityLabel;
+  sanitized_brief: string | null;
+  positions: CouncilPosition[];
+  packet: CouncilPacketV1 | null;
+  external_reviewer: CouncilExternalReviewerState;
+  events: Array<{
+    event_type: "council.session_started" | "council.position_submitted" | "council.packet_synthesized";
+    message: string;
+    created_at: string;
+  }>;
+  errors: string[];
+  updated_at: string;
+}
+
 export interface PostRunTelemetry {
   prepare_latency_ms: number;
   run_latency_ms: number;
@@ -250,8 +342,32 @@ export interface ProjectRuntimeSnapshot {
   last_action: LocalCommandName | null;
   task_draft: LocalTaskDraft | null;
   last_result: LocalCommandResult | null;
+  council: CouncilRoomState;
   errors: string[];
   updated_at: string;
+}
+
+export function createInitialCouncilRoomState(): CouncilRoomState {
+  return {
+    active_tab: "runtime",
+    session_id: null,
+    status: "idle",
+    operator_question: "",
+    sensitivity_label: "unknown",
+    sanitized_brief: null,
+    positions: [],
+    packet: null,
+    external_reviewer: {
+      provider: "gemini_ai_studio",
+      enabled: false,
+      status: "disabled",
+      model: "gemini-3.1-flash-lite",
+      reason: "External reviewer disabled by default.",
+    },
+    events: [],
+    errors: [],
+    updated_at: new Date().toISOString(),
+  };
 }
 
 export function createInitialProjectRuntimeSnapshot(profile: OperationProfile): ProjectRuntimeSnapshot {
@@ -267,6 +383,7 @@ export function createInitialProjectRuntimeSnapshot(profile: OperationProfile): 
     last_action: null,
     task_draft: null,
     last_result: null,
+    council: createInitialCouncilRoomState(),
     errors: [],
     updated_at: new Date().toISOString(),
   };

@@ -14,6 +14,17 @@ if ! docker compose ps mcp | grep -q "Up"; then
   exit 1
 fi
 
+# WP-0.5(e): NO tunelizar un bus sin auth runtime. El túnel expone el MCP a internet;
+# con bypass local activo el write plane y la ratificación quedan sin identidad.
+mcp_env="$(docker inspect wis_context_mcp --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null || true)"
+auth_enabled="$(echo "$mcp_env" | grep -E '^MCP_AUTH_ENABLED=' | head -n1 | cut -d= -f2)"
+bypass_local="$(echo "$mcp_env" | grep -E '^MCP_AUTH_BYPASS_LOCAL=' | head -n1 | cut -d= -f2)"
+if [[ "$auth_enabled" != "true" || "$bypass_local" != "false" ]]; then
+  echo "ERROR: no se tuneliza sin auth runtime activo (MCP_AUTH_ENABLED=true y MCP_AUTH_BYPASS_LOCAL=false)." >&2
+  echo "       Estado del contenedor mcp: MCP_AUTH_ENABLED=${auth_enabled:-unset}, MCP_AUTH_BYPASS_LOCAL=${bypass_local:-unset}." >&2
+  exit 1
+fi
+
 docker rm -f "$TUNNEL_CONTAINER" >/dev/null 2>&1 || true
 
 echo "Starting Cloudflare tunnel container: $TUNNEL_CONTAINER"

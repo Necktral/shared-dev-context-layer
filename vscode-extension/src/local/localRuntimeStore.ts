@@ -29,6 +29,34 @@ function cloneSnapshot(snapshot: ProjectRuntimeSnapshot): ProjectRuntimeSnapshot
           details: snapshot.last_result.details ? { ...snapshot.last_result.details } : null,
         }
       : null,
+    council: {
+      ...snapshot.council,
+      positions: snapshot.council.positions.map((position) => ({
+        ...position,
+        evidence: [...position.evidence],
+        risks: [...position.risks],
+      })),
+      packet: snapshot.council.packet
+        ? {
+            ...snapshot.council.packet,
+            objections: [...snapshot.council.packet.objections],
+            dissent: snapshot.council.packet.dissent.map((entry) => ({ ...entry })),
+            next_actions: [...snapshot.council.packet.next_actions],
+            proposal_candidates: snapshot.council.packet.proposal_candidates.map((candidate) => ({
+              ...candidate,
+              proposed_payload: { ...candidate.proposed_payload },
+            })),
+            positions: snapshot.council.packet.positions.map((position) => ({
+              ...position,
+              evidence: [...position.evidence],
+              risks: [...position.risks],
+            })),
+          }
+        : null,
+      external_reviewer: { ...snapshot.council.external_reviewer },
+      events: snapshot.council.events.map((event) => ({ ...event })),
+      errors: [...snapshot.council.errors],
+    },
   };
 }
 

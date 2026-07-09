@@ -16,12 +16,12 @@ transporte MCP real.
 
 ## MCP (`:8002`, streamable-http)
 
-- `initialize` + `list_tools` → **17 tools publicadas** (contrato `all_published`, sin drift):
+- `initialize` + `list_tools` → **21 tools publicadas** (contrato `all_published`, sin drift):
   `get_active_task, get_context_snapshot, get_recent_errors, get_validation_status,
   get_approved_decisions, search_context, get_context_by_id, list_context_windows,
   resolve_related_items, get_sync_status, preview_write_impact, upsert_context_item,
   append_context_event, link_context_entities, set_context_labels, archive_context_item,
-  apply_sync_batch`
+  apply_sync_batch, propose_change, list_proposals, ratify_proposal, reject_proposal`
 - `get_active_task` → `status=ok` (tarea activa "bootstrap del sistema" del seed)
 - `get_context_snapshot` → `status=ok`, `source=database`
 - `upsert_context_item` (dry_run) → `status=ok`, `result=dry_run`

@@ -8,6 +8,7 @@ Control plane autenticado para consumo y mutación controlada de contexto operat
 - Slice 4 baseline: `WIS: Prepare Handoff` (artifact tipado en memoria, Codex-first).
 - v0.2.0: plano read/write MCP con `dry_run|commit`, idempotencia y auditoría.
 - Paquete 1 local-private: panel base + comandos locales supervisados para baseline Codex.
+- Council Room v1: sala gobernada en el panel local para rondas de agentes, Reg synthesis y `agent_council_packet_v1`.
 
 ## Commands
 
@@ -29,6 +30,10 @@ Control plane autenticado para consumo y mutación controlada de contexto operat
 - `WIS: Local Refresh`
 - `WIS: Local Doctor`
 - `WIS: Local Configure DB Password`
+- `WIS: Council Open Room`
+- `WIS: Council Run Round`
+- `WIS: Council Synthesize Packet`
+- `WIS: Council Configure Gemini Key`
 
 ## Runtime modes
 
@@ -74,9 +79,61 @@ Los playbooks resueltos para post-review se exponen de forma aditiva en `result.
 - `wisContextSync.localDb.password` (default: `""`; si vacío usa `SecretStorage`)
 - `wisContextSync.localDb.schema` (default: `local_private`)
 - `wisContextSync.localDb.ssl` (default: `false`)
+- `wisContextSync.council.enabled` (default: `true`)
+- `wisContextSync.council.externalReview.enabled` (default: `false`)
+- `wisContextSync.council.externalReview.model` (default: `gemini-3.1-flash-lite`)
+- `wisContextSync.council.externalReview.maxChars` (default: `12000`)
 
 Token de autenticación se guarda en `SecretStorage` (no en settings de texto plano) usando `WIS: Configure Authentication`.
 Password de PostgreSQL para `local_private` puede guardarse con `WIS: Local Configure DB Password` (`wisContextSync.localDbPassword`).
+La key de Gemini para Council Room se guarda con `WIS: Council Configure Gemini Key` o en `GEMINI_API_KEY`; nunca se escribe en settings ni logs.
+
+## Council Room
+
+El panel `WIS Local Runtime` tiene dos pestañas:
+
+- `Runtime`: estado local, comandos y post-run review.
+- `Council Room`: problema del operador, etiqueta de sensibilidad, timeline por rol y bloque `Reg Synthesis`.
+
+Flujo v1:
+
+1. `Open Council`: abre sesión y construye un brief sanitizado.
+2. `Run Round`: Reg ejecuta roles locales ordenados (`architect`, `implementer`, `critic`, `operator_advocate`, `risk_auditor`, `historian`, `wildcard`).
+3. `Reg Synthesis`: genera `agent_council_packet_v1`.
+
+Gemini entra solo como `external_reviewer` si `wisContextSync.council.externalReview.enabled=true` o `GEMINI_EXTERNAL_REVIEW_ENABLED=true`, existe key, y la sesión está marcada `non_sensitive`. Si falta key, aparece como `unavailable` y la ronda local continúa.
+
+## Local install and profile
+
+Paquete interno:
+
+```bash
+code --install-extension vscode-extension/wis-context-sync-control-plane-0.2.0-internal.vsix --force
+code --list-extensions --show-versions | grep wis-context-sync
+```
+
+Perfil local recomendado para Docker Compose:
+
+```json
+{
+  "wisContextSync.runtimeMode": "mcp",
+  "wisContextSync.mcpEndpoint": "http://localhost:8002/mcp",
+  "wisContextSync.requestTimeoutMs": 10000,
+  "wisContextSync.authMode": "none",
+  "wisContextSync.requireAuthentication": false,
+  "wisContextSync.operationProfile": "local_private",
+  "wisContextSync.codexCliCommand": "codex",
+  "wisContextSync.localDb.enabled": true,
+  "wisContextSync.localDb.host": "localhost",
+  "wisContextSync.localDb.port": 5432,
+  "wisContextSync.localDb.database": "wis_context",
+  "wisContextSync.localDb.user": "wis_admin",
+  "wisContextSync.localDb.schema": "local_private",
+  "wisContextSync.localDb.ssl": false
+}
+```
+
+No guardar `wisContextSync.localDb.password` en settings planos. Con password vacio, la extension consulta `SecretStorage`; configurar con `WIS: Local Configure DB Password`.
 
 ## Operational load states
 
@@ -103,12 +160,14 @@ Permitido:
 - presentar estado
 - preparar artifact de handoff en memoria
 - ejecutar write tools MCP con confirmación explícita (`dry_run|commit`)
+- deliberar en Council Room y persistir eventos `council.*` resumidos/sanitizados
 
 No permitido:
 
 - mutaciones automáticas de archivos
 - shell execution automatica
-- webview/panel avanzado en este baseline
+- ratificación, escritura canonica o promoción automática desde Council Room
+- enviar secretos, `.env`, raw diffs o payloads Auth0/MCP reales a revisores externos
 
 ## Authentication quickstart
 

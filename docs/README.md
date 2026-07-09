@@ -9,6 +9,9 @@ Este directorio concentra la fuente de verdad documental para el control plane (
 - Operacion MCP (runbook): `docs/mcp/`
 - Contrato VS Code <-> MCP runtime: `docs/mcp/vscode_read_model_contract.md`
 - OAuth Auth0 para ChatGPT Connector: `docs/mcp/oauth_auth0_chatgpt_connector.md`
+- Orquestador del consejo de IAs: `docs/context/AGENT-COUNCIL-ORCHESTRATOR.md`
+- Config default del consejo de IAs: `docs/context/AGENT-COUNCIL-DEFAULT-CONFIG.json`
+- Checkpoint local Docker/VS Code/LLM-agentes 2026-07-07: `docs/context/phase4/evidence/local-dev-checkpoint-20260707.md`
 - Orientacion contexto deliberativo: `docs/context/orientations/deliberative-context-layer.md`
 - ADR ratificacion humana (plan): `docs/context/adr/ADR-deliberative-context-ratification.md`
 
@@ -20,6 +23,8 @@ Este directorio concentra la fuente de verdad documental para el control plane (
   - `docs/context/WIS_PHASE_3_ACCEPTANCE_GATE.md`
   - `docs/context/WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
   - `docs/context/WIS_VSCODE_EXTENSION_ARCHITECTURE.md`
+  - `docs/context/AGENT-COUNCIL-ORCHESTRATOR.md`
+  - `docs/context/AGENT-COUNCIL-DEFAULT-CONFIG.json`
   - `docs/context/local_private/README.md`
 - Policy:
   - `docs/context/REPOSITORY-OPERATIONAL-HARDENING.md`
@@ -44,6 +49,16 @@ El proyecto opera con dos modos explicitos en la extension:
 
 No hay fallback silencioso entre modos.
 
+## Estado local operativo (2026-07-07)
+
+- Docker local: `postgres`, `backend` y `mcp` arriba via `docker compose up --build -d postgres migrate backend mcp`.
+- MCP local: `http://localhost:8002/mcp`; estado publico de servicio en `http://localhost:8001/mcp/info`.
+- Extension instalada: `necktral.wis-context-sync-control-plane@0.2.0-internal`.
+- VS Code recomendado: `runtimeMode=mcp`, `operationProfile=local_private`, `codexCliCommand=codex`.
+- Password de PostgreSQL: fuera de settings planos; usar SecretStorage con `WIS: Local Configure DB Password`.
+- Backend local verificado: `90 passed, 7 skipped` con `MCP_AUTH_BYPASS_LOCAL=true`.
+- Detalle: `docs/context/phase4/evidence/local-dev-checkpoint-20260707.md`.
+
 ## Orden recomendado de lectura
 
 1. `docs/context/README.md`
@@ -63,6 +78,7 @@ No hay fallback silencioso entre modos.
 - Fase 1 GO local separado: `docs/context/phase4/evidence/phase1-local-first-matrix.md`
 - Phase 4 read/write + OAuth: `docs/context/phase4/evidence/README.md`
 - Backlog Fase 2 remoto/global: `docs/context/phase4/evidence/phase2-remote-backlog.md`
+- Checkpoint local 2026-07-07: `docs/context/phase4/evidence/local-dev-checkpoint-20260707.md`
 - Internal release: `docs/context/phase3/release-internal/README.md`
 
 ## Governance

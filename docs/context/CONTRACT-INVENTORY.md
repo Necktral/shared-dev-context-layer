@@ -27,6 +27,12 @@ Estado: activo (normativo operativo)
 | `CT-010` | Commit único del camino de escritura (dominio+auditoría atómicos vía `record_publish_audit(commit=...)`) | `persisted_contract` | maintainers backend/mcp | `additive` — un fallo de auditoría revierte también el dominio (antes no) | `backend/tests/test_wp04_atomicity.py` |
 | `CT-011` | `publish_audit.task_id` nullable + `workspace_id`/`project_id`; `policy_state.approval_mode` nullable | `persisted_contract` | maintainers backend | `additive` — columnas relajadas, sin pérdida de datos; migración `0007_write_plane_fixes` | `backend/tests/test_wp04_atomicity.py::test_read_tool_still_records_publish_audit` |
 
+| `CT-012` | `apply_sync_batch` — despacho real de operaciones (`operations[].operation`+`payload`) + campo `results` | `integration_contract` | maintainers backend/mcp | `additive` (cumple el contrato "atomically" antes incumplido); operaciones ahora requieren `payload`; ratificación por operación | `backend/tests/test_wp03_batch_dispatch.py` |
+
+| `CT-013` | Operator-token de ratificación (`OPERATOR_RATIFY_TOKEN`, param `operator_token` en ratify/reject) | `integration_contract` | maintainers backend/mcp | **non_additive** — ratify/reject exigen token verificado siempre; ADR-phase0-perimeter-closure | `backend/tests/test_wp02_operator_token.py` |
+| `CT-014` | Perímetro HTTP: `/internal/*` exige `X-Internal-Token` (fail-closed); `/mcp/info` sin `auth_enabled`; docs off fuera de dev; bind/publicación loopback | `integration_contract` | maintainers backend | **non_additive** — endpoints internos pasan a requerir token; ADR-phase0-perimeter-closure | `backend/tests/test_wp05_perimeter.py` |
+| `CT-015` | `agent_council_packet_v1` + VS Code Council Room + config seed `AGENT-COUNCIL-DEFAULT-CONFIG.json` | `integration_contract` + `ui_facing_contract` | maintainers deliberative/governance + vscode-extension | `additive_seed` — define sala, paquete/roster deliberativo y eventos `council.*`; no otorga autoridad de ratificación ni escritura canónica | `python -m json.tool docs/context/AGENT-COUNCIL-DEFAULT-CONFIG.json`, `vscode-extension/src/tests/council/councilRoomService.test.ts`, `vscode-extension/src/tests/presentation/localRuntimePanelProvider.test.ts`, `vscode-extension/src/tests/contracts/packageManifest.localProfile.test.ts` |
+
 ## Criterio de actualización
 
 - Si se agrega o modifica contrato: actualizar fila existente o crear nueva (`CT-XXX`).

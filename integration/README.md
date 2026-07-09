@@ -45,7 +45,7 @@ python scripts/dev_native.py        # backend :8001 y MCP :8002 arriba (Ctrl-C p
 ### Verificar que funciona
 
 ```bash
-python scripts/smoke_mcp.py          # conecta al MCP, lista 17 tools, read + dry_run → SMOKE: PASS
+python scripts/smoke_mcp.py          # conecta al MCP, lista 21 tools (igualdad), read + dry_run → SMOKE: PASS
 ```
 
 Evidencia de una corrida verde en [`VERIFICATION.md`](./VERIFICATION.md).

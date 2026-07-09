@@ -299,7 +299,12 @@ def test_mcp_tools_compatibility_and_non_mutating_reads(active_task):
     assert archived["result"] == "archived"
 
     batch = apply_sync_batch(
-        operations=[{"operation": "archive_context_item"}, {"operation": "append_context_event"}],
+        operations=[
+            {
+                "operation": "upsert_context_item",
+                "payload": {"item_key": f"batch.item.{nonce}", "item_type": "note", "title": "batch upsert"},
+            }
+        ],
         dry_run=False,
         idempotency_key=f"test-batch-1-{nonce}",
         workspace_id=str(active_task.workspace_id),
@@ -312,7 +317,12 @@ def test_mcp_tools_compatibility_and_non_mutating_reads(active_task):
     assert batch["result"] == "applied"
 
     batch_replay = apply_sync_batch(
-        operations=[{"operation": "archive_context_item"}, {"operation": "append_context_event"}],
+        operations=[
+            {
+                "operation": "upsert_context_item",
+                "payload": {"item_key": f"batch.item.{nonce}", "item_type": "note", "title": "batch upsert"},
+            }
+        ],
         dry_run=False,
         idempotency_key=f"test-batch-1-{nonce}",
         workspace_id=str(active_task.workspace_id),

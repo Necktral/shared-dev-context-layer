@@ -29,6 +29,12 @@ test("package.json incluye comandos/settings de local_private sin remover comand
     "wisContextSync.localDoctor",
     "wisContextSync.localConfigureDbPassword",
   ];
+  const requiredCouncil = [
+    "wisContextSync.councilOpenRoom",
+    "wisContextSync.councilRunRound",
+    "wisContextSync.councilSynthesizePacket",
+    "wisContextSync.councilConfigureGeminiKey",
+  ];
 
   for (const command of requiredExisting) {
     assert.ok(commands.has(command), `Missing existing command: ${command}`);
@@ -36,6 +42,10 @@ test("package.json incluye comandos/settings de local_private sin remover comand
 
   for (const command of requiredLocal) {
     assert.ok(commands.has(command), `Missing local command: ${command}`);
+  }
+
+  for (const command of requiredCouncil) {
+    assert.ok(commands.has(command), `Missing council command: ${command}`);
   }
 
   const properties = manifest.contributes.configuration.properties;
@@ -49,6 +59,10 @@ test("package.json incluye comandos/settings de local_private sin remover comand
   assert.ok(Object.hasOwn(properties, "wisContextSync.localDb.password"));
   assert.ok(Object.hasOwn(properties, "wisContextSync.localDb.schema"));
   assert.ok(Object.hasOwn(properties, "wisContextSync.localDb.ssl"));
+  assert.ok(Object.hasOwn(properties, "wisContextSync.council.enabled"));
+  assert.ok(Object.hasOwn(properties, "wisContextSync.council.externalReview.enabled"));
+  assert.ok(Object.hasOwn(properties, "wisContextSync.council.externalReview.model"));
+  assert.ok(Object.hasOwn(properties, "wisContextSync.council.externalReview.maxChars"));
 
   const explorerViews = manifest.contributes.views?.explorer ?? [];
   assert.ok(explorerViews.some((view) => view.id === "wisContextSync.localRuntimePanel"));

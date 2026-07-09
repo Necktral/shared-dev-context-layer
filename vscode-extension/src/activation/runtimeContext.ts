@@ -18,6 +18,7 @@ import { ContextCommandOutputRenderer } from "../presentation/renderers/contextC
 import { LocalRuntimeOutputRenderer } from "../presentation/renderers/localRuntimeOutputRenderer";
 import { LocalDoctorService } from "../platform/doctor/localDoctorService";
 import { LocalRuntimePanelProvider } from "../presentation/local/localRuntimePanelProvider";
+import { CouncilRoomService } from "../council/councilRoomService";
 
 export interface ExtensionRuntimeContext {
   outputChannel: vscode.OutputChannel;
@@ -34,6 +35,7 @@ export interface ExtensionRuntimeContext {
   localStore: InMemoryLocalRuntimeStore;
   localOutputRenderer: LocalRuntimeOutputRenderer;
   localCommandService: LocalCommandService;
+  councilRoomService: CouncilRoomService;
   doctorService: LocalDoctorService;
   getCurrentConfig: () => LoadContextConfig;
   isDiagnosticMode: () => boolean;

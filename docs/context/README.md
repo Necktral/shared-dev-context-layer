@@ -31,8 +31,11 @@ El canon `local_private` vive en `docs/context/local_private/` y es complementar
 - Evidencia Slice 3C (`all_published`): `phase3/evidence/slice-3c-all-published/README.md`
 - Evidencia GO local Fase 1: `phase4/evidence/phase1-local-first-matrix.md`
 - Evidencia Phase 4 (read/write + OAuth): `phase4/evidence/README.md`
+- Checkpoint local Docker/VS Code/LLM-agentes 2026-07-07: `phase4/evidence/local-dev-checkpoint-20260707.md`
 - Backlog Fase 2 (remoto/global): `phase4/evidence/phase2-remote-backlog.md`
 - Internal release pack: `phase3/release-internal/README.md`
+- Agent Council Orchestrator: `AGENT-COUNCIL-ORCHESTRATOR.md`
+- Agent Council default config: `AGENT-COUNCIL-DEFAULT-CONFIG.json`
 - Blueprint V2 reliability: `ARCHITECTURE_V2_RELIABILITY.md`
 - ADR state machine: `ADR-EXECUTION-STATE-MACHINE.md`
 - ADR idempotency/locking: `ADR-IDEMPOTENCY-AND-LOCKING.md`
@@ -45,6 +48,8 @@ El canon `local_private` vive en `docs/context/local_private/` y es complementar
 - `README.md` (este archivo, precedencia global)
 - `WIS_VSCODE_CONTROL_PLANE_CONTRACT.md`
 - `WIS_VSCODE_EXTENSION_ARCHITECTURE.md`
+- `AGENT-COUNCIL-ORCHESTRATOR.md`
+- `AGENT-COUNCIL-DEFAULT-CONFIG.json`
 - `WIS_PHASE_1_LOCAL_FIRST_ACCEPTANCE_GATE.md`
 - `WIS_PHASE_3_ACCEPTANCE_GATE.md`
 - `local_private/README.md` (canon complementario)
@@ -76,7 +81,8 @@ Regla: `campaign` y `debt_register` no definen contrato activo por sí solos; so
 ## Roadmap corto
 
 - Estado actual: Slice 3A + Slice 4 baseline + write plane v0.2.0 con comandos MCP read/write.
-- Siguiente foco: hardening reliability-first del run plane local (locking, idempotencia, reconciliación determinista).
+- Estado local 2026-07-07: Docker + MCP local + extension VS Code instalada/configurada; backend completo verde (`90 passed, 7 skipped`).
+- Siguiente foco: cerrar PR #30 y avanzar el orquestador del consejo de IAs desde config/documento hacia servicio stateless.
 
 ## Cierre por gate
 

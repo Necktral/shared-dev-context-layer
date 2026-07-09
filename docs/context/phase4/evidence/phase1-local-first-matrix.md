@@ -1,6 +1,6 @@
 # Phase 1 Local-First Closure Matrix
 
-Fecha de actualizacion: 2026-04-08  
+Fecha de actualizacion: 2026-07-07
 Estado: `GO local separado` (scope local-first)
 
 ## Scope
@@ -48,6 +48,23 @@ Artefactos versionados:
 1. `docs/context/phase4/evidence/phase1-cli-output-a1-success_full.log`
 2. `docs/context/phase4/evidence/phase1-cli-output-a6-validation_stale.log`
 3. `docs/context/phase4/evidence/phase1-cli-output-a1-a6.md`
+
+## Checkpoint local adicional (2026-07-07)
+
+Estado: `PASS local`, sin sustituir el GO global remoto/Auth0.
+
+Evidencia:
+
+1. `docs/context/phase4/evidence/local-dev-checkpoint-20260707.md`
+
+Resumen:
+
+- Docker Compose local arriba: `postgres`, `backend`, `mcp`.
+- MCP info local responde `status=ready`.
+- Extension VS Code instalada y configurada para `runtimeMode=mcp` + `operationProfile=local_private`.
+- `codex` configurado como comando local para ejecucion supervisada.
+- Backend completo en verde: `90 passed, 7 skipped`.
+- Consejo de IAs documentado y con config default versionada.
 
 ## Decision
 

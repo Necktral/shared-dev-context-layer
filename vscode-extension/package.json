@@ -30,7 +30,11 @@
     "onCommand:wisContextSync.localRunCodex",
     "onCommand:wisContextSync.localRefresh",
     "onCommand:wisContextSync.localDoctor",
-    "onCommand:wisContextSync.localConfigureDbPassword"
+    "onCommand:wisContextSync.localConfigureDbPassword",
+    "onCommand:wisContextSync.councilOpenRoom",
+    "onCommand:wisContextSync.councilRunRound",
+    "onCommand:wisContextSync.councilSynthesizePacket",
+    "onCommand:wisContextSync.councilConfigureGeminiKey"
   ],
   "contributes": {
     "views": {
@@ -113,6 +117,22 @@
       {
         "command": "wisContextSync.localConfigureDbPassword",
         "title": "WIS: Local Configure DB Password"
+      },
+      {
+        "command": "wisContextSync.councilOpenRoom",
+        "title": "WIS: Council Open Room"
+      },
+      {
+        "command": "wisContextSync.councilRunRound",
+        "title": "WIS: Council Run Round"
+      },
+      {
+        "command": "wisContextSync.councilSynthesizePacket",
+        "title": "WIS: Council Synthesize Packet"
+      },
+      {
+        "command": "wisContextSync.councilConfigureGeminiKey",
+        "title": "WIS: Council Configure Gemini Key"
       }
     ],
     "configuration": {
@@ -276,7 +296,6 @@
             ".toml",
             ".ini",
             ".cfg",
-            ".env",
             ".css",
             ".scss",
             ".html",
@@ -304,6 +323,27 @@
           "default": 120,
           "minimum": 0,
           "markdownDescription": "Chunk overlap in characters for file_chunks generation."
+        },
+        "wisContextSync.council.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Enable the governed Agent Council Room in the local runtime panel."
+        },
+        "wisContextSync.council.externalReview.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Enable optional Gemini AI Studio external review for briefs marked non_sensitive. Secrets are read from SecretStorage or GEMINI_API_KEY."
+        },
+        "wisContextSync.council.externalReview.model": {
+          "type": "string",
+          "default": "gemini-3.1-flash-lite",
+          "markdownDescription": "Gemini model used by the external reviewer."
+        },
+        "wisContextSync.council.externalReview.maxChars": {
+          "type": "number",
+          "default": 12000,
+          "minimum": 1,
+          "markdownDescription": "Maximum sanitized brief characters sent to the external reviewer."
         }
       }
     }
@@ -313,8 +353,8 @@
     "watch": "tsc -w -p .",
     "manual:load-context-output": "npm run compile && node dist/tools/loadContextOutputCli.js",
     "manual:a1": "npm run manual:load-context-output -- --runtime-mode offline_fixture --scenario success_full",
-    "test": "npm run compile && node --test $(find dist/tests -type f -name \"*.test.js\" | sort)",
-    "test:local-db": "LOCAL_DB_TESTS=1 npm run compile && LOCAL_DB_TESTS=1 node --test $(find dist/tests/local-db -type f -name \"*.test.js\" | sort)"
+    "test": "node node_modules/typescript/bin/tsc -p . && node tools/run-node-tests.mjs",
+    "test:local-db": "node node_modules/typescript/bin/tsc -p . && node tools/run-node-tests.mjs --local-db"
   },
   "devDependencies": {
     "@types/node": "^20.16.5",

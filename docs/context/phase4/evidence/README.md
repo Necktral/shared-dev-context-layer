@@ -5,6 +5,7 @@ Esta matriz consolida evidencia de cierre para read/write MCP con OAuth Auth0 y 
 Estado vigente (2026-04-09):
 - `read_plane` remoto en `PASS` sobre `https://mcp.wiscontext-sync.org/mcp`.
 - el cierre global sigue `NO-GO/BLOCKED` hasta cerrar write-plane y conector Read en ChatGPT.
+- checkpoint local 2026-07-07: Docker + MCP local + VS Code extension + backend suite en verde; no cambia el `NO-GO/BLOCKED` global remoto/Auth0.
 
 Nota de alcance:
 - esta matriz corresponde al **GO global** (remoto/Auth0/endpoint estable).
@@ -15,6 +16,7 @@ Evidencia local Package 3 (indexador incremental): `package-3-smoke.md`.
 Resultado ejecutado de smoke Package 3: `package-3-smoke-result.json`.
 Checklist de hardening Package 8: `package-8-hardening.md`.
 Resultado ejecutado Package 8: `package-8-hardening-result.json`.
+Checkpoint local Docker/VS Code/LLM-agentes 2026-07-07: `local-dev-checkpoint-20260707.md`.
 Backlog Fase 2 remoto/global: `phase2-remote-backlog.md`.
 Script de cierre local-first reproducible: `../../../../scripts/run_phase1_local_closure.sh`.
 Runbook tunnel + hostname (sin Auth0): `../../../mcp/TUNNEL_HOSTNAME_RUNBOOK.md`.
@@ -83,6 +85,23 @@ Evidencia:
 - `phase2-local-20260410T023237Z-after-401-www-authenticate.log`
 - `phase2-local-20260410T023237Z-before-protected-resource-root.log`
 - `phase2-local-20260410T023237Z-after-protected-resource-root.log`
+
+## 0.4 Checkpoint local Docker/VS Code/LLM-agentes (2026-07-07)
+
+Resultado: `PASS local`, sin declarar GO global remoto/Auth0.
+
+Evidencia:
+
+- `local-dev-checkpoint-20260707.md`
+
+Resumen:
+
+- Docker Compose levanto `postgres`, `backend` y `mcp` en loopback.
+- `GET http://127.0.0.1:8001/mcp/info` respondio `status=ready`.
+- VS Code extension instalada: `necktral.wis-context-sync-control-plane@0.2.0-internal`.
+- VS Code configurado para `runtimeMode=mcp`, `operationProfile=local_private` y `codexCliCommand=codex`.
+- Config de agentes/LLM versionada en `docs/context/AGENT-COUNCIL-DEFAULT-CONFIG.json`.
+- Backend local: `90 passed, 7 skipped`.
 
 ## 1. Conectividad y endpoint canónico
 

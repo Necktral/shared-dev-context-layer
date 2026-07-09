@@ -14,7 +14,7 @@ import type {
   WorkspaceIndexRequest,
   WorkspaceIndexResult,
 } from "../../local/ports";
-import type { CodexExecutionResult, ProjectRuntimeSnapshot } from "../../local/types";
+import { createInitialCouncilRoomState, type CodexExecutionResult, type ProjectRuntimeSnapshot } from "../../local/types";
 
 const indexConfig: LocalIndexConfig = {
   excludeDirs: [".git", "node_modules", "dist", "coverage"],
@@ -37,6 +37,7 @@ function makeSnapshot(root: string): ProjectRuntimeSnapshot {
     last_action: null,
     task_draft: null,
     last_result: null,
+    council: createInitialCouncilRoomState(),
     errors: [],
     updated_at: new Date().toISOString(),
   };

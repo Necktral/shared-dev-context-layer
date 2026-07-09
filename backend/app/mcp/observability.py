@@ -202,19 +202,24 @@ class MCPTransportObservabilityASGI:
         logger: MCPStructuredLogger,
         streamable_path: str,
         allowed_origins: list[str] | None = None,
+        enforce_when_empty: bool = False,
     ) -> None:
         self.app = app
         self.logger = logger
         self.streamable_path = streamable_path
+        self.enforce_when_empty = enforce_when_empty
         self.allowed_origins = {
             origin.strip().lower() for origin in (allowed_origins or []) if origin and origin.strip()
         }
 
     def _is_origin_allowed(self, origin: str | None) -> bool:
-        if not self.allowed_origins:
-            return True
+        # WP-0.5(d): protección anti-CSRF de navegador (no es control de acceso). Sin
+        # cabecera Origin (clientes no-navegador) se permite por diseño. Con allowlist
+        # vacía se aplica default-deny SOLO cuando el auth runtime está activo.
         if not origin:
             return True
+        if not self.allowed_origins:
+            return not self.enforce_when_empty
         return origin.strip().lower() in self.allowed_origins
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
