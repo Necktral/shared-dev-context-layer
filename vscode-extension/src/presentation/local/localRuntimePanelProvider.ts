@@ -65,10 +65,14 @@ export class LocalRuntimePanelProvider implements vscode.WebviewViewProvider {
 
   private snapshot: ProjectRuntimeSnapshot;
 
-  private readonly actions?: LocalRuntimePanelActions;
+  private actions?: LocalRuntimePanelActions;
 
   constructor(initialSnapshot: ProjectRuntimeSnapshot, actions?: LocalRuntimePanelActions) {
     this.snapshot = initialSnapshot;
+    this.actions = actions;
+  }
+
+  public setActions(actions: LocalRuntimePanelActions): void {
     this.actions = actions;
   }
 

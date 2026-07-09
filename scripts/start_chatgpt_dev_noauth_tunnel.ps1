@@ -1,7 +1,8 @@
 param(
     [string]$McpUrl = "http://127.0.0.1:8002/mcp",
     [string]$TunnelProfile = "wis-local-mcp",
-    [switch]$SkipPreflight
+    [switch]$SkipPreflight,
+    [switch]$RunHostedDoctor
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,6 +38,37 @@ function Get-TunnelClientPath {
     return $null
 }
 
+$tunnelClient = Get-TunnelClientPath
+if (-not $tunnelClient) {
+    Fail "tunnel-client not found. Install it from https://github.com/openai/tunnel-client/releases/latest"
+}
+
+if (-not $SkipPreflight) {
+    if ($RunHostedDoctor) {
+        Write-Info "running no-auth ChatGPT MCP preflight with optional hosted tunnel doctor"
+        Write-Info "hosted doctor is diagnostic for this no-auth path and may expect OAuth/DCR metadata"
+    } else {
+        Write-Info "running local no-auth ChatGPT MCP preflight"
+        Write-Info "hosted tunnel doctor is skipped by default for Tunnel + No auth"
+    }
+
+    $preflight = Join-Path $scriptDir "check_chatgpt_dev_noauth.ps1"
+    $preflightArgs = @("-ExecutionPolicy", "Bypass", "-File", $preflight, "-McpUrl", $McpUrl, "-TunnelProfile", $TunnelProfile)
+    if ($RunHostedDoctor) {
+        $preflightArgs += "-RunHostedDoctor"
+    }
+
+    & powershell @preflightArgs
+    if ($LASTEXITCODE -ne 0) {
+        Fail "preflight failed"
+    }
+} else {
+    Write-Info "preflight skipped by operator request"
+    if ($RunHostedDoctor) {
+        Write-Info "RunHostedDoctor ignored because preflight was skipped"
+    }
+}
+
 $hasRuntimeKey = [bool](Get-Item -Path "Env:CONTROL_PLANE_API_KEY" -ErrorAction SilentlyContinue)
 $hasTunnelId = [bool](Get-Item -Path "Env:CONTROL_PLANE_TUNNEL_ID" -ErrorAction SilentlyContinue)
 if (-not $hasRuntimeKey) {
@@ -46,24 +78,10 @@ if (-not $hasTunnelId) {
     Fail "CONTROL_PLANE_TUNNEL_ID is required. Set it in this PowerShell session."
 }
 
-$tunnelClient = Get-TunnelClientPath
-if (-not $tunnelClient) {
-    Fail "tunnel-client not found. Install it from https://github.com/openai/tunnel-client/releases/latest"
-}
-
-if (-not $SkipPreflight) {
-    Write-Info "running no-auth ChatGPT MCP preflight and hosted tunnel doctor"
-    $preflight = Join-Path $scriptDir "check_chatgpt_dev_noauth.ps1"
-    & powershell -ExecutionPolicy Bypass -File $preflight -McpUrl $McpUrl -TunnelProfile $TunnelProfile -RunHostedDoctor
-    if ($LASTEXITCODE -ne 0) {
-        Fail "preflight failed"
-    }
-} else {
-    Write-Info "preflight skipped by operator request"
-    & $tunnelClient init --profile $TunnelProfile --tunnel-id $env:CONTROL_PLANE_TUNNEL_ID --mcp-server-url $McpUrl --force
-    if ($LASTEXITCODE -ne 0) {
-        Fail "tunnel-client init failed"
-    }
+Write-Info "initializing OpenAI tunnel profile '$TunnelProfile' for MCP URL $McpUrl"
+& $tunnelClient init --profile $TunnelProfile --tunnel-id $env:CONTROL_PLANE_TUNNEL_ID --mcp-server-url $McpUrl --force
+if ($LASTEXITCODE -ne 0) {
+    Fail "tunnel-client init failed"
 }
 
 Write-Host ""

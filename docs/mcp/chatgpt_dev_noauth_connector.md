@@ -46,6 +46,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check_chatgpt_dev_noauth.ps1
 
 Este preflight valida postura no-auth, ausencia de metadata OAuth, `list_tools`
 con `securitySchemes: noauth` y un proxy local de `tunnel-client` sin usar secretos.
+No ejecuta el hosted tunnel doctor por defecto, porque ese diagnostico puede esperar
+metadata OAuth/DCR que esta ruta no-auth omite intencionalmente.
 
 ## Secure MCP Tunnel
 
@@ -70,14 +72,20 @@ $env:CONTROL_PLANE_TUNNEL_ID="<tunnel_id>"
 powershell -ExecutionPolicy Bypass -File .\scripts\start_chatgpt_dev_noauth_tunnel.ps1
 ```
 
+Este comando ejecuta el preflight local no-auth, inicializa/refresca el perfil
+`wis-local-mcp` y arranca `tunnel-client run`. No requiere que exista metadata OAuth.
 Mantener `tunnel-client run` activo durante discovery y pruebas.
 
-Si ya existen `CONTROL_PLANE_API_KEY` y `CONTROL_PLANE_TUNNEL_ID` en el entorno,
-se puede validar el perfil hospedado antes de abrir ChatGPT:
+Diagnostico hospedado opcional:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\check_chatgpt_dev_noauth.ps1 -RunHostedDoctor
 ```
+
+Usar este diagnostico solo para investigar el tunnel hospedado. Si falla por checks
+OAuth/DCR como `oauth_metadata` mientras el preflight local pasa, no es la autoridad
+de exito para `Connection=Tunnel` + `Auth=No auth` y no debe resolverse habilitando
+Auth0 ni publicando metadata OAuth en esta ruta.
 
 ## Crear conector en ChatGPT
 

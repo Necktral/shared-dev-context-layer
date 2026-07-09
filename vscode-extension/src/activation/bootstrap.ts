@@ -127,6 +127,7 @@ async function createLocalPersistence(
 export async function bootstrapExtension(
   context: vscode.ExtensionContext,
   outputChannel: vscode.OutputChannel,
+  providedLocalPanelProvider?: LocalRuntimePanelProvider,
 ): Promise<ExtensionBootstrapResult> {
   const sessionManager = new SessionManager(context);
   const environmentInspector = new EnvironmentInspector();
@@ -200,7 +201,8 @@ export async function bootstrapExtension(
     localOutputRenderer.render(result, localStore.getSnapshot());
     outputChannel.show(true);
   };
-  const localPanelProvider = new LocalRuntimePanelProvider(localStore.getSnapshot(), {
+  const localPanelProvider = providedLocalPanelProvider ?? new LocalRuntimePanelProvider(localStore.getSnapshot());
+  localPanelProvider.setActions({
     openCouncil: async (input) => renderCouncilResult(() => councilRoomService.openSession(input)),
     runCouncilRound: async () => renderCouncilResult(() => councilRoomService.runRound()),
     synthesizeCouncilPacket: async () => renderCouncilResult(() => councilRoomService.synthesizePacket()),
